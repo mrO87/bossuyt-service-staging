@@ -1,0 +1,153 @@
+export type InterventionStatus =
+  | 'gepland'
+  | 'onderweg'
+  | 'bezig'
+  | 'wacht_onderdelen'
+  | 'afgewerkt'
+  | 'geannuleerd'
+
+export type InterventionType = 'warm' | 'montage' | 'preventief'
+
+export type InterventionSource = 'planned' | 'reactive'
+
+export interface Customer {
+  id: string
+  name: string
+  phone: string           // main company phone
+  address: string         // billing address
+  city: string            // billing city
+  vatNumber?: string      // BTW nummer — optional for now
+}
+
+export interface Site {
+  id: string
+  customerId: string      // which customer this site belongs to
+  name: string            // e.g. "Hoofdkantoor", "Vestiging Gent" — can be same as customer name
+  address: string
+  city: string
+  phones: string[]        // one or more phone numbers for this location
+}
+
+export interface Contact {
+  id: string
+  siteId: string          // which site this contact belongs to
+  name: string
+  phone: string
+  email?: string
+  role?: string           // e.g. "Verantwoordelijke", "Technieker ter plaatse"
+}
+
+export interface Device {
+  id: string
+  siteId: string          // devices belong to a site, not directly to a customer
+  brand: string
+  model: string
+  serialNumber?: string
+  installDate?: string
+  notes?: string
+}
+
+export interface DeviceDocument {
+  id: string
+  deviceId: string
+  type: 'manual' | 'wiring' | 'explosion' | 'service'
+  filename: string
+  url: string
+  fileSize?: number
+}
+
+export interface Article {
+  id: string
+  code: string
+  description: string
+  unitPrice: number
+  compatibleDeviceIds: string[]
+}
+
+export interface InterventionTechnician {
+  technicianId: string
+  name: string
+  initials: string
+  isLead: boolean
+  accepted: boolean
+  plannedOrder: number
+}
+
+export interface Intervention {
+  id: string
+  customerId: string
+  customerName: string    // denormalized for display in day view
+  siteId: string
+  siteName: string        // denormalized for display
+  siteAddress: string     // denormalized for display
+  siteCity: string        // denormalized for display
+  deviceId: string
+  deviceBrand?: string
+  deviceModel?: string
+  plannedDate: string
+  status: InterventionStatus
+  type: InterventionType
+  description?: string    // reported problem
+  estimatedMinutes?: number
+  isUrgent: boolean
+  source: InterventionSource
+  technicians: InterventionTechnician[]
+  statusOnderwegAt?: string
+  statusArrivedAt?: string
+  statusOnderwegBy?: string
+  createdBy?: string
+}
+
+export interface User {
+  id: string
+  name: string
+  initials: string
+  email: string
+  role: 'technician' | 'office' | 'admin'
+  active: boolean
+}
+
+export interface Werkbon {
+  id: string
+  interventionId: string
+  createdBy: string
+  arrivalTime?: string
+  workStart?: string
+  workEnd?: string
+  description?: string
+  status: 'concept' | 'ingediend' | 'goedgekeurd'
+  signatureData?: string
+  pdfUrl?: string
+  submittedAt?: string
+  syncedAt?: string
+}
+
+export interface WerkbonArticle {
+  id: string
+  werkbonId: string
+  articleCode: string
+  description: string
+  quantity: number
+  toOrder: boolean
+  needsQuote: boolean
+}
+
+export interface FollowUpAction {
+  id: string
+  werkbonId: string
+  description: string
+  priority: 'laag' | 'normaal' | 'hoog' | 'dringend'
+  dueDate?: string
+  done: boolean
+  doneAt?: string
+}
+
+export interface Notification {
+  id: string
+  userId: string
+  type: 'onderweg' | 'aangekomen' | 'werkbon_ingediend' | 'nieuwe_job'
+  interventionId?: string
+  message: string
+  read: boolean
+  createdAt: string
+}
