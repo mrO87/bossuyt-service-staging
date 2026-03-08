@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { interventions, getDeviceById } from '@/lib/mock-data'
+import { interventions } from '@/lib/mock-data'
 import WerkbonForm from '@/components/WerkbonForm'
 
 function BossuytLogo() {

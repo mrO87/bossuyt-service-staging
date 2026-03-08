@@ -30,3 +30,15 @@ Before working on this project, read:
 - Docker + nginx on Hetzner
 - Target: bossuyt-service.fixassistant.com
 - `docker compose up --build` to run locally on port 3080
+
+## Teaching Mode — ALWAYS ACTIVE
+This project is a learning exercise. The user is learning to code.
+Treat every session like a live classroom or Udemy course:
+
+- **Before writing a function**, briefly explain what it's going to do and why we need it.
+- **After writing a function**, explain every part of it — what each line does, why we wrote it that way, and what would happen if we did it differently.
+- **If the next function is similar** to one we just wrote, say "this one is almost the same as X, the only difference is..." — don't repeat the full explanation from scratch.
+- **Explain concepts** (React hooks, TypeScript types, async/await, etc.) the moment they appear — don't assume the user knows them.
+- **Use simple language** — no jargon without explanation.
+- **Be encouraging** — this is a safe learning environment.
+- Never just silently write code and move on. Every piece of code we write together gets explained.

@@ -19,18 +19,18 @@ interface FormState {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'gepland',          label: 'Gepland',              color: '#6B7280', bg: '#E5E7EB' },
-  { value: 'onderweg',         label: 'Onderweg',             color: '#fff',    bg: '#F28C28' },
-  { value: 'bezig',            label: 'Bezig',                color: '#fff',    bg: '#4C6A85' },
-  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen',  color: '#fff',    bg: '#D64545' },
-  { value: 'afgewerkt',        label: 'Afgewerkt',            color: '#fff',    bg: '#2E9E5B' },
+  { value: 'gepland',          label: 'Gepland',             activeClass: 'bg-stroke text-ink-soft border-stroke',                inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'onderweg',         label: 'Onderweg',            activeClass: 'bg-brand-orange text-white border-brand-orange',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'bezig',            label: 'Bezig',               activeClass: 'bg-brand-blue text-white border-brand-blue',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen', activeClass: 'bg-brand-red text-white border-brand-red',             inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'afgewerkt',        label: 'Afgewerkt',           activeClass: 'bg-brand-green text-white border-brand-green',         inactiveClass: 'bg-surface text-ink-soft border-stroke' },
 ]
 
 const PRIORITY_OPTIONS = [
-  { value: 'laag',    label: 'Laag',    color: '#2E9E5B' },
-  { value: 'normaal', label: 'Normaal', color: '#4C6A85' },
-  { value: 'hoog',    label: 'Hoog',    color: '#F28C28' },
-  { value: 'dringend',label: 'Dringend',color: '#D64545' },
+  { value: 'laag',     label: 'Laag',     activeClass: 'bg-brand-green text-white border-brand-green',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'normaal',  label: 'Normaal',  activeClass: 'bg-brand-blue text-white border-brand-blue',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'hoog',     label: 'Hoog',     activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'dringend', label: 'Dringend', activeClass: 'bg-brand-red text-white border-brand-red',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
 ]
 
 function now() {
@@ -45,11 +45,10 @@ function fmtTime(iso: string) {
 // Reusable section wrapper
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-      {/* Section header */}
-      <div className="flex items-center gap-2 px-4 py-3" style={{ backgroundColor: '#2F343A' }}>
-        <div className="w-1 h-4 rounded-full" style={{ backgroundColor: '#F28C28' }} />
-        <p className="font-bold text-sm tracking-wide" style={{ color: '#fff' }}>{title}</p>
+    <div className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
+        <div className="w-1 h-4 rounded-full bg-brand-orange" />
+        <p className="font-bold text-sm tracking-wide text-white">{title}</p>
       </div>
       <div className="p-4">
         {children}
@@ -153,23 +152,21 @@ export default function WerkbonForm({ intervention }: Props) {
     setPdfLoading(false)
   }
 
-  const currentStatus = STATUS_OPTIONS.find(s => s.value === form.status)
-
   return (
     <div className="flex flex-col gap-4 pb-10">
 
       {/* ── Info card ── */}
       <Section title="KLANT & TOESTEL">
         <div className="flex flex-col gap-1">
-          <p className="font-bold text-base" style={{ color: '#1F2933' }}>{intervention.customerName}</p>
-          <p className="text-sm" style={{ color: '#6B7280' }}>{intervention.siteName}</p>
-          <p className="text-sm" style={{ color: '#6B7280' }}>{intervention.siteAddress}, {intervention.siteCity}</p>
-          <div className="mt-2 pt-2" style={{ borderTop: '1px solid #E5E7EB' }}>
-            <p className="font-bold text-sm" style={{ color: '#1F2933' }}>
+          <p className="font-bold text-base text-ink">{intervention.customerName}</p>
+          <p className="text-sm text-ink-soft">{intervention.siteName}</p>
+          <p className="text-sm text-ink-soft">{intervention.siteAddress}, {intervention.siteCity}</p>
+          <div className="mt-2 pt-2 border-t border-stroke">
+            <p className="font-bold text-sm text-ink">
               {intervention.deviceBrand} {intervention.deviceModel}
             </p>
             {intervention.description && (
-              <p className="text-sm mt-1 italic" style={{ color: '#F28C28' }}>
+              <p className="text-sm mt-1 italic text-brand-orange">
                 Melding: {intervention.description}
               </p>
             )}
@@ -184,12 +181,7 @@ export default function WerkbonForm({ intervention }: Props) {
             <button
               key={s.value}
               onClick={() => update('status', s.value)}
-              className="px-3 py-1.5 rounded-full text-sm font-medium transition-opacity"
-              style={{
-                backgroundColor: form.status === s.value ? s.bg : '#F4F6F8',
-                color:           form.status === s.value ? s.color : '#6B7280',
-                border:          `1px solid ${form.status === s.value ? s.bg : '#E5E7EB'}`,
-              }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === s.value ? s.activeClass : s.inactiveClass}`}
             >
               {s.label}
             </button>
@@ -206,9 +198,9 @@ export default function WerkbonForm({ intervention }: Props) {
             { label: 'Werk start', value: form.workStart },
             { label: 'Werk einde', value: form.workEnd },
           ].map(t => (
-            <div key={t.label} className="rounded-xl p-3 text-center" style={{ backgroundColor: '#F4F6F8' }}>
-              <p className="text-xs mb-1" style={{ color: '#6B7280' }}>{t.label}</p>
-              <p className="text-xl font-bold" style={{ color: '#1F2933' }}>{fmtTime(t.value)}</p>
+            <div key={t.label} className="rounded-xl p-3 text-center bg-surface">
+              <p className="text-xs mb-1 text-ink-soft">{t.label}</p>
+              <p className="text-xl font-bold text-ink">{fmtTime(t.value)}</p>
             </div>
           ))}
         </div>
@@ -218,8 +210,7 @@ export default function WerkbonForm({ intervention }: Props) {
           {!form.arrivalTime && (
             <button
               onClick={markAankomst}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm"
-              style={{ backgroundColor: '#F28C28' }}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-orange"
             >
               Aankomst registreren
             </button>
@@ -227,8 +218,7 @@ export default function WerkbonForm({ intervention }: Props) {
           {form.arrivalTime && !form.workStart && (
             <button
               onClick={markStartWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm"
-              style={{ backgroundColor: '#4C6A85' }}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue"
             >
               Start werk
             </button>
@@ -236,8 +226,7 @@ export default function WerkbonForm({ intervention }: Props) {
           {form.workStart && !form.workEnd && (
             <button
               onClick={markEndWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm"
-              style={{ backgroundColor: '#2E9E5B' }}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-green"
             >
               Werk beëindigen
             </button>
@@ -252,12 +241,7 @@ export default function WerkbonForm({ intervention }: Props) {
           placeholder="Beschrijf de uitgevoerde werkzaamheden..."
           value={form.description}
           onChange={e => update('description', e.target.value)}
-          className="w-full rounded-xl p-3 text-sm resize-none outline-none"
-          style={{
-            backgroundColor: '#F4F6F8',
-            border: '1px solid #E5E7EB',
-            color: '#1F2933',
-          }}
+          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink"
         />
       </Section>
 
@@ -265,37 +249,34 @@ export default function WerkbonForm({ intervention }: Props) {
       <Section title="GEBRUIKTE ONDERDELEN">
         <div className="flex flex-col gap-3">
           {form.parts.length === 0 && (
-            <p className="text-sm text-center py-2" style={{ color: '#9CA3AF' }}>Nog geen onderdelen toegevoegd</p>
+            <p className="text-sm text-center py-2 text-ink-faint">Nog geen onderdelen toegevoegd</p>
           )}
           {form.parts.map(part => (
-            <div key={part.id} className="rounded-xl p-3 flex flex-col gap-2" style={{ backgroundColor: '#F4F6F8', border: '1px solid #E5E7EB' }}>
+            <div key={part.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
               <div className="flex gap-2">
                 <input
                   placeholder="Artikelcode"
                   value={part.code}
                   onChange={e => updatePart(part.id, 'code', e.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', color: '#1F2933' }}
+                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
                 />
                 <input
                   type="number"
                   min={1}
                   value={part.quantity}
                   onChange={e => updatePart(part.id, 'quantity', parseInt(e.target.value) || 1)}
-                  className="w-16 rounded-lg px-3 py-2 text-sm text-center outline-none"
-                  style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', color: '#1F2933' }}
+                  className="w-16 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
                 />
-                <button onClick={() => removePart(part.id)} className="px-2 text-lg" style={{ color: '#D64545' }}>×</button>
+                <button onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
               </div>
               <input
                 placeholder="Omschrijving onderdeel"
                 value={part.description}
                 onChange={e => updatePart(part.id, 'description', e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', color: '#1F2933' }}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
               />
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm" style={{ color: '#6B7280' }}>
+                <label className="flex items-center gap-2 text-sm text-ink-soft">
                   <input
                     type="checkbox"
                     checked={part.toOrder}
@@ -305,7 +286,7 @@ export default function WerkbonForm({ intervention }: Props) {
                   Te bestellen
                 </label>
                 {part.toOrder && (
-                  <label className="flex items-center gap-2 text-sm font-medium" style={{ color: '#D64545' }}>
+                  <label className="flex items-center gap-2 text-sm font-medium text-brand-red">
                     <input
                       type="checkbox"
                       checked={part.urgent}
@@ -320,8 +301,7 @@ export default function WerkbonForm({ intervention }: Props) {
           ))}
           <button
             onClick={addPart}
-            className="w-full py-2.5 rounded-xl text-sm font-medium"
-            style={{ border: '2px dashed #E5E7EB', color: '#6B7280' }}
+            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
           >
             + Onderdeel toevoegen
           </button>
@@ -332,19 +312,18 @@ export default function WerkbonForm({ intervention }: Props) {
       <Section title="OPVOLGACTIES">
         <div className="flex flex-col gap-3">
           {form.followUp.length === 0 && (
-            <p className="text-sm text-center py-2" style={{ color: '#9CA3AF' }}>Geen opvolgacties</p>
+            <p className="text-sm text-center py-2 text-ink-faint">Geen opvolgacties</p>
           )}
           {form.followUp.map(f => (
-            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-2" style={{ backgroundColor: '#F4F6F8', border: '1px solid #E5E7EB' }}>
+            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
               <div className="flex gap-2">
                 <input
                   placeholder="Beschrijving actie..."
                   value={f.description}
                   onChange={e => updateFollowUp(f.id, 'description', e.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', color: '#1F2933' }}
+                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
                 />
-                <button onClick={() => removeFollowUp(f.id)} className="px-2 text-lg" style={{ color: '#D64545' }}>×</button>
+                <button onClick={() => removeFollowUp(f.id)} className="px-2 text-lg text-brand-red">×</button>
               </div>
               <div className="flex gap-2">
                 {/* Priority selector */}
@@ -353,12 +332,7 @@ export default function WerkbonForm({ intervention }: Props) {
                     <button
                       key={p.value}
                       onClick={() => updateFollowUp(f.id, 'priority', p.value)}
-                      className="px-2.5 py-1 rounded-full text-xs font-medium"
-                      style={{
-                        backgroundColor: f.priority === p.value ? p.color : '#F4F6F8',
-                        color:           f.priority === p.value ? '#fff' : '#6B7280',
-                        border:          `1px solid ${f.priority === p.value ? p.color : '#E5E7EB'}`,
-                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${f.priority === p.value ? p.activeClass : p.inactiveClass}`}
                     >
                       {p.label}
                     </button>
@@ -368,16 +342,14 @@ export default function WerkbonForm({ intervention }: Props) {
                   type="date"
                   value={f.dueDate}
                   onChange={e => updateFollowUp(f.id, 'dueDate', e.target.value)}
-                  className="rounded-lg px-2 py-1 text-sm outline-none"
-                  style={{ backgroundColor: '#fff', border: '1px solid #E5E7EB', color: '#1F2933' }}
+                  className="rounded-lg px-2 py-1 text-sm outline-none bg-white border border-stroke text-ink"
                 />
               </div>
             </div>
           ))}
           <button
             onClick={addFollowUp}
-            className="w-full py-2.5 rounded-xl text-sm font-medium"
-            style={{ border: '2px dashed #E5E7EB', color: '#6B7280' }}
+            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
           >
             + Opvolgactie toevoegen
           </button>
@@ -393,8 +365,7 @@ export default function WerkbonForm({ intervention }: Props) {
       <button
         onClick={handlePDF}
         disabled={pdfLoading}
-        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60"
-        style={{ backgroundColor: '#F28C28' }}
+        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange"
       >
         {pdfLoading ? 'PDF aanmaken...' : 'PDF Genereren & Opslaan'}
       </button>

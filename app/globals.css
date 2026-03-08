@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+@theme {
+  /* ── Brand colours ── */
+  --color-brand-dark:   #2F343A; /* header / section header backgrounds */
+  --color-brand-mid:    #3A3F45; /* subtle dark dividers, secondary avatars */
+  --color-brand-orange: #F28C28; /* primary accent — warm jobs, CTA buttons */
+  --color-brand-blue:   #4C6A85; /* montage jobs, info */
+  --color-brand-green:  #2E9E5B; /* preventief jobs, success */
+  --color-brand-red:    #D64545; /* urgent / danger */
+  --color-brand-purple: #7B5EA7; /* Meiko device accent */
+
+  /* ── Surface / layout ── */
+  --color-surface: #F4F6F8; /* page background, input backgrounds */
+  --color-stroke:  #E5E7EB; /* borders and dividers */
+
+  /* ── Text ── */
+  --color-ink:       #1F2933; /* primary text */
+  --color-ink-soft:  #6B7280; /* secondary / label text */
+  --color-ink-faint: #9CA3AF; /* placeholder / muted text */
+}

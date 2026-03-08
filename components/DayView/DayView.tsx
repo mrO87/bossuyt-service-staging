@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import type { InterventionStatus } from '@/types'
 import { interventions as MOCK_INTERVENTIONS } from '@/lib/mock-data'
+import { usePushNotifications } from '@/lib/usePushNotifications'
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('nl-BE', {
@@ -21,42 +22,57 @@ function formatMinutes(minutes?: number): string {
   return `${h}u${m}`
 }
 
-// Left border color per job type
-function getTypeBorderColor(type: string, isUrgent: boolean): string {
-  if (isUrgent) return '#D64545'
+// Tailwind bg class for the left color strip per job type / urgency
+function getTypeBorderClass(type: string, isUrgent: boolean): string {
+  if (isUrgent) return 'bg-brand-red'
   switch (type) {
-    case 'warm':       return '#F28C28'
-    case 'montage':    return '#4C6A85'
-    case 'preventief': return '#2E9E5B'
-    default:           return '#E5E7EB'
+    case 'warm':       return 'bg-brand-orange'
+    case 'montage':    return 'bg-brand-blue'
+    case 'preventief': return 'bg-brand-green'
+    default:           return 'bg-stroke'
   }
 }
 
-function getStatusBadge(status: InterventionStatus) {
+// Returns the Tailwind classes for each status badge
+function getStatusClass(status: InterventionStatus): string {
   switch (status) {
-    case 'gepland':
-      return { label: 'Gepland', bg: '#E5E7EB', color: '#6B7280' }
-    case 'onderweg':
-      return { label: 'Onderweg', bg: '#F28C28', color: '#fff' }
-    case 'bezig':
-      return { label: 'Bezig', bg: '#4C6A85', color: '#fff' }
-    case 'wacht_onderdelen':
-      return { label: 'Wacht onderdelen', bg: '#E5E7EB', color: '#6B7280' }
-    case 'afgewerkt':
-      return { label: 'Afgewerkt', bg: '#2E9E5B', color: '#fff' }
-    case 'geannuleerd':
-      return { label: 'Geannuleerd', bg: '#D64545', color: '#fff' }
-    default:
-      return { label: status, bg: '#E5E7EB', color: '#6B7280' }
+    case 'gepland':          return 'bg-stroke text-ink-soft'
+    case 'onderweg':         return 'bg-brand-orange text-white'
+    case 'bezig':            return 'bg-brand-blue text-white'
+    case 'wacht_onderdelen': return 'bg-stroke text-ink-soft'
+    case 'afgewerkt':        return 'bg-brand-green text-white'
+    case 'geannuleerd':      return 'bg-brand-red text-white'
+    default:                 return 'bg-stroke text-ink-soft'
   }
 }
 
-function getTypeBadge(type: string) {
+function getStatusLabel(status: InterventionStatus): string {
+  switch (status) {
+    case 'gepland':          return 'Gepland'
+    case 'onderweg':         return 'Onderweg'
+    case 'bezig':            return 'Bezig'
+    case 'wacht_onderdelen': return 'Wacht onderdelen'
+    case 'afgewerkt':        return 'Afgewerkt'
+    case 'geannuleerd':      return 'Geannuleerd'
+    default:                 return status
+  }
+}
+
+function getTypeClass(type: string): string {
   switch (type) {
-    case 'warm':       return { label: 'Warm',       bg: '#F28C28', color: '#fff' }
-    case 'montage':    return { label: 'Montage',    bg: '#4C6A85', color: '#fff' }
-    case 'preventief': return { label: 'Preventief', bg: '#2E9E5B', color: '#fff' }
-    default:           return { label: type,          bg: '#E5E7EB', color: '#6B7280' }
+    case 'warm':       return 'bg-brand-orange text-white'
+    case 'montage':    return 'bg-brand-blue text-white'
+    case 'preventief': return 'bg-brand-green text-white'
+    default:           return 'bg-stroke text-ink-soft'
+  }
+}
+
+function getTypeLabel(type: string): string {
+  switch (type) {
+    case 'warm':       return 'Warm'
+    case 'montage':    return 'Montage'
+    case 'preventief': return 'Preventief'
+    default:           return type
   }
 }
 
@@ -71,12 +87,9 @@ function BossuyLogo() {
   )
 }
 
-function Badge({ bg, color, label }: { bg: string; color: string; label: string }) {
+function Badge({ className, label }: { className: string; label: string }) {
   return (
-    <span
-      style={{ backgroundColor: bg, color }}
-      className="text-xs px-2.5 py-1 rounded-full font-medium"
-    >
+    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${className}`}>
       {label}
     </span>
   )
@@ -84,121 +97,133 @@ function Badge({ bg, color, label }: { bg: string; color: string; label: string 
 
 export default function DayView() {
   const router = useRouter()
-  const today = new Date()
+  const today  = new Date()
+  const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
 
-  const done = MOCK_INTERVENTIONS.filter(i => i.status === 'afgewerkt').length
+  const done  = MOCK_INTERVENTIONS.filter(i => i.status === 'afgewerkt').length
   const total = MOCK_INTERVENTIONS.length
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F4F6F8' }}>
+    <div className="min-h-screen bg-surface">
 
       {/* Header */}
-      <header style={{ backgroundColor: '#2F343A' }} className="px-4 py-4 flex items-center justify-between">
+      <header className="bg-brand-dark px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <BossuyLogo />
           <div>
-            <p className="font-bold text-base leading-tight tracking-wide" style={{ color: '#fff' }}>bossuyt</p>
-            <p className="text-xs leading-tight" style={{ color: '#6B7280' }}>technieker</p>
+            <p className="font-bold text-base leading-tight tracking-wide text-white">bossuyt</p>
+            <p className="text-xs leading-tight text-ink-soft">technieker</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-xs" style={{ color: '#6B7280' }}>Vandaag</p>
-            <p className="text-sm font-medium" style={{ color: '#fff' }}>{done}/{total} afgewerkt</p>
+            <p className="text-xs text-ink-soft">Vandaag</p>
+            <p className="text-sm font-medium text-white">{done}/{total} afgewerkt</p>
           </div>
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: '#F28C28' }}
-          >
+          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange">
             <span className="text-white text-xs font-bold">OP</span>
           </div>
         </div>
       </header>
 
       {/* Date bar */}
-      <div style={{ backgroundColor: '#2F343A', borderBottomColor: '#3A3F45' }} className="px-4 pb-3 border-b">
-        <p className="text-sm capitalize" style={{ color: '#6B7280' }}>{formatDate(today)}</p>
+      <div className="bg-brand-dark border-b border-brand-mid px-4 pb-3">
+        <p className="text-sm capitalize text-ink-soft">{formatDate(today)}</p>
       </div>
+
+      {/* Push notification bar — shown until subscribed */}
+      {!subscribed && (
+        <div className="bg-ink px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-ink-faint">
+            {error ?? 'Schakel meldingen in om nieuwe jobs te ontvangen'}
+          </p>
+          <button
+            onClick={subscribe}
+            disabled={loading}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50 bg-brand-orange text-white"
+          >
+            {loading ? 'Even wachten...' : 'Inschakelen'}
+          </button>
+        </div>
+      )}
+
+      {/* Test button — only shown after subscribing */}
+      {subscribed && (
+        <div className="bg-brand-green px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-medium text-white">Meldingen actief</p>
+          <button
+            onClick={sendTestNotification}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-brand-green"
+          >
+            Stuur testmelding
+          </button>
+        </div>
+      )}
 
       {/* Job list */}
       <main className="px-4 py-4 flex flex-col gap-3 pb-8">
-        {MOCK_INTERVENTIONS.map((intervention) => {
-          const status = getStatusBadge(intervention.status)
-          const type = getTypeBadge(intervention.type)
-          const borderColor = getTypeBorderColor(intervention.type, intervention.isUrgent)
+        {MOCK_INTERVENTIONS.map((intervention) => (
+          <div
+            key={intervention.id}
+            onClick={() => router.push(`/interventions/${intervention.id}`)}
+            className="rounded-xl cursor-pointer transition-opacity active:opacity-70 flex overflow-hidden bg-white border border-stroke shadow-sm"
+          >
+            {/* Left color strip — indicates job type or urgency */}
+            <div className={`w-1 shrink-0 ${getTypeBorderClass(intervention.type, intervention.isUrgent)}`} />
 
-          return (
-            <div
-              key={intervention.id}
-              onClick={() => router.push(`/interventions/${intervention.id}`)}
-              className="rounded-xl cursor-pointer transition-opacity active:opacity-70 flex overflow-hidden"
-              style={{
-                backgroundColor: '#fff',
-                border: '1px solid #E5E7EB',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-              }}
-            >
-              {/* Left color border */}
-              <div
-                className="w-1 shrink-0"
-                style={{ backgroundColor: borderColor }}
-              />
-
-              {/* Card content */}
-              <div className="flex-1 p-4">
-                {/* Top row */}
-                <div className="flex items-start justify-between mb-1">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-base leading-tight" style={{ color: '#1F2933' }}>
-                      {intervention.customerName}
-                    </p>
-                    <p className="text-sm" style={{ color: '#6B7280' }}>{intervention.siteCity}</p>
-                  </div>
-                  {/* Technician avatars */}
-                  <div className="flex -space-x-2 ml-2 shrink-0">
-                    {intervention.technicians.map((tech, i) => (
-                      <div
-                        key={tech.technicianId}
-                        className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-white"
-                        style={{ backgroundColor: i === 0 ? '#3A3F45' : '#4B5563' }}
-                        title={tech.name}
-                      >
-                        <span className="text-white text-xs font-bold">{tech.initials}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Device */}
-                {intervention.deviceBrand && (
-                  <p className="text-sm font-medium mt-2" style={{ color: '#1F2933' }}>
-                    {intervention.deviceBrand} {intervention.deviceModel}
+            {/* Card content */}
+            <div className="flex-1 p-4">
+              {/* Top row */}
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-base leading-tight text-ink">
+                    {intervention.customerName}
                   </p>
-                )}
-
-                {/* Description */}
-                <p className="text-sm mt-0.5 mb-3" style={{ color: '#6B7280' }}>
-                  {intervention.description}
-                </p>
-
-                {/* Badges */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge bg={type.bg} color={type.color} label={type.label} />
-                  <Badge bg={status.bg} color={status.color} label={status.label} />
-                  {intervention.estimatedMinutes && (
-                    <Badge bg="#E5E7EB" color="#6B7280" label={formatMinutes(intervention.estimatedMinutes)} />
-                  )}
-                  {intervention.isUrgent && (
-                    <Badge bg="#D64545" color="#fff" label="Dringend" />
-                  )}
+                  <p className="text-sm text-ink-soft">{intervention.siteCity}</p>
+                </div>
+                {/* Technician avatars */}
+                <div className="flex -space-x-2 ml-2 shrink-0">
+                  {intervention.technicians.map((tech, i) => (
+                    <div
+                      key={tech.technicianId}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center border-2 border-white ${i === 0 ? 'bg-brand-mid' : 'bg-gray-600'}`}
+                      title={tech.name}
+                    >
+                      <span className="text-white text-xs font-bold">{tech.initials}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
+
+              {/* Device */}
+              {intervention.deviceBrand && (
+                <p className="text-sm font-medium mt-2 text-ink">
+                  {intervention.deviceBrand} {intervention.deviceModel}
+                </p>
+              )}
+
+              {/* Description */}
+              <p className="text-sm mt-0.5 mb-3 text-ink-soft">
+                {intervention.description}
+              </p>
+
+              {/* Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge className={getTypeClass(intervention.type)} label={getTypeLabel(intervention.type)} />
+                <Badge className={getStatusClass(intervention.status)} label={getStatusLabel(intervention.status)} />
+                {intervention.estimatedMinutes && (
+                  <Badge className="bg-stroke text-ink-soft" label={formatMinutes(intervention.estimatedMinutes)} />
+                )}
+                {intervention.isUrgent && (
+                  <Badge className="bg-brand-red text-white" label="Dringend" />
+                )}
+              </div>
             </div>
-          )
-        })}
+          </div>
+        ))}
 
         {MOCK_INTERVENTIONS.length === 0 && (
-          <p className="text-center mt-16" style={{ color: '#6B7280' }}>
+          <p className="text-center mt-16 text-ink-soft">
             Geen jobs gepland voor vandaag
           </p>
         )}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Dark background with rounded corners -->
+  <rect width="192" height="192" rx="32" fill="#2F343A"/>
+  <!-- Orange left bar accent, same as the app header -->
+  <rect x="0" y="0" width="12" height="192" rx="4" fill="#F28C28"/>
+  <!-- The 4 × symbols, 2 rows of 2 -->
+  <text x="36"  y="95"  fill="#F28C28" font-size="72" font-weight="bold" font-family="sans-serif">×</text>
+  <text x="108" y="95"  fill="#F28C28" font-size="72" font-weight="bold" font-family="sans-serif">×</text>
+  <text x="36"  y="168" fill="#F28C28" font-size="72" font-weight="bold" font-family="sans-serif">×</text>
+  <text x="108" y="168" fill="#F28C28" font-size="72" font-weight="bold" font-family="sans-serif">×</text>
+</svg>

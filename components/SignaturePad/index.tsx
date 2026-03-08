@@ -10,7 +10,8 @@ interface Props {
 export default function SignaturePad({ signature, onSignatureChange }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
-  const [hasContent, setHasContent] = useState(false)
+  // Derived: no separate state. If the parent has a signature string, the canvas has content.
+  const hasContent = !!signature
 
   // Get position from either mouse or touch event
   function getPos(e: React.TouchEvent | React.MouseEvent) {
@@ -55,24 +56,22 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
     ctx.strokeStyle = '#1F2933'
     ctx.lineTo(x, y)
     ctx.stroke()
-    setHasContent(true)
   }, [isDrawing])
 
   const endDraw = useCallback(() => {
     if (!isDrawing) return
     setIsDrawing(false)
     const canvas = canvasRef.current
-    if (canvas && hasContent) {
+    if (canvas) {
       onSignatureChange(canvas.toDataURL('image/png'))
     }
-  }, [isDrawing, hasContent, onSignatureChange])
+  }, [isDrawing, onSignatureChange])
 
   const clear = useCallback(() => {
     const canvas = canvasRef.current
     const ctx    = canvas?.getContext('2d')
     if (!ctx || !canvas) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    setHasContent(false)
     onSignatureChange(null)
   }, [onSignatureChange])
 
@@ -86,12 +85,10 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
       img.onload = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        setHasContent(true)
       }
       img.src = signature
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      setHasContent(false)
     }
   }, [signature])
 
@@ -99,8 +96,7 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
     <div className="flex flex-col gap-2">
       {/* Canvas */}
       <div
-        className="relative rounded-xl overflow-hidden"
-        style={{ border: '2px dashed #E5E7EB', backgroundColor: '#F9FAFB' }}
+        className="relative rounded-xl overflow-hidden border-2 border-dashed border-stroke bg-gray-50"
       >
         <canvas
           ref={canvasRef}
@@ -119,7 +115,7 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
         {/* Placeholder text when empty */}
         {!hasContent && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="text-sm" style={{ color: '#9CA3AF' }}>Teken hier de handtekening van de klant</p>
+            <p className="text-sm text-ink-faint">Teken hier de handtekening van de klant</p>
           </div>
         )}
       </div>
@@ -129,8 +125,7 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
         type="button"
         onClick={clear}
         disabled={!hasContent}
-        className="self-end text-sm px-3 py-1.5 rounded-lg transition-opacity disabled:opacity-40"
-        style={{ backgroundColor: '#F4F6F8', color: '#6B7280', border: '1px solid #E5E7EB' }}
+        className="self-end text-sm px-3 py-1.5 rounded-lg transition-opacity disabled:opacity-40 bg-surface text-ink-soft border border-stroke"
       >
         Wissen
       </button>
