@@ -16,6 +16,8 @@ COPY . .
 # so they must be passed in as build arguments — they can't be injected at runtime.
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ARG NEXT_PUBLIC_STAGING
+ENV NEXT_PUBLIC_STAGING=$NEXT_PUBLIC_STAGING
 RUN npm run build
 
 # Production image
