@@ -14,6 +14,52 @@ type Version = { version: string; date: string; changes: Change[] }
 
 const VERSIONS: Version[] = [
   {
+    version: 'v1.6',
+    date: '9 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Route-timeline op het dagoverzicht',
+        body:
+          'De Planning-sectie is geen lijst meer maar een verticale route: ' +
+          'Start → rijtijd → job → rijtijd → job → pauze → rijtijd → job → einde. ' +
+          'Elke rijtijd wordt apart getoond, zodat je meteen ziet hoe je dag eruitziet.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Instelbare start- en eind-adres',
+        body:
+          'Bovenaan de timeline kan je je vertrekpunt kiezen. Met één vinkje ' +
+          'zeg je "einde = start" als je terug naar het depot rijdt, of je ' +
+          'kiest een ander eindadres (bv. je thuis).',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Middagpauze als verplaatsbaar blok',
+        body:
+          'Er staat automatisch een pauze van 30 minuten middenin de dag. ' +
+          'Sleep hem naar boven of beneden om hem op een andere plaats in je ' +
+          'route te zetten.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Dagsamenvatting bovenaan',
+        body:
+          'Je ziet in één oogopslag hoeveel jobs je hebt, hoeveel werkuren er ' +
+          'staan en hoeveel je in totaal zal moeten rijden. De cijfers worden ' +
+          'live herberekend bij elke drag & drop.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Scrollen + slepen samen',
+        body:
+          'Scrollen op mobiel werkt weer vlot. Slepen start alleen vanaf de ' +
+          '⋮⋮ handle aan de linkerkant van een kaart, met een korte hold van ' +
+          '250 ms zodat een snelle scroll nooit per ongeluk een drag wordt.',
+      },
+    ],
+  },
+  {
     version: 'v1.5',
     date: '9 april 2026',
     changes: [

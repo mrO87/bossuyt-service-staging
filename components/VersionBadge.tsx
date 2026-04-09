@@ -9,7 +9,7 @@
 
 import Link from 'next/link'
 
-export const APP_VERSION = 'v1.5'
+export const APP_VERSION = 'v1.6'
 
 export default function VersionBadge() {
   // process.env.NEXT_PUBLIC_STAGING is injected at build time.

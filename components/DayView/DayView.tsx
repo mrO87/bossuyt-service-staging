@@ -1,9 +1,22 @@
 'use client'
 
+/**
+ * DayView — het dagoverzicht van de technieker.
+ *
+ * v1.6: de Planning-sectie is nu een route-timeline (DayTimeline).
+ * Start → rijtijd → job → rijtijd → job → pauze → rijtijd → job → rijtijd → einde.
+ *
+ * De open pool blijft als aparte sectie onderaan staan.
+ */
+
+import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import type { InterventionStatus } from '@/types'
+import type { Intervention, InterventionStatus, InterventionType } from '@/types'
 import { interventions as MOCK_INTERVENTIONS } from '@/lib/mock-data'
 import { usePushNotifications } from '@/lib/usePushNotifications'
+import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
+
+// ---------- helpers ----------
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('nl-BE', {
@@ -22,31 +35,38 @@ function formatMinutes(minutes?: number): string {
   return `${h}u${m}`
 }
 
-// Tailwind bg class for the left color strip per job type / urgency
-function getTypeBorderClass(type: string, isUrgent: boolean): string {
-  if (isUrgent) return 'bg-brand-red'
+function typeBorderClass(type: InterventionType, urgent: boolean): string {
+  if (urgent) return 'bg-brand-red'
   switch (type) {
     case 'warm':       return 'bg-brand-orange'
     case 'montage':    return 'bg-brand-blue'
     case 'preventief': return 'bg-brand-green'
-    default:           return 'bg-stroke'
   }
 }
-
-// Returns the Tailwind classes for each status badge
-function getStatusClass(status: InterventionStatus): string {
+function typeClass(type: InterventionType): string {
+  switch (type) {
+    case 'warm':       return 'bg-brand-orange text-white'
+    case 'montage':    return 'bg-brand-blue text-white'
+    case 'preventief': return 'bg-brand-green text-white'
+  }
+}
+function typeLabel(type: InterventionType): string {
+  switch (type) {
+    case 'warm':       return 'Warm'
+    case 'montage':    return 'Montage'
+    case 'preventief': return 'Preventief'
+  }
+}
+function statusClass(status: InterventionStatus): string {
   switch (status) {
-    case 'gepland':          return 'bg-stroke text-ink-soft'
     case 'onderweg':         return 'bg-brand-orange text-white'
     case 'bezig':            return 'bg-brand-blue text-white'
-    case 'wacht_onderdelen': return 'bg-stroke text-ink-soft'
     case 'afgewerkt':        return 'bg-brand-green text-white'
     case 'geannuleerd':      return 'bg-brand-red text-white'
     default:                 return 'bg-stroke text-ink-soft'
   }
 }
-
-function getStatusLabel(status: InterventionStatus): string {
+function statusLabel(status: InterventionStatus): string {
   switch (status) {
     case 'gepland':          return 'Gepland'
     case 'onderweg':         return 'Onderweg'
@@ -54,25 +74,6 @@ function getStatusLabel(status: InterventionStatus): string {
     case 'wacht_onderdelen': return 'Wacht onderdelen'
     case 'afgewerkt':        return 'Afgewerkt'
     case 'geannuleerd':      return 'Geannuleerd'
-    default:                 return status
-  }
-}
-
-function getTypeClass(type: string): string {
-  switch (type) {
-    case 'warm':       return 'bg-brand-orange text-white'
-    case 'montage':    return 'bg-brand-blue text-white'
-    case 'preventief': return 'bg-brand-green text-white'
-    default:           return 'bg-stroke text-ink-soft'
-  }
-}
-
-function getTypeLabel(type: string): string {
-  switch (type) {
-    case 'warm':       return 'Warm'
-    case 'montage':    return 'Montage'
-    case 'preventief': return 'Preventief'
-    default:           return type
   }
 }
 
@@ -89,23 +90,40 @@ function BossuyLogo() {
 
 function Badge({ className, label }: { className: string; label: string }) {
   return (
-    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${className}`}>
+    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${className}`}>
       {label}
     </span>
   )
 }
 
+// ---------- main view ----------
+
 export default function DayView() {
   const router = useRouter()
-  const today  = new Date()
+  const today = new Date()
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
 
-  const done  = MOCK_INTERVENTIONS.filter(i => i.status === 'afgewerkt').length
+  const planned = useMemo<Intervention[]>(
+    () =>
+      MOCK_INTERVENTIONS
+        .filter(i => i.source === 'planned')
+        .sort((a, b) => {
+          const ao = a.technicians.find(t => t.isLead)?.plannedOrder ?? 0
+          const bo = b.technicians.find(t => t.isLead)?.plannedOrder ?? 0
+          return ao - bo
+        }),
+    [],
+  )
+  const openPool = useMemo<Intervention[]>(
+    () => MOCK_INTERVENTIONS.filter(i => i.source === 'reactive'),
+    [],
+  )
+
+  const done = MOCK_INTERVENTIONS.filter(i => i.status === 'afgewerkt').length
   const total = MOCK_INTERVENTIONS.length
 
   return (
     <div className="min-h-screen bg-surface">
-
       {/* Header */}
       <header className="bg-brand-dark px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -131,7 +149,7 @@ export default function DayView() {
         <p className="text-sm capitalize text-ink-soft">{formatDate(today)}</p>
       </div>
 
-      {/* Push notification bar — shown until subscribed */}
+      {/* Push notification bar */}
       {!subscribed && (
         <div className="bg-ink px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-xs text-ink-faint">
@@ -146,8 +164,6 @@ export default function DayView() {
           </button>
         </div>
       )}
-
-      {/* Test button — only shown after subscribing */}
       {subscribed && (
         <div className="bg-brand-green px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-xs font-medium text-white">Meldingen actief</p>
@@ -160,71 +176,68 @@ export default function DayView() {
         </div>
       )}
 
-      {/* Job list */}
-      <main className="px-4 py-4 flex flex-col gap-3 pb-8">
-        {MOCK_INTERVENTIONS.map((intervention) => (
-          <div
-            key={intervention.id}
-            onClick={() => router.push(`/interventions/${intervention.id}`)}
-            className="rounded-xl cursor-pointer transition-opacity active:opacity-70 flex overflow-hidden bg-white border border-stroke shadow-sm"
-          >
-            {/* Left color strip — indicates job type or urgency */}
-            <div className={`w-1 shrink-0 ${getTypeBorderClass(intervention.type, intervention.isUrgent)}`} />
+      <main className="px-4 py-4 pb-24">
+        {/* ---------- Planning — route timeline ---------- */}
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
+            Planning
+          </h2>
+          <span className="text-[11px] text-ink-soft">sleep om te herschikken</span>
+        </div>
 
-            {/* Card content */}
-            <div className="flex-1 p-4">
-              {/* Top row */}
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-base leading-tight text-ink">
-                    {intervention.customerName}
+        <DayTimeline plannedInterventions={planned} />
+
+        {/* ---------- Open pool ---------- */}
+        <div className="flex items-center justify-between mt-8 mb-2">
+          <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
+            Open pool
+          </h2>
+          <span className="text-[11px] text-ink-soft">{openPool.length} extra beschikbaar</span>
+        </div>
+        <p className="text-xs text-ink-soft mb-3">
+          Flexibele jobs — pak er eentje op als je tijd over hebt. Ze
+          worden niet in de route meegerekend tot je ze toewijst.
+        </p>
+
+        <div className="flex flex-col gap-3">
+          {openPool.map(intervention => (
+            <div
+              key={intervention.id}
+              onClick={() => router.push(`/interventions/${intervention.id}`)}
+              className="rounded-xl cursor-pointer transition-opacity active:opacity-70 flex overflow-hidden bg-white/70 border border-dashed border-stroke"
+            >
+              <div className={`w-1 shrink-0 ${typeBorderClass(intervention.type, intervention.isUrgent)}`} />
+              <div className="flex-1 p-3">
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
+                    <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
+                  </div>
+                </div>
+                {intervention.deviceBrand && (
+                  <p className="text-xs font-medium mt-1 text-ink">
+                    {intervention.deviceBrand} {intervention.deviceModel}
                   </p>
-                  <p className="text-sm text-ink-soft">{intervention.siteCity}</p>
-                </div>
-                {/* Technician avatars */}
-                <div className="flex -space-x-2 ml-2 shrink-0">
-                  {intervention.technicians.map((tech, i) => (
-                    <div
-                      key={tech.technicianId}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center border-2 border-white ${i === 0 ? 'bg-brand-mid' : 'bg-gray-600'}`}
-                      title={tech.name}
-                    >
-                      <span className="text-white text-xs font-bold">{tech.initials}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Device */}
-              {intervention.deviceBrand && (
-                <p className="text-sm font-medium mt-2 text-ink">
-                  {intervention.deviceBrand} {intervention.deviceModel}
-                </p>
-              )}
-
-              {/* Description */}
-              <p className="text-sm mt-0.5 mb-3 text-ink-soft">
-                {intervention.description}
-              </p>
-
-              {/* Badges */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge className={getTypeClass(intervention.type)} label={getTypeLabel(intervention.type)} />
-                <Badge className={getStatusClass(intervention.status)} label={getStatusLabel(intervention.status)} />
-                {intervention.estimatedMinutes && (
-                  <Badge className="bg-stroke text-ink-soft" label={formatMinutes(intervention.estimatedMinutes)} />
                 )}
-                {intervention.isUrgent && (
-                  <Badge className="bg-brand-red text-white" label="Dringend" />
+                {intervention.description && (
+                  <p className="text-xs mt-0.5 mb-2 text-ink-soft">{intervention.description}</p>
                 )}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge className={typeClass(intervention.type)} label={typeLabel(intervention.type)} />
+                  <Badge className={statusClass(intervention.status)} label={statusLabel(intervention.status)} />
+                  {intervention.estimatedMinutes && (
+                    <Badge className="bg-stroke text-ink-soft" label={formatMinutes(intervention.estimatedMinutes)} />
+                  )}
+                  {intervention.isUrgent && <Badge className="bg-brand-red text-white" label="Dringend" />}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
 
-        {MOCK_INTERVENTIONS.length === 0 && (
-          <p className="text-center mt-16 text-ink-soft">
-            Geen jobs gepland voor vandaag
+        {openPool.length === 0 && (
+          <p className="text-center mt-6 text-ink-soft text-sm">
+            Geen jobs in de pool
           </p>
         )}
       </main>
