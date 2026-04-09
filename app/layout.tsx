@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import VersionBadge from '@/components/VersionBadge'
 
 export const metadata: Metadata = {
   title: 'Bossuyt Service',
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="nl-BE">
       <body className="bg-gray-100 min-h-screen">
         {children}
+        <VersionBadge />
       </body>
     </html>
   )
