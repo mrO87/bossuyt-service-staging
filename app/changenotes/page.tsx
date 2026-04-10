@@ -14,6 +14,50 @@ type Version = { version: string; date: string; changes: Change[] }
 
 const VERSIONS: Version[] = [
   {
+    version: 'v1.7',
+    date: '10 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Echte rijtijden via OpenRouteService',
+        body:
+          'De route-timeline toont nu echte rijtijden en afstanden berekend ' +
+          'via OpenRouteService. De dag wordt live herberekend na elke ' +
+          'drag & drop. Zonder API key valt het systeem terug op mock-waarden.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'GPS-coördinaten op alle locaties',
+        body:
+          'Elke site heeft nu lat/lon coördinaten (via Nominatim/OpenStreetMap). ' +
+          'Het depot, klanten en nieuwe locaties zijn correct gepositioneerd ' +
+          'in Oost-Vlaanderen.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Nominatim geocoder voor adres → coördinaten',
+        body:
+          'Nieuwe adressen kunnen automatisch omgezet worden naar GPS-coördinaten ' +
+          'via de gratis Nominatim API (OpenStreetMap). Geen API key nodig.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Meer realistische demo-klanten',
+        body:
+          "Twee nieuwe klanten toegevoegd: Frituur 't Pleintje (Lokeren) en " +
+          'Brasserie De Klok (Dendermonde). De dag bevat nu 6 geplande jobs ' +
+          'met een route van ~148 km door Oost-Vlaanderen.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Pauze geeft 0 reistijd',
+        body:
+          'De middagpauze wordt niet meer als verplaatsing geteld. Reistijd ' +
+          'gaat van de job vóór de pauze naar de job erna — je blijft ter plaatse.',
+      },
+    ],
+  },
+  {
     version: 'v1.6',
     date: '9 april 2026',
     changes: [

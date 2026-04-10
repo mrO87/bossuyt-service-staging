@@ -26,6 +26,8 @@ export interface Site {
   address: string
   city: string
   phones: string[]        // one or more phone numbers for this location
+  lat?: number            // GPS latitude (WGS84)
+  lon?: number            // GPS longitude (WGS84)
 }
 
 export interface Contact {
@@ -81,6 +83,8 @@ export interface Intervention {
   siteName: string        // denormalized for display
   siteAddress: string     // denormalized for display
   siteCity: string        // denormalized for display
+  siteLat?: number        // denormalized GPS latitude
+  siteLon?: number        // denormalized GPS longitude
   deviceId: string
   deviceBrand?: string
   deviceModel?: string

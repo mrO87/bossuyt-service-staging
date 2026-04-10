@@ -29,6 +29,22 @@ export const customers: Customer[] = [
     city: 'Sint-Niklaas',
     vatNumber: 'BE0455112233',
   },
+  {
+    id: 'c4',
+    name: "Frituur 't Pleintje",
+    phone: '09 348 55 12',
+    address: 'Markt 18',
+    city: 'Lokeren',
+    vatNumber: 'BE0678901234',
+  },
+  {
+    id: 'c5',
+    name: 'Brasserie De Klok',
+    phone: '052 21 33 44',
+    address: 'Kerkstraat 10',
+    city: 'Dendermonde',
+    vatNumber: 'BE0789012345',
+  },
 ]
 
 // ============================================================
@@ -44,6 +60,8 @@ export const sites: Site[] = [
     address: 'Gasthuisstraat 12',
     city: 'Sint-Niklaas',
     phones: ['03 776 12 34', '03 776 12 35'],
+    lat: 51.1286,
+    lon: 4.2130,
   },
 
   // WZC Helianthus has two sites
@@ -54,6 +72,8 @@ export const sites: Site[] = [
     address: 'Wellingstraat 5',
     city: 'Melle',
     phones: ['09 252 67 89'],
+    lat: 51.0030,
+    lon: 3.7989,
   },
   {
     id: 's3',
@@ -62,6 +82,8 @@ export const sites: Site[] = [
     address: 'Hundelgemsesteenweg 44',
     city: 'Merelbeke',
     phones: ['09 231 44 56', '09 231 44 57'],
+    lat: 51.0249,
+    lon: 3.7491,
   },
 
   // AZ Nikolaas has one site
@@ -72,6 +94,32 @@ export const sites: Site[] = [
     address: 'Moerlandstraat 1',
     city: 'Sint-Niklaas',
     phones: ['03 760 00 00'],
+    lat: 51.1616,
+    lon: 4.1493,
+  },
+
+  // Frituur 't Pleintje in Lokeren
+  {
+    id: 's5',
+    customerId: 'c4',
+    name: "Frituur 't Pleintje",
+    address: 'Markt 18',
+    city: 'Lokeren',
+    phones: ['09 348 55 12'],
+    lat: 51.1040,
+    lon: 3.9892,
+  },
+
+  // Brasserie De Klok in Dendermonde
+  {
+    id: 's6',
+    customerId: 'c5',
+    name: 'Brasserie De Klok',
+    address: 'Kerkstraat 10',
+    city: 'Dendermonde',
+    phones: ['052 21 33 44'],
+    lat: 51.0317,
+    lon: 4.0983,
   },
 ]
 
@@ -110,6 +158,21 @@ export const contacts: Contact[] = [
     phone: '0499 11 22 33',
     email: 'p.goossens@azniko.be',
     role: 'Facility manager',
+  },
+  {
+    id: 'ct5',
+    siteId: 's5',
+    name: 'Kevin Maes',
+    phone: '0476 33 44 55',
+    role: 'Uitbater',
+  },
+  {
+    id: 'ct6',
+    siteId: 's6',
+    name: 'Annelies De Smet',
+    phone: '0487 66 77 88',
+    email: 'annelies@deklok.be',
+    role: 'Zaakvoerster',
   },
 ]
 
@@ -184,6 +247,27 @@ export const devices: Device[] = [
     installDate: '2023-05-22',
     notes: 'Groot toestel — 2 techniekers nodig voor onderhoud',
   },
+
+  // Frituur 't Pleintje (s5)
+  {
+    id: 'd8',
+    siteId: 's5',
+    brand: 'Henny Penny',
+    model: 'OFG-322',
+    serialNumber: 'HP-2021-00555',
+    installDate: '2021-04-10',
+    notes: 'Open fryer — hogedruk gasaansluiting',
+  },
+
+  // Brasserie De Klok (s6)
+  {
+    id: 'd9',
+    siteId: 's6',
+    brand: 'Rational',
+    model: 'iCombi Classic 6-1/1',
+    serialNumber: 'RAT-2022-00888',
+    installDate: '2022-08-15',
+  },
 ]
 
 // ============================================================
@@ -199,6 +283,8 @@ export const interventions: Intervention[] = [
     siteName: 'Rustoord Ennea',
     siteAddress: 'Gasthuisstraat 12',
     siteCity: 'Sint-Niklaas',
+    siteLat: 51.1286,
+    siteLon: 4.2130,
     deviceId: 'd1',
     deviceBrand: 'Electrolux',
     deviceModel: 'Glasswasher 50',
@@ -221,6 +307,8 @@ export const interventions: Intervention[] = [
     siteName: 'WZC Helianthus — Melle',
     siteAddress: 'Wellingstraat 5',
     siteCity: 'Melle',
+    siteLat: 51.0030,
+    siteLon: 3.7989,
     deviceId: 'd3',
     deviceBrand: 'Rational',
     deviceModel: 'iCombi Pro 10-1/1',
@@ -244,6 +332,8 @@ export const interventions: Intervention[] = [
     siteName: 'AZ Nikolaas — Campus Sint-Niklaas',
     siteAddress: 'Moerlandstraat 1',
     siteCity: 'Sint-Niklaas',
+    siteLat: 51.1616,
+    siteLon: 4.1493,
     deviceId: 'd7',
     deviceBrand: 'Rational',
     deviceModel: 'iCombi Pro 20-1/1',
@@ -266,6 +356,8 @@ export const interventions: Intervention[] = [
     siteName: 'Rustoord Ennea',
     siteAddress: 'Gasthuisstraat 12',
     siteCity: 'Sint-Niklaas',
+    siteLat: 51.1286,
+    siteLon: 4.2130,
     deviceId: 'd2',
     deviceBrand: 'Rational',
     deviceModel: 'SelfCooking Center 61',
@@ -280,15 +372,65 @@ export const interventions: Intervention[] = [
       { technicianId: 'u1', name: 'Olivier Bossuyt', initials: 'OB', isLead: true, accepted: true, plannedOrder: 4 },
     ],
   },
-  // --- Open pool — flexibele extra jobs die de technieker zelf kan oppikken ---
   {
     id: 'i5',
+    customerId: 'c4',
+    customerName: "Frituur 't Pleintje",
+    siteId: 's5',
+    siteName: "Frituur 't Pleintje",
+    siteAddress: 'Markt 18',
+    siteCity: 'Lokeren',
+    siteLat: 51.1040,
+    siteLon: 3.9892,
+    deviceId: 'd8',
+    deviceBrand: 'Henny Penny',
+    deviceModel: 'OFG-322',
+    plannedDate: new Date().toISOString(),
+    status: 'gepland',
+    type: 'warm',
+    description: 'Friteuse schakelt uit na 10 min — thermokoppel defect?',
+    estimatedMinutes: 90,
+    isUrgent: true,
+    source: 'planned',
+    technicians: [
+      { technicianId: 'u1', name: 'Olivier Bossuyt', initials: 'OB', isLead: true, accepted: true, plannedOrder: 5 },
+    ],
+  },
+  {
+    id: 'i6',
+    customerId: 'c5',
+    customerName: 'Brasserie De Klok',
+    siteId: 's6',
+    siteName: 'Brasserie De Klok',
+    siteAddress: 'Kerkstraat 10',
+    siteCity: 'Dendermonde',
+    siteLat: 51.0317,
+    siteLon: 4.0983,
+    deviceId: 'd9',
+    deviceBrand: 'Rational',
+    deviceModel: 'iCombi Classic 6-1/1',
+    plannedDate: new Date().toISOString(),
+    status: 'gepland',
+    type: 'preventief',
+    description: 'Halfjaarlijks onderhoud combisteamer',
+    estimatedMinutes: 60,
+    isUrgent: false,
+    source: 'planned',
+    technicians: [
+      { technicianId: 'u1', name: 'Olivier Bossuyt', initials: 'OB', isLead: true, accepted: true, plannedOrder: 6 },
+    ],
+  },
+  // --- Open pool — flexibele extra jobs die de technieker zelf kan oppikken ---
+  {
+    id: 'i7',
     customerId: 'c2',
     customerName: 'WZC Helianthus',
     siteId: 's3',
     siteName: 'WZC Helianthus — Merelbeke',
     siteAddress: 'Hundelgemsesteenweg 44',
     siteCity: 'Merelbeke',
+    siteLat: 51.0249,
+    siteLon: 3.7491,
     deviceId: 'd5',
     deviceBrand: 'MKN',
     deviceModel: 'FlexiCombi 10.1',
@@ -304,13 +446,15 @@ export const interventions: Intervention[] = [
     ],
   },
   {
-    id: 'i6',
+    id: 'i8',
     customerId: 'c2',
     customerName: 'WZC Helianthus',
     siteId: 's2',
     siteName: 'WZC Helianthus — Melle',
     siteAddress: 'Wellingstraat 5',
     siteCity: 'Melle',
+    siteLat: 51.0030,
+    siteLon: 3.7989,
     deviceId: 'd4',
     deviceBrand: 'Meiko',
     deviceModel: 'FV 130.2',

@@ -50,6 +50,7 @@ export function DayTimeline({
     state,
     fullSequence,
     totals,
+    routeLoading,
     reorder,
     setStartAddress,
     setEndAddress,
@@ -78,6 +79,7 @@ export function DayTimeline({
         jobCount={totals.jobCount}
         workMinutes={totals.workMinutes}
         travelMinutes={totals.travelMinutes}
+        routeLoading={routeLoading}
       />
 
       <StartEndAddressControls
