@@ -107,6 +107,7 @@ export default function DayView() {
     done,
     total,
     error: dayDataError,
+    notice,
   } = useDayData()
 
   return (
@@ -167,6 +168,11 @@ export default function DayView() {
         {dayDataError && (
           <div className="mb-4 rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-2 text-xs text-ink">
             {dayDataError}
+          </div>
+        )}
+        {notice && (
+          <div className="mb-4 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-3 py-2 text-xs text-ink">
+            {notice}
           </div>
         )}
 

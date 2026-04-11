@@ -16,6 +16,7 @@ import {
   cacheInterventions,
   saveDayMeta,
   getDayMeta,
+  type PendingWriteResult,
   type DayMeta,
 } from './idb'
 import type { Intervention } from '@/types'
@@ -157,12 +158,17 @@ async function fetchDailyRoute(planned: Intervention[]): Promise<RouteStep[]> {
  * Each pending write is tried in order. If it fails, we stop
  * and try again next time (keeps things in the right order).
  */
-export async function syncPendingWrites(): Promise<{ synced: number; failed: number }> {
-  const { getPendingWrites, removePendingWrite } = await import('./idb')
+export async function syncPendingWrites(): Promise<PendingWriteResult> {
+  const {
+    getPendingWrites,
+    removePendingWrite,
+  } = await import('./idb')
   const pending = await getPendingWrites()
 
   let synced = 0
   let failed = 0
+  let notice: string | undefined
+  let conflict = false
 
   for (const write of pending) {
     try {
@@ -172,8 +178,25 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
         body: JSON.stringify(write),
       })
       if (res.ok) {
+        const data = await res.json() as {
+          planned?: Intervention[]
+          open?: Intervention[]
+        }
+        if (data.planned && data.open) {
+          await cacheInterventions([...data.planned, ...data.open])
+        }
         await removePendingWrite(write.id!)
         synced++
+      } else if (res.status === 409 && write.type === 'update_sequence') {
+        const data = await res.json() as {
+          planned: Intervention[]
+          open: Intervention[]
+        }
+        await cacheInterventions([...data.planned, ...data.open])
+        await removePendingWrite(write.id!)
+        synced++
+        conflict = true
+        notice = 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
       } else {
         failed++
         break  // stop on first failure — maintain order
@@ -184,5 +207,5 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
     }
   }
 
-  return { synced, failed }
+  return { synced, failed, notice, conflict }
 }

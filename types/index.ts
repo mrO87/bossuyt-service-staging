@@ -100,6 +100,7 @@ export interface Intervention {
   statusArrivedAt?: string
   statusOnderwegBy?: string
   createdBy?: string
+  planningVersion?: number
 }
 
 export interface User {

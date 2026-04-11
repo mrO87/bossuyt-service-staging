@@ -38,6 +38,7 @@ import { TimelineNode } from './TimelineNode'
 import { TravelSegment } from './TravelSegment'
 import { JobTimelineCard } from './JobTimelineCard'
 import { BreakTimelineCard } from './BreakTimelineCard'
+import { enqueuePendingWrite, removePendingWritesByType, updateInterventionSequence } from '@/lib/idb'
 
 export function DayTimeline({
   plannedInterventions,
@@ -63,10 +64,29 @@ export function DayTimeline({
     useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 8 } }),
   )
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    reorder(String(active.id), String(over.id))
+    const reorderedJobs = reorder(String(active.id), String(over.id))
+    if (!reorderedJobs) return
+
+    await Promise.all(
+      reorderedJobs.map((intervention, index) =>
+        updateInterventionSequence(intervention.id, index + 1),
+      ),
+    )
+
+    await removePendingWritesByType('update_sequence')
+    await enqueuePendingWrite({
+      type: 'update_sequence',
+      createdAt: new Date().toISOString(),
+      payload: {
+        technicianId: 'u1',
+        date: new Date().toISOString().slice(0, 10),
+        planningVersion: reorderedJobs[0]?.planningVersion ?? 1,
+        orderedWorkOrderIds: reorderedJobs.map(intervention => intervention.id),
+      },
+    })
     // Route refresh is handled inside useRouteTimeline; this only updates order.
   }
 

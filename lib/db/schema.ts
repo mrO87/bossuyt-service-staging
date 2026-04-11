@@ -88,6 +88,7 @@ export const workOrders = pgTable('work_orders', {
   description: text('description'),
   estimatedMinutes: integer('estimated_minutes'),
   isUrgent: boolean('is_urgent').notNull().default(false),
+  planningVersion: integer('planning_version').notNull().default(1),
   statusOnderwegAt: timestamp('status_onderweg_at', { withTimezone: true }),
   statusArrivedAt: timestamp('status_arrived_at', { withTimezone: true }),
   statusOnderwegBy: text('status_onderweg_by'),

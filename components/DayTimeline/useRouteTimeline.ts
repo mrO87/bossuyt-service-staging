@@ -186,6 +186,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
   const [travelOverrides, setTravelOverrides] = useState<Map<string, { minutes: number; km: number }> | null>(null)
   const [routeLoading, setRouteLoading] = useState(false)
   const fetchIdRef = useRef(0)
+  const lastExternalJobSignatureRef = useRef('')
   const { movableItems, startAddress, endAddress, sameAsStart } = state
   const routeRefreshRequest = useMemo(
     () => buildRouteRefreshRequest({
@@ -206,6 +207,25 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
     [movableItems, startAddress, endAddress, sameAsStart],
   )
   const lastSuccessfulRouteKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const nextSignature = plannedInterventions
+      .map(intervention => `${intervention.id}:${intervention.technicians.find(technician => technician.isLead)?.plannedOrder ?? 0}`)
+      .join('|')
+
+    if (!nextSignature || nextSignature === lastExternalJobSignatureRef.current) {
+      return
+    }
+
+    lastExternalJobSignatureRef.current = nextSignature
+
+    setState(current => ({
+      ...current,
+      movableItems: initialState.movableItems,
+    }))
+    setTravelOverrides(null)
+    lastSuccessfulRouteKeyRef.current = null
+  }, [initialState.movableItems, plannedInterventions])
 
   // Fetch real travel times from ORS whenever the route inputs change.
   useEffect(() => {
@@ -353,15 +373,19 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
   }, [state, travelOverrides])
 
   const reorder = useCallback((activeId: string, overId: string) => {
-    setState(prev => {
-      const oldIndex = prev.movableItems.findIndex(i => i.id === activeId)
-      const newIndex = prev.movableItems.findIndex(i => i.id === overId)
-      if (oldIndex === -1 || newIndex === -1) return prev
-      return { ...prev, movableItems: arrayMove(prev.movableItems, oldIndex, newIndex) }
-    })
+    const oldIndex = movableItems.findIndex(item => item.id === activeId)
+    const newIndex = movableItems.findIndex(item => item.id === overId)
+    if (oldIndex === -1 || newIndex === -1) return null
+
+    const nextMovableItems = arrayMove(movableItems, oldIndex, newIndex)
+
+    setState(prev => ({ ...prev, movableItems: nextMovableItems }))
     // Clear overrides so mock values show instantly; useEffect will refetch
     setTravelOverrides(null)
-  }, [])
+    return nextMovableItems
+      .filter((item): item is JobItem => item.kind === 'job')
+      .map(item => item.intervention)
+  }, [movableItems])
 
   const setStartAddress = useCallback((address: string) => {
     setState(prev => ({

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { Intervention } from '@/types'
 import { getOpenInterventions, getPlannedInterventions } from '@/lib/idb'
-import { shouldSync, syncToday } from '@/lib/sync'
+import { shouldSync, syncPendingWrites, syncToday } from '@/lib/sync'
 
 const DEFAULT_TECHNICIAN_ID = 'u1'
 
@@ -32,6 +32,7 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID) {
   const [open, setOpen] = useState<Intervention[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     let isCancelled = false
@@ -47,6 +48,21 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID) {
 
       const hasCachedData = cached.planned.length + cached.open.length > 0
       const canSync = typeof navigator !== 'undefined' ? navigator.onLine : true
+      if (canSync) {
+        const writeResult = await syncPendingWrites()
+        if (isCancelled) return
+
+        if (writeResult.synced > 0 || writeResult.conflict) {
+          const refreshed = await readCachedDayData()
+          if (isCancelled) return
+
+          setPlanned(refreshed.planned)
+          setOpen(refreshed.open)
+        }
+
+        setNotice(writeResult.notice ?? null)
+      }
+
       const needsSync = canSync
         ? !hasCachedData || await shouldSync(technicianId)
         : !hasCachedData
@@ -86,5 +102,6 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID) {
     total: all.length,
     loading,
     error,
+    notice,
   }
 }

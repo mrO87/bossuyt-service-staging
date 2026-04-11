@@ -60,6 +60,13 @@ export interface PendingWrite {
   attempts: number
 }
 
+export interface PendingWriteResult {
+  synced: number
+  failed: number
+  notice?: string
+  conflict?: boolean
+}
+
 export interface DayMeta {
   date: string              // YYYY-MM-DD
   technicianId: string
@@ -185,6 +192,20 @@ export async function loadWerkbon(interventionId: string): Promise<WerkbonCache 
 export async function enqueuePendingWrite(write: Omit<PendingWrite, 'id' | 'attempts'>): Promise<void> {
   const db = await getDB()
   await db.add('pendingWrites', { ...write, attempts: 0 })
+}
+
+export async function removePendingWritesByType(type: PendingWrite['type']): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction('pendingWrites', 'readwrite')
+  const items = await tx.store.getAll()
+
+  await Promise.all(
+    items
+      .filter(item => item.type === type && typeof item.id === 'number')
+      .map(item => tx.store.delete(item.id!)),
+  )
+
+  await tx.done
 }
 
 /** Get all pending writes (to process when back online) */

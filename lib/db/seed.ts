@@ -85,6 +85,7 @@ async function seed() {
       description: intervention.description ?? null,
       estimatedMinutes: intervention.estimatedMinutes ?? null,
       isUrgent: intervention.isUrgent,
+      planningVersion: intervention.planningVersion ?? 1,
       statusOnderwegAt: intervention.statusOnderwegAt ? new Date(intervention.statusOnderwegAt) : null,
       statusArrivedAt: intervention.statusArrivedAt ? new Date(intervention.statusArrivedAt) : null,
       statusOnderwegBy: intervention.statusOnderwegBy ?? null,

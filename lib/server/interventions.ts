@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { Intervention, InterventionTechnician } from '@/types'
 import { db } from '@/lib/db'
 import {
@@ -32,6 +32,7 @@ type InterventionCoreRow = {
   description: string | null
   estimatedMinutes: number | null
   isUrgent: boolean
+  planningVersion: number
   source: Intervention['source']
   statusOnderwegAt: Date | null
   statusArrivedAt: Date | null
@@ -78,6 +79,7 @@ function toIntervention(
     description: row.description ?? undefined,
     estimatedMinutes: row.estimatedMinutes ?? undefined,
     isUrgent: row.isUrgent,
+    planningVersion: row.planningVersion,
     source: row.source,
     technicians: techniciansForWorkOrder,
     statusOnderwegAt: row.statusOnderwegAt?.toISOString(),
@@ -158,6 +160,7 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
       description: workOrders.description,
       estimatedMinutes: workOrders.estimatedMinutes,
       isUrgent: workOrders.isUrgent,
+      planningVersion: workOrders.planningVersion,
       source: workOrders.source,
       statusOnderwegAt: workOrders.statusOnderwegAt,
       statusArrivedAt: workOrders.statusArrivedAt,
@@ -220,4 +223,94 @@ export async function getTodayInterventions(
 export async function getInterventionById(id: string): Promise<Intervention | null> {
   const [intervention] = await fetchInterventionRows([id])
   return intervention ?? null
+}
+
+export async function getPlanningVersion(
+  technicianId: string,
+  date: string,
+): Promise<number> {
+  const { start, end } = getDayBounds(date)
+
+  const [row] = await db
+    .select({
+      planningVersion: sql<number>`coalesce(max(${workOrders.planningVersion}), 1)`,
+    })
+    .from(workOrderAssignments)
+    .innerJoin(workOrders, eq(workOrderAssignments.workOrderId, workOrders.id))
+    .where(
+      and(
+        eq(workOrderAssignments.technicianId, technicianId),
+        gte(workOrders.plannedDate, start),
+        lt(workOrders.plannedDate, end),
+      ),
+    )
+
+  return row?.planningVersion ?? 1
+}
+
+export async function saveTechnicianPlanningOrder(input: {
+  technicianId: string
+  date: string
+  planningVersion: number
+  orderedWorkOrderIds: string[]
+}): Promise<
+  | { ok: true; planningVersion: number; planned: Intervention[]; open: Intervention[] }
+  | { ok: false; planningVersion: number; planned: Intervention[]; open: Intervention[] }
+> {
+  const currentPlanningVersion = await getPlanningVersion(input.technicianId, input.date)
+  const latest = await getTodayInterventions(input.technicianId, input.date)
+
+  if (input.planningVersion !== currentPlanningVersion) {
+    return {
+      ok: false,
+      planningVersion: currentPlanningVersion,
+      planned: latest.planned,
+      open: latest.open,
+    }
+  }
+
+  const plannedIds = latest.planned.map(intervention => intervention.id).sort()
+  const requestedIds = [...input.orderedWorkOrderIds].sort()
+
+  if (
+    plannedIds.length !== requestedIds.length ||
+    plannedIds.some((id, index) => id !== requestedIds[index])
+  ) {
+    return {
+      ok: false,
+      planningVersion: currentPlanningVersion,
+      planned: latest.planned,
+      open: latest.open,
+    }
+  }
+
+  const nextPlanningVersion = currentPlanningVersion + 1
+
+  await Promise.all(
+    input.orderedWorkOrderIds.map((workOrderId, index) =>
+      db
+        .update(workOrderAssignments)
+        .set({ plannedOrder: index + 1 })
+        .where(
+          and(
+            eq(workOrderAssignments.workOrderId, workOrderId),
+            eq(workOrderAssignments.technicianId, input.technicianId),
+          ),
+        ),
+    ),
+  )
+
+  await db
+    .update(workOrders)
+    .set({ planningVersion: nextPlanningVersion })
+    .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+
+  const updated = await getTodayInterventions(input.technicianId, input.date)
+
+  return {
+    ok: true,
+    planningVersion: nextPlanningVersion,
+    planned: updated.planned,
+    open: updated.open,
+  }
 }
