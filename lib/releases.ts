@@ -15,6 +15,38 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.10',
+    date: '11 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Rijkere staging-database met ongeveer 15 klanten',
+        body:
+          'De staging database bevat nu een veel grotere en realistischer dataset, ' +
+          'met extra klanten, sites en toestellen. Daardoor kunnen we de volgende ' +
+          'versies testen op meerdere toestellen per klant zonder eerst opnieuw ' +
+          'basisdata te moeten uitvinden.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Bestaande planningsklanten kregen veel meer toestellen',
+        body:
+          'De klanten die vandaag al in de planning zitten zijn bewust het sterkst ' +
+          'uitgebreid. Dat maakt het mogelijk om in de volgende versie extra ' +
+          'opdrachten op dezelfde site voor een ander toestel te simuleren.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Historische dummy werkorders in de database',
+        body:
+          'Voor de belangrijkste bestaande klanten en toestellen zijn oudere ' +
+          'afgewerkte werkorders toegevoegd in de database. Die zijn nog niet in ' +
+          'de huidige UI zichtbaar, maar vormen wel het fundament voor de ' +
+          'toestelgeschiedenis die we in de volgende versie willen tonen.',
+      },
+    ],
+  },
+  {
     version: 'v1.9',
     date: '11 april 2026',
     changes: [
@@ -261,7 +293,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.9'
+const CURRENT_RELEASE_VERSION = 'v1.10'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
