@@ -19,7 +19,7 @@ services:
     container_name: bossuyt-staging
     restart: "no"           # niet auto-herstarten — staging is tijdelijk
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL_STAGING_DOCKER:-postgres://bossuyt:${POSTGRES_PASSWORD}@db-staging:5432/bossuyt_staging}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: https://staging.bossuyt.fixassistant.com
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
@@ -46,6 +46,8 @@ services:
       POSTGRES_DB: bossuyt_staging
       POSTGRES_USER: ${POSTGRES_USER:-bossuyt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_STAGING_PORT:-5433}:5432"
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
     networks:

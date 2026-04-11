@@ -33,6 +33,9 @@ const DEPOT_LAT = 51.1480
 const DEPOT_LON = 4.1709
 const DEFAULT_START_ADDRESS = 'Bossuyt Depot · Sint-Niklaas'
 const DEFAULT_BREAK_MINUTES = 30
+const ROUTE_REFRESH_DEBOUNCE_MS = 350
+
+type RouteRefreshInputs = Pick<RouteState, 'movableItems' | 'startAddress' | 'endAddress' | 'sameAsStart'>
 
 /** Insert a 30-minute midday break in the middle of the job list. */
 function insertMiddayBreak(jobs: JobItem[]): MovableItem[] {
@@ -65,6 +68,54 @@ function buildRouteStops(
   }
   stops.push({ lat: endLat, lon: endLon })
   return stops
+}
+
+function buildRouteRequest(
+  movableItems: MovableItem[],
+  startAddress: string,
+  endAddress: string,
+  sameAsStart: boolean,
+) {
+  return {
+    stops: buildRouteStops(
+      movableItems,
+      DEPOT_LAT, DEPOT_LON,
+      DEPOT_LAT, DEPOT_LON,
+    ),
+    startAddress,
+    endAddress,
+    sameAsStart,
+  }
+}
+
+/**
+ * Route refresh reproduction seam.
+ *
+ * Repro: open the day timeline, change the start or end address, and note
+ * that travel times only update once the order changes. Keeping the refresh
+ * inputs in one explicit object makes that trigger easy to inspect in tests.
+ */
+function buildRouteRefreshRequest({
+  movableItems,
+  startAddress,
+  endAddress,
+  sameAsStart,
+}: RouteRefreshInputs) {
+  return buildRouteRequest(movableItems, startAddress, endAddress, sameAsStart)
+}
+
+function getRouteRefreshKey({
+  movableItems,
+  startAddress,
+  endAddress,
+  sameAsStart,
+}: RouteRefreshInputs) {
+  return JSON.stringify({
+    itemIds: movableItems.map(item => item.id),
+    startAddress,
+    endAddress,
+    sameAsStart,
+  })
 }
 
 /**
@@ -135,41 +186,74 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
   const [travelOverrides, setTravelOverrides] = useState<Map<string, { minutes: number; km: number }> | null>(null)
   const [routeLoading, setRouteLoading] = useState(false)
   const fetchIdRef = useRef(0)
+  const { movableItems, startAddress, endAddress, sameAsStart } = state
+  const routeRefreshRequest = useMemo(
+    () => buildRouteRefreshRequest({
+      movableItems,
+      startAddress,
+      endAddress,
+      sameAsStart,
+    }),
+    [movableItems, startAddress, endAddress, sameAsStart],
+  )
+  const routeRefreshKey = useMemo(
+    () => getRouteRefreshKey({
+      movableItems,
+      startAddress,
+      endAddress,
+      sameAsStart,
+    }),
+    [movableItems, startAddress, endAddress, sameAsStart],
+  )
+  const lastSuccessfulRouteKeyRef = useRef<string | null>(null)
 
-  // Fetch real travel times from ORS whenever the order changes.
+  // Fetch real travel times from ORS whenever the route inputs change.
   useEffect(() => {
     const id = ++fetchIdRef.current
-    const stops = buildRouteStops(
-      state.movableItems,
-      DEPOT_LAT, DEPOT_LON,
-      DEPOT_LAT, DEPOT_LON, // same-as-start for now
-    )
+    const { stops } = routeRefreshRequest
 
     if (stops.length < 2) return
 
-    setRouteLoading(true)
+    let cancelled = false
 
-    fetch('/api/route/daily', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stops }),
-    })
-      .then(res => res.json())
-      .then(data => {
-        // Only apply if this is still the latest request
-        if (id !== fetchIdRef.current) return
+    if (routeRefreshKey !== lastSuccessfulRouteKeyRef.current) {
+      setTravelOverrides(null)
+    }
+
+    const refreshRoute = async () => {
+      setRouteLoading(true)
+
+      try {
+        const response = await fetch('/api/route/daily', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(routeRefreshRequest),
+        })
+        const data = await response.json()
+
+        if (cancelled || id !== fetchIdRef.current) return
+
         if (data.steps && data.steps[0]?.provider !== 'mock') {
-          const overrides = mapTravelOverrides(state.movableItems, data.steps)
+          const overrides = mapTravelOverrides(movableItems, data.steps)
           setTravelOverrides(overrides)
+          lastSuccessfulRouteKeyRef.current = routeRefreshKey
         }
-      })
-      .catch(() => {
-        // ORS unavailable — keep using mock values
-      })
-      .finally(() => {
-        if (id === fetchIdRef.current) setRouteLoading(false)
-      })
-  }, [state.movableItems])
+      } catch {
+        // ORS unavailable — keep the last successful values usable.
+      } finally {
+        if (!cancelled && id === fetchIdRef.current) setRouteLoading(false)
+      }
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void refreshRoute()
+    }, ROUTE_REFRESH_DEBOUNCE_MS)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [movableItems, routeRefreshKey, routeRefreshRequest])
 
   // Derived: the full visual sequence + totals.
   const { fullSequence, totals } = useMemo(() => {

@@ -9,7 +9,7 @@
 
 import Link from 'next/link'
 
-export const APP_VERSION = 'v1.7'
+import { CURRENT_VERSION } from '@/lib/releases'
 
 export default function VersionBadge() {
   // process.env.NEXT_PUBLIC_STAGING is injected at build time.
@@ -28,7 +28,7 @@ export default function VersionBadge() {
       }
       aria-label="Toon changelog"
     >
-      {isStaging ? `STAGING · ${APP_VERSION}` : APP_VERSION}
+      {isStaging ? `STAGING · ${CURRENT_VERSION}` : CURRENT_VERSION}
     </Link>
   )
 }

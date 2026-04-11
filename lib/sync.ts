@@ -117,11 +117,10 @@ async function fetchDailyRoute(planned: Intervention[]): Promise<RouteStep[]> {
   // TODO: store lat/lon on Intervention when Core API is connected
   // For now: skip routing if no coordinates available
   const stops = planned
-    .filter(i => i.siteId)  // only items with a known location
+    .filter(i => typeof i.siteLat === 'number' && typeof i.siteLon === 'number')
     .map(i => ({
-      // Placeholder — replace with real coordinates from Core API
-      lat: 0,
-      lon: 0,
+      lat: i.siteLat!,
+      lon: i.siteLon!,
       workOrderId: i.id,
     }))
 

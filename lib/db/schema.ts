@@ -1,0 +1,167 @@
+import { relations } from 'drizzle-orm'
+import {
+  boolean,
+  doublePrecision,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core'
+import type {
+  InterventionSource,
+  InterventionStatus,
+  InterventionType,
+  User,
+} from '@/types'
+
+export const technicians = pgTable('technicians', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  initials: text('initials').notNull(),
+  email: text('email'),
+  role: text('role').$type<User['role']>().notNull().default('technician'),
+  active: boolean('active').notNull().default(true),
+})
+
+export const customers = pgTable('customers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  phone: text('phone').notNull(),
+  address: text('address').notNull(),
+  city: text('city').notNull(),
+  vatNumber: text('vat_number'),
+})
+
+export const sites = pgTable('sites', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => customers.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  address: text('address').notNull(),
+  city: text('city').notNull(),
+  phonePrimary: text('phone_primary'),
+  phoneSecondary: text('phone_secondary'),
+  lat: doublePrecision('lat'),
+  lon: doublePrecision('lon'),
+})
+
+export const contacts = pgTable('contacts', {
+  id: text('id').primaryKey(),
+  siteId: text('site_id')
+    .notNull()
+    .references(() => sites.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  phone: text('phone').notNull(),
+  email: text('email'),
+  role: text('role'),
+})
+
+export const devices = pgTable('devices', {
+  id: text('id').primaryKey(),
+  siteId: text('site_id')
+    .notNull()
+    .references(() => sites.id, { onDelete: 'cascade' }),
+  brand: text('brand').notNull(),
+  model: text('model').notNull(),
+  serialNumber: text('serial_number'),
+  installDate: text('install_date'),
+  notes: text('notes'),
+})
+
+export const workOrders = pgTable('work_orders', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id')
+    .notNull()
+    .references(() => customers.id, { onDelete: 'restrict' }),
+  siteId: text('site_id')
+    .notNull()
+    .references(() => sites.id, { onDelete: 'restrict' }),
+  deviceId: text('device_id')
+    .notNull()
+    .references(() => devices.id, { onDelete: 'restrict' }),
+  plannedDate: timestamp('planned_date', { withTimezone: true }).notNull(),
+  status: text('status').$type<InterventionStatus>().notNull(),
+  type: text('type').$type<InterventionType>().notNull(),
+  source: text('source').$type<InterventionSource>().notNull(),
+  description: text('description'),
+  estimatedMinutes: integer('estimated_minutes'),
+  isUrgent: boolean('is_urgent').notNull().default(false),
+  statusOnderwegAt: timestamp('status_onderweg_at', { withTimezone: true }),
+  statusArrivedAt: timestamp('status_arrived_at', { withTimezone: true }),
+  statusOnderwegBy: text('status_onderweg_by'),
+  createdBy: text('created_by'),
+})
+
+export const workOrderAssignments = pgTable(
+  'work_order_assignments',
+  {
+    workOrderId: text('work_order_id')
+      .notNull()
+      .references(() => workOrders.id, { onDelete: 'cascade' }),
+    technicianId: text('technician_id')
+      .notNull()
+      .references(() => technicians.id, { onDelete: 'cascade' }),
+    isLead: boolean('is_lead').notNull().default(false),
+    accepted: boolean('accepted').notNull().default(false),
+    plannedOrder: integer('planned_order').notNull().default(0),
+  },
+  table => ({
+    pk: primaryKey({ columns: [table.workOrderId, table.technicianId] }),
+  }),
+)
+
+export const customerRelations = relations(customers, ({ many }) => ({
+  sites: many(sites),
+  workOrders: many(workOrders),
+}))
+
+export const siteRelations = relations(sites, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [sites.customerId],
+    references: [customers.id],
+  }),
+  contacts: many(contacts),
+  devices: many(devices),
+  workOrders: many(workOrders),
+}))
+
+export const deviceRelations = relations(devices, ({ one, many }) => ({
+  site: one(sites, {
+    fields: [devices.siteId],
+    references: [sites.id],
+  }),
+  workOrders: many(workOrders),
+}))
+
+export const workOrderRelations = relations(workOrders, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [workOrders.customerId],
+    references: [customers.id],
+  }),
+  site: one(sites, {
+    fields: [workOrders.siteId],
+    references: [sites.id],
+  }),
+  device: one(devices, {
+    fields: [workOrders.deviceId],
+    references: [devices.id],
+  }),
+  assignments: many(workOrderAssignments),
+}))
+
+export const technicianRelations = relations(technicians, ({ many }) => ({
+  assignments: many(workOrderAssignments),
+}))
+
+export const workOrderAssignmentRelations = relations(workOrderAssignments, ({ one }) => ({
+  workOrder: one(workOrders, {
+    fields: [workOrderAssignments.workOrderId],
+    references: [workOrders.id],
+  }),
+  technician: one(technicians, {
+    fields: [workOrderAssignments.technicianId],
+    references: [technicians.id],
+  }),
+}))

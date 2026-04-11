@@ -14,12 +14,7 @@ interface NominatimResult {
   display_name: string
 }
 
-export async function geocodeAddress(
-  address: string,
-  city: string,
-  country = 'Belgium',
-): Promise<Coordinates | null> {
-  const query = `${address}, ${city}, ${country}`
+async function geocodeQuery(query: string): Promise<Coordinates | null> {
   const url = new URL('https://nominatim.openstreetmap.org/search')
   url.searchParams.set('q', query)
   url.searchParams.set('format', 'json')
@@ -37,4 +32,27 @@ export async function geocodeAddress(
     lat: parseFloat(data[0].lat),
     lon: parseFloat(data[0].lon),
   }
+}
+
+export async function geocodeAddress(
+  address: string,
+  city: string,
+  country = 'Belgium',
+): Promise<Coordinates | null> {
+  const query = `${address}, ${city}, ${country}`
+  return geocodeQuery(query)
+}
+
+export async function geocodeSearchQuery(
+  query: string,
+  country = 'Belgium',
+): Promise<Coordinates | null> {
+  const trimmed = query.trim()
+  if (!trimmed) return null
+
+  const normalized = trimmed
+    .replaceAll('·', ',')
+    .replaceAll(/\s+/g, ' ')
+
+  return geocodeQuery(`${normalized}, ${country}`)
 }

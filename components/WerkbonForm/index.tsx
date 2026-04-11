@@ -9,7 +9,6 @@ import type { Intervention } from '@/types'
 // Local state shape for the form
 interface FormState {
   status: string
-  arrivalTime: string
   workStart: string
   workEnd: string
   description: string
@@ -27,19 +26,13 @@ const STATUS_OPTIONS = [
 ]
 
 const PRIORITY_OPTIONS = [
-  { value: 'laag',     label: 'Laag',     activeClass: 'bg-brand-green text-white border-brand-green',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'normaal',  label: 'Normaal',  activeClass: 'bg-brand-blue text-white border-brand-blue',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'hoog',     label: 'Hoog',     activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'dringend', label: 'Dringend', activeClass: 'bg-brand-red text-white border-brand-red',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-]
+  { value: 'laag',      label: 'Laag',      activeClass: 'bg-brand-green text-white border-brand-green',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'gemiddeld', label: 'Gemiddeld', activeClass: 'bg-brand-blue text-white border-brand-blue',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'hoog',      label: 'Hoog',      activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+] as const
 
 function now() {
   return new Date().toISOString()
-}
-
-function fmtTime(iso: string) {
-  if (!iso) return '--:--'
-  return new Date(iso).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })
 }
 
 // Reusable section wrapper
@@ -64,7 +57,6 @@ interface Props {
 export default function WerkbonForm({ intervention }: Props) {
   const [form, setForm] = useState<FormState>({
     status:      intervention.status,
-    arrivalTime: '',
     workStart:   '',
     workEnd:     '',
     description: '',
@@ -80,14 +72,35 @@ export default function WerkbonForm({ intervention }: Props) {
   }
 
   // Time buttons
-  function markAankomst() {
-    setForm(prev => ({ ...prev, arrivalTime: now(), status: 'bezig' }))
-  }
   function markStartWork() {
-    setForm(prev => ({ ...prev, workStart: now() }))
+    setForm(prev => ({ ...prev, workStart: now(), status: 'bezig' }))
   }
   function markEndWork() {
     setForm(prev => ({ ...prev, workEnd: now(), status: 'afgewerkt' }))
+  }
+
+  // Convert the "HH:mm" value from a <input type="time"> back into an ISO
+  // timestamp on the same calendar day as the original entry (or today if
+  // no time was set yet). Keeps the stored value format consistent with
+  // the buttons (always an ISO string).
+  function setTimeField(field: 'workStart' | 'workEnd', hhmm: string) {
+    if (!hhmm) {
+      setForm(prev => ({ ...prev, [field]: '' }))
+      return
+    }
+    const [h, m] = hhmm.split(':').map(Number)
+    setForm(prev => {
+      const base = prev[field] ? new Date(prev[field]) : new Date()
+      base.setHours(h, m, 0, 0)
+      return { ...prev, [field]: base.toISOString() }
+    })
+  }
+
+  // Convert an ISO timestamp to the "HH:mm" shape that <input type="time"> needs.
+  function isoToHHMM(iso: string): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
   // Parts
@@ -107,7 +120,7 @@ export default function WerkbonForm({ intervention }: Props) {
 
   // Follow-up
   function addFollowUp() {
-    const f: PdfFollowUp = { id: `f-${Date.now()}`, description: '', priority: 'normaal', dueDate: '' }
+    const f: PdfFollowUp = { id: `f-${Date.now()}`, description: '', priority: 'gemiddeld', dueDate: '' }
     setForm(prev => ({ ...prev, followUp: [...prev.followUp, f] }))
   }
   function updateFollowUp(id: string, field: keyof PdfFollowUp, value: string) {
@@ -138,7 +151,6 @@ export default function WerkbonForm({ intervention }: Props) {
         deviceBrand:  intervention.deviceBrand  || '',
         deviceModel:  intervention.deviceModel  || '',
         status:       form.status,
-        arrivalTime:  form.arrivalTime,
         workStart:    form.workStart,
         workEnd:      form.workEnd,
         description:  form.description,
@@ -191,31 +203,31 @@ export default function WerkbonForm({ intervention }: Props) {
 
       {/* ── Time registration ── */}
       <Section title="TIJDREGISTRATIE">
-        {/* Time display boxes */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        {/* Editable time inputs — tap to adjust the recorded time */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
           {[
-            { label: 'Aankomst',   value: form.arrivalTime },
-            { label: 'Werk start', value: form.workStart },
-            { label: 'Werk einde', value: form.workEnd },
+            { label: 'Werk start', value: form.workStart, field: 'workStart' as const },
+            { label: 'Werk einde', value: form.workEnd,   field: 'workEnd'   as const },
           ].map(t => (
-            <div key={t.label} className="rounded-xl p-3 text-center bg-surface">
+            <label key={t.label} className="rounded-xl p-3 text-center bg-surface block">
               <p className="text-xs mb-1 text-ink-soft">{t.label}</p>
-              <p className="text-xl font-bold text-ink">{fmtTime(t.value)}</p>
-            </div>
+              {t.value ? (
+                <input
+                  type="time"
+                  value={isoToHHMM(t.value)}
+                  onChange={e => setTimeField(t.field, e.target.value)}
+                  className="w-full text-xl font-bold text-ink bg-transparent text-center outline-none"
+                />
+              ) : (
+                <p className="text-xl font-bold text-ink">--:--</p>
+              )}
+            </label>
           ))}
         </div>
 
         {/* Action buttons — show progressively */}
         <div className="flex flex-col gap-2">
-          {!form.arrivalTime && (
-            <button
-              onClick={markAankomst}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-orange"
-            >
-              Aankomst registreren
-            </button>
-          )}
-          {form.arrivalTime && !form.workStart && (
+          {!form.workStart && (
             <button
               onClick={markStartWork}
               className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue"
@@ -315,7 +327,8 @@ export default function WerkbonForm({ intervention }: Props) {
             <p className="text-sm text-center py-2 text-ink-faint">Geen opvolgacties</p>
           )}
           {form.followUp.map(f => (
-            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
+            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-3 bg-surface border border-stroke">
+              {/* Description row */}
               <div className="flex gap-2">
                 <input
                   placeholder="Beschrijving actie..."
@@ -325,24 +338,28 @@ export default function WerkbonForm({ intervention }: Props) {
                 />
                 <button onClick={() => removeFollowUp(f.id)} className="px-2 text-lg text-brand-red">×</button>
               </div>
-              <div className="flex gap-2">
-                {/* Priority selector */}
-                <div className="flex gap-1 flex-wrap flex-1">
-                  {PRIORITY_OPTIONS.map(p => (
-                    <button
-                      key={p.value}
-                      onClick={() => updateFollowUp(f.id, 'priority', p.value)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${f.priority === p.value ? p.activeClass : p.inactiveClass}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
+
+              {/* Priority — three-level segmented control */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {PRIORITY_OPTIONS.map(p => (
+                  <button
+                    key={p.value}
+                    onClick={() => updateFollowUp(f.id, 'priority', p.value)}
+                    className={`py-1.5 rounded-lg text-xs font-semibold border transition-colors ${f.priority === p.value ? p.activeClass : p.inactiveClass}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Due date — small inline row aligned right */}
+              <div className="flex items-center justify-end gap-2">
+                <label className="text-[11px] uppercase tracking-wide text-ink-soft">Tegen</label>
                 <input
                   type="date"
                   value={f.dueDate}
                   onChange={e => updateFollowUp(f.id, 'dueDate', e.target.value)}
-                  className="rounded-lg px-2 py-1 text-sm outline-none bg-white border border-stroke text-ink"
+                  className="rounded-md px-2 py-1 text-xs outline-none bg-white border border-stroke text-ink"
                 />
               </div>
             </div>

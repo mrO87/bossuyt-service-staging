@@ -9,12 +9,11 @@
  * De open pool blijft als aparte sectie onderaan staan.
  */
 
-import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Intervention, InterventionStatus, InterventionType } from '@/types'
-import { interventions as MOCK_INTERVENTIONS } from '@/lib/mock-data'
+import type { InterventionStatus, InterventionType } from '@/types'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
+import { useDayData } from '@/lib/useDayData'
 
 // ---------- helpers ----------
 
@@ -102,25 +101,13 @@ export default function DayView() {
   const router = useRouter()
   const today = new Date()
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
-
-  const planned = useMemo<Intervention[]>(
-    () =>
-      MOCK_INTERVENTIONS
-        .filter(i => i.source === 'planned')
-        .sort((a, b) => {
-          const ao = a.technicians.find(t => t.isLead)?.plannedOrder ?? 0
-          const bo = b.technicians.find(t => t.isLead)?.plannedOrder ?? 0
-          return ao - bo
-        }),
-    [],
-  )
-  const openPool = useMemo<Intervention[]>(
-    () => MOCK_INTERVENTIONS.filter(i => i.source === 'reactive'),
-    [],
-  )
-
-  const done = MOCK_INTERVENTIONS.filter(i => i.status === 'afgewerkt').length
-  const total = MOCK_INTERVENTIONS.length
+  const {
+    planned,
+    open: openPool,
+    done,
+    total,
+    error: dayDataError,
+  } = useDayData()
 
   return (
     <div className="min-h-screen bg-surface">
@@ -177,6 +164,12 @@ export default function DayView() {
       )}
 
       <main className="px-4 py-4 pb-24">
+        {dayDataError && (
+          <div className="mb-4 rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-2 text-xs text-ink">
+            {dayDataError}
+          </div>
+        )}
+
         {/* ---------- Planning — route timeline ---------- */}
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-bold tracking-wide text-ink uppercase">

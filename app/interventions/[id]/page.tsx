@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { interventions } from '@/lib/mock-data'
 import WerkbonForm from '@/components/WerkbonForm'
+import type { Intervention } from '@/types'
+import { getIntervention, upsertIntervention } from '@/lib/idb'
 
 function BossuytLogo() {
   return (
@@ -18,9 +20,63 @@ function BossuytLogo() {
 export default function InterventionPage() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
+  const [intervention, setIntervention] = useState<Intervention | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // Look up the intervention from mock data
-  const intervention = interventions.find(i => i.id === id)
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadIntervention() {
+      setLoading(true)
+
+      const cached = await getIntervention(id)
+      if (cached) {
+        if (!cancelled) {
+          setIntervention(cached)
+          setLoading(false)
+        }
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/interventions/${id}`)
+        if (!response.ok) {
+          if (!cancelled) {
+            setIntervention(null)
+            setLoading(false)
+          }
+          return
+        }
+
+        const data = await response.json() as { intervention: Intervention }
+        await upsertIntervention(data.intervention)
+
+        if (!cancelled) {
+          setIntervention(data.intervention)
+          setLoading(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setIntervention(null)
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadIntervention()
+
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F4F6F8' }}>
+        <p className="text-sm" style={{ color: '#1F2933' }}>Job laden...</p>
+      </div>
+    )
+  }
 
   // Not found
   if (!intervention) {

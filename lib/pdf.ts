@@ -15,7 +15,7 @@ export interface PdfPart {
 export interface PdfFollowUp {
   id: string
   description: string
-  priority: 'laag' | 'normaal' | 'hoog' | 'dringend'
+  priority: 'laag' | 'gemiddeld' | 'hoog'
   dueDate: string
 }
 
@@ -28,7 +28,6 @@ export interface PdfData {
   deviceModel: string
   deviceSerial?: string
   status: string
-  arrivalTime: string
   workStart: string
   workEnd: string
   description: string
@@ -71,10 +70,9 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const PRIORITY_COLORS: Record<string, readonly [number, number, number]> = {
-  laag:    C.green,
-  normaal: C.blue,
-  hoog:    C.orange,
-  dringend:C.red,
+  laag:      C.green,
+  gemiddeld: C.blue,
+  hoog:      C.orange,
 }
 
 // jsPDF types don't accept spread of readonly tuples — use this helper instead
@@ -168,7 +166,7 @@ export function generateWerkbonPDF(data: PdfData): void {
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   textColor(doc, C.textGray)
-  doc.text(fmtDate(data.arrivalTime || new Date().toISOString()), pageW - mR, 19, { align: 'right' })
+  doc.text(fmtDate(data.workStart || new Date().toISOString()), pageW - mR, 19, { align: 'right' })
 
   y = 38
 
@@ -200,9 +198,8 @@ export function generateWerkbonPDF(data: PdfData): void {
   sectionTitle('TIJDREGISTRATIE')
   checkPage(16)
 
-  const timeBoxW = cW / 3
+  const timeBoxW = cW / 2
   const times = [
-    { label: 'Aankomst',   value: fmtTime(data.arrivalTime) },
     { label: 'Werk start', value: fmtTime(data.workStart) },
     { label: 'Werk einde', value: fmtTime(data.workEnd) },
   ]

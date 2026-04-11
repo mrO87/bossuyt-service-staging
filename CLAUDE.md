@@ -25,6 +25,14 @@ Before working on this project, read:
 - Mobile-first — design for phone in the field
 - High contrast, large touch targets (used with dirty hands/gloves)
 - Offline-first — every write goes to IndexedDB before API
+- Do not use subagents in this repo unless the user explicitly re-enables them in the current session.
+
+## Release Workflow
+- For visible changes on `staging.bossuyt.fixassistant.com`, first ask whether the work is a new version or a refinement of the current version.
+- `/architecture`-only edits and hidden-route edits do not require a version question by themselves.
+- Do not bump versions on your own; version changes must be user-directed.
+- If the user confirms the work is a new version, update version metadata only as part of that version.
+- When that version is finished, ask whether to commit and push it to GitHub.
 
 ## Deployment
 - Docker + nginx on Hetzner

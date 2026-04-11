@@ -130,6 +130,12 @@ export async function getIntervention(id: string): Promise<Intervention | undefi
   return db.get('interventions', id)
 }
 
+/** Save or refresh one intervention without clearing the full day cache */
+export async function upsertIntervention(item: Intervention): Promise<void> {
+  const db = await getDB()
+  await db.put('interventions', item)
+}
+
 /** Update status of an intervention in local cache */
 export async function updateInterventionStatus(
   id: string,

@@ -9,10 +9,9 @@
  * user can drag to reorder jobs and the break freely, but not the start
  * and end anchors.
  *
- * Travel minutes/km are currently computed by `mockRouting.ts`. To plug
- * in the real ORS call, fire a `fetch('/api/route/daily', { … })` on
- * drag-end with the new anchor coordinates and replace the mocked
- * travel values in state. The visual layout stays the same.
+ * Travel minutes/km are derived by `useRouteTimeline`, which refreshes
+ * the route automatically when the order or start/end inputs change.
+ * This component stays focused on rendering and drag/drop interaction.
  */
 'use client'
 
@@ -68,7 +67,7 @@ export function DayTimeline({
     const { active, over } = event
     if (!over || active.id === over.id) return
     reorder(String(active.id), String(over.id))
-    // TODO: when routing is live, trigger a real /api/route/daily refresh here.
+    // Route refresh is handled inside useRouteTimeline; this only updates order.
   }
 
   const sortableIds = state.movableItems.map(i => i.id)

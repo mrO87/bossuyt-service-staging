@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { TimelineRail, RailLine } from './TimelineRail'
+import { getGeolocationErrorMessage } from './geolocationError'
 
 type BreakState = 'idle' | 'active' | 'done'
 
@@ -41,7 +42,6 @@ async function reverseGeocode(lat: number, lon: number): Promise<string> {
 
 export function BreakTimelineCard({
   id,
-  minutes,
   label,
 }: {
   id: string
@@ -54,9 +54,28 @@ export function BreakTimelineCard({
   const [breakState, setBreakState] = useState<BreakState>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [location, setLocation] = useState<string | null>(null)
+  const [locAccuracy, setLocAccuracy] = useState<number | null>(null)
   const [locLoading, setLocLoading] = useState(false)
   const [locError, setLocError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const watchIdRef = useRef<number | null>(null)
+
+  // Pre-request location permission on mount so the browser prompt appears
+  // early — before any notification banners or overlays that would block it.
+  useEffect(() => {
+    if (!navigator.geolocation || !navigator.permissions) return
+    navigator.permissions.query({ name: 'geolocation' }).then(result => {
+      if (result.state === 'prompt') {
+        // Trigger the permission dialog now (result is discarded).
+        navigator.geolocation.getCurrentPosition(() => {}, () => {}, {
+          enableHighAccuracy: false,
+          timeout: 5000,
+        })
+      }
+    }).catch(() => {
+      // Permissions API not supported — we'll prompt on Start instead.
+    })
+  }, [])
 
   // Live timer while break is active
   useEffect(() => {
@@ -70,35 +89,86 @@ export function BreakTimelineCard({
     }
   }, [breakState])
 
+  // Safety cleanup: if the component unmounts while we're still watching, release the GPS.
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
+  }, [])
+
+  // Target accuracy in meters: once the GPS fix is this good, we stop watching.
+  const GOOD_ACCURACY_M = 50
+  // Hard cutoff: after 20s we accept whatever we have.
+  const WATCH_TIMEOUT_MS = 20000
+
   const handleStart = useCallback(() => {
     setBreakState('active')
     setElapsed(0)
     setLocation(null)
+    setLocAccuracy(null)
     setLocError(null)
 
-    // Capture GPS
     if (!navigator.geolocation) {
       setLocError('GPS niet beschikbaar')
       return
     }
 
     setLocLoading(true)
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const addr = await reverseGeocode(pos.coords.latitude, pos.coords.longitude)
-        setLocation(addr)
-        setLocLoading(false)
+
+    // Track the best fix we've seen so far — GPS accuracy improves over time.
+    let bestAccuracy = Infinity
+    let bestCoords: { lat: number; lon: number } | null = null
+
+    const finishWith = async (coords: { lat: number; lon: number }, accuracy: number) => {
+      setLocAccuracy(accuracy)
+      const addr = await reverseGeocode(coords.lat, coords.lon)
+      setLocation(addr)
+      setLocLoading(false)
+    }
+
+    const stopWatching = () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const acc = pos.coords.accuracy
+        if (acc < bestAccuracy) {
+          bestAccuracy = acc
+          bestCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude }
+          // Show intermediate accuracy so the user sees it tightening up.
+          setLocAccuracy(Math.round(acc))
+        }
+        if (acc <= GOOD_ACCURACY_M) {
+          stopWatching()
+          void finishWith({ lat: pos.coords.latitude, lon: pos.coords.longitude }, acc)
+        }
       },
       (err) => {
-        setLocError(
-          err.code === 1 ? 'Locatie geweigerd' :
-          err.code === 2 ? 'Locatie niet beschikbaar' :
-          'Locatie timeout'
-        )
+        stopWatching()
+        setLocError(getGeolocationErrorMessage(err))
         setLocLoading(false)
       },
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, timeout: WATCH_TIMEOUT_MS, maximumAge: 0 },
     )
+
+    // Hard timeout: if we never hit 50m, accept the best we have.
+    setTimeout(() => {
+      if (watchIdRef.current === null) return
+      stopWatching()
+      if (bestCoords) {
+        void finishWith(bestCoords, bestAccuracy)
+      } else {
+        setLocError('Geen GPS-fix gekregen')
+        setLocLoading(false)
+      }
+    }, WATCH_TIMEOUT_MS)
   }, [])
 
   const handleStop = useCallback(() => {
@@ -195,9 +265,20 @@ export function BreakTimelineCard({
             <div className="px-3 pb-2.5 pl-11">
               <div className="flex items-center gap-1.5 text-xs text-ink-soft">
                 <span aria-hidden>📍</span>
-                {locLoading && <span className="animate-pulse">Locatie ophalen...</span>}
+                {locLoading && (
+                  <span className="animate-pulse">
+                    Locatie ophalen{locAccuracy !== null ? ` (±${locAccuracy}m)` : '...'}
+                  </span>
+                )}
                 {locError && <span>{locError}</span>}
-                {location && <span className="truncate">{location}</span>}
+                {location && (
+                  <span className="truncate">
+                    {location}
+                    {locAccuracy !== null && (
+                      <span className="ml-1 text-ink-faint">±{Math.round(locAccuracy)}m</span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
           )}

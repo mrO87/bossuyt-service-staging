@@ -115,7 +115,7 @@ export default function SignaturePad({ signature, onSignatureChange }: Props) {
         {/* Placeholder text when empty */}
         {!hasContent && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="text-sm text-ink-faint">Teken hier de handtekening van de klant</p>
+            <p className="text-sm text-ink-faint">In dit vak handtekenen</p>
           </div>
         )}
       </div>
