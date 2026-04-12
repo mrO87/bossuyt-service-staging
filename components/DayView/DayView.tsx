@@ -9,7 +9,9 @@
  * De open pool blijft als aparte sectie onderaan staan.
  */
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import SettingsSheet from '@/components/SettingsSheet'
 import type { InterventionStatus, InterventionType } from '@/types'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
@@ -100,6 +102,7 @@ function Badge({ className, label }: { className: string; label: string }) {
 export default function DayView() {
   const router = useRouter()
   const today = new Date()
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
   const {
     planned,
@@ -126,9 +129,13 @@ export default function DayView() {
             <p className="text-xs text-ink-soft">Vandaag</p>
             <p className="text-sm font-medium text-white">{done}/{total} afgewerkt</p>
           </div>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
+            aria-label="Instellingen openen"
+          >
             <span className="text-white text-xs font-bold">OP</span>
-          </div>
+          </button>
         </div>
       </header>
 
@@ -240,6 +247,8 @@ export default function DayView() {
           </p>
         )}
       </main>
+
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }
