@@ -15,6 +15,34 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.13',
+    date: '12 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Werkbonnen tabel — elke opslag maakt een nieuw record',
+        body:
+          'Elke keer dat je op "PDF Genereren & Opslaan" klikt, wordt een nieuw werkbon-record ' +
+          'aangemaakt in de database. Zo wordt niets meer overschreven en is de volledige ' +
+          'geschiedenis van alle ingevulde werkbonnen per toestel bewaard.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'PDF bekijken via historiek',
+        body:
+          'De PDF-link in de historiek werkt nu correct. De bestanden worden bewaard op de server ' +
+          'en opgediend via een beveiligde API-route — ook in de standalone Docker-build.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Opvolgacties worden ook opgeslagen bij de werkbon',
+        body:
+          'Naast omschrijving, onderdelen, start- en eindtijd worden nu ook de opvolgacties ' +
+          'bewaard als onderdeel van de werkbon in de database.',
+      },
+    ],
+  },
+  {
     version: 'v1.12',
     date: '12 april 2026',
     changes: [
@@ -364,7 +392,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.12'
+const CURRENT_RELEASE_VERSION = 'v1.13'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

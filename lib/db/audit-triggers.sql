@@ -46,7 +46,8 @@ BEGIN
     'devices',
     'work_orders',
     'work_order_assignments',
-    'device_documents'
+    'device_documents',
+    'werkbonnen'
   ] LOOP
     EXECUTE format(
       'DROP TRIGGER IF EXISTS audit_%I ON %I;

@@ -22,16 +22,19 @@ interface Docs {
 }
 
 interface HistoryEntry {
-  id:                string
-  status:            string
-  type:              string
-  plannedDate:       string
-  description:       string | null
-  isUrgent:          boolean
-  completionNotes:   string | null
-  completionParts:   string | null  // JSON string: PdfPart[]
-  completionPdfPath: string | null
-  completedAt:       string | null
+  id:          string
+  workOrderId: string
+  type:        string
+  plannedDate: string
+  description: string | null   // original problem reported
+  isUrgent:    boolean
+  workStart:   string | null
+  workEnd:     string | null
+  notes:       string | null   // technician work description
+  parts:       string | null   // JSON: PdfPart[]
+  pdfPath:     string | null
+  completedAt: string | null
+  changedBy:   string | null
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -162,7 +165,7 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
     <div className="space-y-3 mt-1">
       {entries.map(e => {
         const parts: Array<{ code: string; description: string; quantity: number }> =
-          e.completionParts ? (() => { try { return JSON.parse(e.completionParts!) } catch { return [] } })() : []
+          e.parts ? (() => { try { return JSON.parse(e.parts!) } catch { return [] } })() : []
 
         return (
           <div key={e.id} className="rounded-xl border border-stroke bg-surface px-3 py-3 space-y-2">
@@ -170,7 +173,7 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-ink">{TYPE_LABEL[e.type] ?? e.type}</span>
               <span className="text-[10px] text-ink-soft flex-shrink-0">
-                {new Date(e.plannedDate).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {new Date(e.completedAt ?? e.plannedDate).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             </div>
 
@@ -182,11 +185,11 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
               </div>
             )}
 
-            {/* Oplossing (completionNotes) */}
-            {e.completionNotes && (
+            {/* Oplossing (technician notes) */}
+            {e.notes && (
               <div>
                 <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-0.5">Oplossing</p>
-                <p className="text-xs text-ink leading-snug">{e.completionNotes}</p>
+                <p className="text-xs text-ink leading-snug">{e.notes}</p>
               </div>
             )}
 
@@ -209,9 +212,9 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
             )}
 
             {/* PDF link */}
-            {e.completionPdfPath && (
+            {e.pdfPath && (
               <a
-                href={e.completionPdfPath}
+                href={e.pdfPath}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-orange underline underline-offset-2"

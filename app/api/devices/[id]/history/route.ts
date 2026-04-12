@@ -1,38 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { and, eq, ne } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { workOrders } from '@/lib/db/schema'
+import { werkbonnen, workOrders } from '@/lib/db/schema'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params
-  const { searchParams } = new URL(req.url)
-  const excludeId = searchParams.get('exclude') // exclude the current open work order
+  const { id: deviceId } = await params
 
+  // Return all werkbon submissions for this device, newest first.
+  // Each row represents one completed werkbon (multiple allowed per work order).
   const rows = await db
     .select({
-      id:                workOrders.id,
-      status:            workOrders.status,
-      type:              workOrders.type,
-      plannedDate:       workOrders.plannedDate,
-      description:       workOrders.description,
-      isUrgent:          workOrders.isUrgent,
-      completionNotes:   workOrders.completionNotes,
-      completionParts:   workOrders.completionParts,
-      completionPdfPath: workOrders.completionPdfPath,
-      completedAt:       workOrders.completedAt,
+      id:          werkbonnen.id,
+      workOrderId: werkbonnen.workOrderId,
+      type:        workOrders.type,
+      plannedDate: workOrders.plannedDate,
+      description: workOrders.description,   // original problem reported
+      isUrgent:    workOrders.isUrgent,
+      workStart:   werkbonnen.workStart,
+      workEnd:     werkbonnen.workEnd,
+      notes:       werkbonnen.notes,         // technician's work description
+      parts:       werkbonnen.parts,         // JSON: PdfPart[]
+      pdfPath:     werkbonnen.pdfPath,
+      completedAt: werkbonnen.completedAt,
+      changedBy:   werkbonnen.changedBy,
     })
-    .from(workOrders)
-    .where(
-      and(
-        eq(workOrders.deviceId, id),
-        eq(workOrders.status, 'afgewerkt'),
-        excludeId ? ne(workOrders.id, excludeId) : undefined,
-      ),
-    )
-    .orderBy(workOrders.plannedDate)
+    .from(werkbonnen)
+    .innerJoin(workOrders, eq(werkbonnen.workOrderId, workOrders.id))
+    .where(eq(workOrders.deviceId, deviceId))
+    .orderBy(desc(werkbonnen.completedAt))
 
   return NextResponse.json(rows)
 }

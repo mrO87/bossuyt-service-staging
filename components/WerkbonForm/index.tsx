@@ -167,6 +167,7 @@ export default function WerkbonForm({ intervention }: Props) {
       fd.append('changedBy',       intervention.technicians[0]?.technicianId ?? '')
       fd.append('completionNotes', form.description)
       fd.append('completionParts', JSON.stringify(form.parts))
+      fd.append('followUp',        JSON.stringify(form.followUp))
       if (form.workStart) fd.append('workStart', form.workStart)
       if (form.workEnd)   fd.append('workEnd',   form.workEnd)
       fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)

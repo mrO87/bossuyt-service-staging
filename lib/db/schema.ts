@@ -160,6 +160,7 @@ export const workOrderRelations = relations(workOrders, ({ one, many }) => ({
     references: [devices.id],
   }),
   assignments: many(workOrderAssignments),
+  werkbonnen:  many(werkbonnen),
 }))
 
 export const deviceDocuments = pgTable(
@@ -190,6 +191,32 @@ export const workOrderAssignmentRelations = relations(workOrderAssignments, ({ o
   technician: one(technicians, {
     fields: [workOrderAssignments.technicianId],
     references: [technicians.id],
+  }),
+}))
+
+// ── Werkbonnen ────────────────────────────────────────────────────────────────
+// One record per completed werkbon submission. Multiple submissions are allowed
+// per work order (re-submissions, admin corrections). Replaces the flat
+// completion columns on work_orders.
+export const werkbonnen = pgTable('werkbonnen', {
+  id:          text('id').primaryKey(),                    // crypto.randomUUID()
+  workOrderId: text('work_order_id')
+    .notNull()
+    .references(() => workOrders.id, { onDelete: 'cascade' }),
+  workStart:   timestamp('work_start',  { withTimezone: true }),
+  workEnd:     timestamp('work_end',    { withTimezone: true }),
+  notes:       text('notes'),                              // omschrijving werkzaamheden
+  parts:       text('parts'),                              // JSON: PdfPart[]
+  followUp:    text('follow_up'),                          // JSON: PdfFollowUp[]
+  pdfPath:     text('pdf_path'),                           // /api/uploads/werkbonnen/{id}.pdf
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+  changedBy:   text('changed_by'),
+})
+
+export const werkbonnenRelations = relations(werkbonnen, ({ one }) => ({
+  workOrder: one(workOrders, {
+    fields: [werkbonnen.workOrderId],
+    references: [workOrders.id],
   }),
 }))
 
