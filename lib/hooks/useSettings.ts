@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 
 export interface HomeAddress {
   display: string
@@ -22,29 +22,37 @@ const DEFAULTS: Settings = {
 
 const STORAGE_KEY = 'bossuyt.settings'
 
-export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(DEFAULTS)
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) setSettings({ ...DEFAULTS, ...JSON.parse(stored) })
-    } catch {
-      // ignore corrupted storage
+function getInitialSettings(): Settings {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return {
+        startLocation: parsed.startLocation === 'thuis' ? 'thuis' : DEFAULTS.startLocation,
+        homeAddress: parsed.homeAddress ?? DEFAULTS.homeAddress,
+        startTime: typeof parsed.startTime === 'string' ? parsed.startTime : DEFAULTS.startTime,
+      }
     }
-  }, [])
+  } catch {
+    localStorage.removeItem(STORAGE_KEY)
+  }
+  return DEFAULTS
+}
 
-  function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
+export function useSettings() {
+  const [settings, setSettings] = useState<Settings>(getInitialSettings)
+
+  const updateSetting = useCallback(function<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings(prev => {
       const next = { ...prev, [key]: value }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
       } catch {
-        // ignore storage errors
+        localStorage.removeItem(STORAGE_KEY)
       }
       return next
     })
-  }
+  }, [])
 
   return { settings, updateSetting }
 }
