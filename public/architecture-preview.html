@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="nl-BE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bossuyt Architecture Preview</title>
+    <style>
+      :root {
+        --bg: #f5f1eb;
+        --panel: #ffffff;
+        --ink: #202629;
+        --muted: #667178;
+        --stroke: #d6ddd9;
+        --orange: #f28c28;
+        --orange-soft: rgba(242, 140, 40, 0.12);
+        --green: #1f8f5f;
+        --green-soft: rgba(31, 143, 95, 0.12);
+        --red: #c94c4c;
+        --red-soft: rgba(201, 76, 76, 0.12);
+        --blue: #3f82b5;
+        --blue-soft: rgba(63, 130, 181, 0.12);
+        --dark: #2b3236;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(circle at top left, #fff8f1, var(--bg) 42%);
+        color: var(--ink);
+      }
+
+      .page {
+        min-height: 100vh;
+      }
+
+      .hero {
+        background: linear-gradient(135deg, #22292d, #3d4449);
+        color: #fff;
+        padding: 24px 18px 28px;
+      }
+
+      .hero h1 {
+        margin: 10px 0 12px;
+        font-size: clamp(2rem, 6vw, 3.4rem);
+        line-height: 1.04;
+        max-width: 920px;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 860px;
+        color: #d2d9dc;
+        line-height: 1.7;
+        font-size: 0.98rem;
+      }
+
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.24em;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #a9b2b6;
+      }
+
+      .container {
+        width: min(1120px, calc(100% - 28px));
+        margin: -18px auto 0;
+        padding: 0 0 28px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 28px;
+        padding: 22px;
+        box-shadow: 0 14px 34px rgba(30, 35, 38, 0.06);
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .option {
+        display: grid;
+        gap: 16px;
+      }
+
+      .option.recommended {
+        border-color: var(--orange);
+        background: linear-gradient(180deg, var(--orange-soft), #fff);
+      }
+
+      .option-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .option h2 {
+        margin: 8px 0 0;
+        font-size: 1.5rem;
+        line-height: 1.15;
+      }
+
+      .option p {
+        margin: 0;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .tag {
+        white-space: nowrap;
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: var(--orange);
+        color: #fff;
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .pros-cons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .bucket {
+        border-radius: 20px;
+        padding: 16px;
+      }
+
+      .bucket h3 {
+        margin: 0 0 10px;
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+      }
+
+      .bucket ul {
+        margin: 0;
+        padding-left: 18px;
+        line-height: 1.7;
+      }
+
+      .bucket.green {
+        background: var(--green-soft);
+      }
+
+      .bucket.green h3 {
+        color: var(--green);
+      }
+
+      .bucket.red {
+        background: var(--red-soft);
+      }
+
+      .bucket.red h3 {
+        color: var(--red);
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .step {
+        border: 1px solid var(--stroke);
+        border-radius: 20px;
+        padding: 16px;
+      }
+
+      .step:nth-child(1),
+      .step:nth-child(4) {
+        background: var(--blue-soft);
+      }
+
+      .step:nth-child(2),
+      .step:nth-child(5) {
+        background: var(--orange-soft);
+      }
+
+      .step:nth-child(3) {
+        background: var(--green-soft);
+      }
+
+      .step .n {
+        font-size: 0.76rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+        color: var(--muted);
+      }
+
+      .step p {
+        margin: 10px 0 0;
+        line-height: 1.65;
+        font-weight: 600;
+      }
+
+      .flow {
+        background: linear-gradient(135deg, #242b2f, #31393e);
+        color: #fff;
+      }
+
+      .flow-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .flow-item {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 16px;
+      }
+
+      .flow-item h3 {
+        margin: 0;
+        color: var(--orange);
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .flow-item p {
+        margin: 10px 0 0;
+        line-height: 1.65;
+        color: #d9e0e3;
+      }
+
+      .section-title {
+        margin: 0 0 8px;
+        font-size: 2rem;
+        line-height: 1.15;
+      }
+
+      .section-copy {
+        margin: 0 0 18px;
+        max-width: 860px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      @media (max-width: 900px) {
+        .pros-cons,
+        .steps,
+        .flow-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .option-top {
+          flex-direction: column;
+        }
+
+        .tag {
+          white-space: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="eyebrow">Architecture Preview</div>
+        <h1>Welke route is nu het slimst voor offline-first en de gedeelde database?</h1>
+        <p>
+          De plan-site stuurt aan op één gedeelde Core API met PostgreSQL voor de
+          Service App, Vanventory en OCR. Daarom is een tijdelijke mock-oplossing
+          minder interessant dan een kleine maar echte fundering die later
+          herbruikbaar blijft.
+        </p>
+      </header>
+
+      <main class="container stack">
+        <section class="card option">
+          <div class="option-top">
+            <div>
+              <div class="eyebrow">Optie A</div>
+              <h2>Tijdelijk verder op mock data</h2>
+            </div>
+          </div>
+          <p>
+            Snel voor een demo-fix, maar de offline-flow moet later opnieuw
+            omgebouwd worden zodra de echte backend er is.
+          </p>
+          <div class="pros-cons">
+            <div class="bucket green">
+              <h3>Pluspunten</h3>
+              <ul>
+                <li>Snelste korte route voor alleen zichtbare UI-fixes.</li>
+                <li>Geen database of backend nodig om te starten.</li>
+              </ul>
+            </div>
+            <div class="bucket red">
+              <h3>Minpunten</h3>
+              <ul>
+                <li>Offline-sync moet later opnieuw gebouwd worden.</li>
+                <li>Botst met het masterplan van een gedeelde databron.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="card option">
+          <div class="option-top">
+            <div>
+              <div class="eyebrow">Optie B</div>
+              <h2>Eigen database alleen voor deze app</h2>
+            </div>
+          </div>
+          <p>
+            Beter dan mock data, maar deze app krijgt dan zijn eigen backendpad
+            terwijl het plan net een gedeelde Core API voorziet.
+          </p>
+          <div class="pros-cons">
+            <div class="bucket green">
+              <h3>Pluspunten</h3>
+              <ul>
+                <li>Sneller dan een volledige Core API opzetten.</li>
+                <li>Je hebt meteen echte opslag voor deze app.</li>
+              </ul>
+            </div>
+            <div class="bucket red">
+              <h3>Minpunten</h3>
+              <ul>
+                <li>Architectuur wijkt af van het ERP-masterplan.</li>
+                <li>Andere apps kunnen deze laag later niet netjes hergebruiken.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="card option recommended">
+          <div class="option-top">
+            <div>
+              <div class="eyebrow">Optie C</div>
+              <h2>Minimale gedeelde Core API + PostgreSQL</h2>
+            </div>
+            <div class="tag">Aanbevolen</div>
+          </div>
+          <p>
+            De service-app blijft offline-first, maar leest straks uit dezelfde
+            gedeelde databasis als de andere apps. De huidige mock data gebruiken
+            we als seed.
+          </p>
+          <div class="pros-cons">
+            <div class="bucket green">
+              <h3>Pluspunten</h3>
+              <ul>
+                <li>Past bij plan.bossuyt.fixassistant.com.</li>
+                <li>Offline-sync maar één keer juist bouwen.</li>
+                <li>Vanventory en OCR kunnen later dezelfde bron gebruiken.</li>
+              </ul>
+            </div>
+            <div class="bucket red">
+              <h3>Minpunten</h3>
+              <ul>
+                <li>Eerst wat funderingswerk voordat de app volledig overschakelt.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="eyebrow">Aanbevolen pad</div>
+          <h2 class="section-title">Eerst de gedeelde fundering, daarna de app erop aansluiten</h2>
+          <p class="section-copy">
+            Dit houdt de architectuur proper en voorkomt dat we offline-sync,
+            routing en data-opslag straks opnieuw moeten uitvinden.
+          </p>
+          <div class="steps">
+            <div class="step">
+              <div class="n">1</div>
+              <p>Reistijd-bug nu herstellen zodat start/einde meteen de route herberekenen.</p>
+            </div>
+            <div class="step">
+              <div class="n">2</div>
+              <p>Minimale PostgreSQL + Drizzle schema opzetten voor techniekers, klanten, sites en werkorders.</p>
+            </div>
+            <div class="step">
+              <div class="n">3</div>
+              <p>Huidige mock data als seed laden zodat staging meteen echte records heeft.</p>
+            </div>
+            <div class="step">
+              <div class="n">4</div>
+              <p>Sync-endpoint bouwen dat deze service-app leest en naar IndexedDB cachet.</p>
+            </div>
+            <div class="step">
+              <div class="n">5</div>
+              <p>Offline-cache op 10 volledige werkbonnen brengen en later Vanventory/OCR laten aansluiten.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card flow">
+          <div class="eyebrow">Datastroom</div>
+          <h2 class="section-title">Service App → Core API → Shared PostgreSQL</h2>
+          <div class="flow-grid">
+            <div class="flow-item">
+              <h3>Service App</h3>
+              <p>Day view, werkbonnen, IndexedDB en offline-first ervaring voor de technieker.</p>
+            </div>
+            <div class="flow-item">
+              <h3>Core API</h3>
+              <p>Gedeelde backendlaag met sync, routing, auth en businessregels.</p>
+            </div>
+            <div class="flow-item">
+              <h3>Shared PostgreSQL</h3>
+              <p>Eén bron van waarheid voor klanten, sites, techniekers en werkorders.</p>
+            </div>
+            <div class="flow-item">
+              <h3>Later ook</h3>
+              <p>Vanventory en OCR kunnen zonder extra datamigratie op dezelfde bron aansluiten.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
