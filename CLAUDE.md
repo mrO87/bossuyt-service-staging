@@ -25,7 +25,6 @@ Before working on this project, read:
 - Mobile-first — design for phone in the field
 - High contrast, large touch targets (used with dirty hands/gloves)
 - Offline-first — every write goes to IndexedDB before API
-- Do not use subagents in this repo unless the user explicitly re-enables them in the current session.
 
 ## Release Workflow
 - For visible changes on `staging.bossuyt.fixassistant.com`, first ask whether the work is a new version or a refinement of the current version.
