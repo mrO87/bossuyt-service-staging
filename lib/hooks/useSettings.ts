@@ -23,6 +23,7 @@ const DEFAULTS: Settings = {
 const STORAGE_KEY = 'bossuyt.settings'
 
 function getInitialSettings(): Settings {
+  if (typeof window === 'undefined') return DEFAULTS
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
@@ -30,7 +31,9 @@ function getInitialSettings(): Settings {
       return {
         startLocation: parsed.startLocation === 'thuis' ? 'thuis' : DEFAULTS.startLocation,
         homeAddress: parsed.homeAddress ?? DEFAULTS.homeAddress,
-        startTime: typeof parsed.startTime === 'string' ? parsed.startTime : DEFAULTS.startTime,
+        startTime: typeof parsed.startTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.startTime)
+          ? parsed.startTime
+          : DEFAULTS.startTime,
       }
     }
   } catch {

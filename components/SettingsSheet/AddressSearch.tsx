@@ -97,7 +97,7 @@ export default function AddressSearch({ value, onChange }: Props) {
         <div className="absolute z-10 inset-x-0 top-full mt-1 bg-white rounded-xl border border-stroke shadow-lg overflow-hidden">
           {suggestions.map((s) => (
             <button
-              key={s.display_name}
+              key={`${s.lat},${s.lon}`}
               type="button"
               onClick={() => select(s)}
               className="w-full text-left px-3 py-2.5 text-sm text-ink hover:bg-surface border-b last:border-b-0 border-stroke"

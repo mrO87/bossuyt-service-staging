@@ -48,7 +48,7 @@ export default function SettingsSheet({ open, onClose }: Props) {
           <h2 className="text-base font-bold text-ink">Instellingen</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-surface text-ink-soft text-lg leading-none"
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-surface text-ink-soft text-lg leading-none"
             aria-label="Sluiten"
           >
             ✕
