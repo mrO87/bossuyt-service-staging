@@ -8,8 +8,9 @@ interface Props {
 }
 
 function parseMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
+  const match = hhmm.match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return 0
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
 }
 
 function formatElapsed(minutes: number): string {
@@ -41,8 +42,10 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
   useEffect(() => {
     function update() {
       const now = new Date()
-      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+      let nowMinutes = now.getHours() * 60 + now.getMinutes()
       const startMinutes = parseMinutes(startTime)
+      // Handle midnight rollover (shift started before midnight)
+      if (nowMinutes < startMinutes) nowMinutes += 24 * 60
       setElapsed(Math.max(0, nowMinutes - startMinutes))
     }
     update()
