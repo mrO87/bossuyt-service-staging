@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import SignaturePad from '@/components/SignaturePad'
+import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
 import type { PdfPart, PdfFollowUp } from '@/lib/pdf'
 import type { Intervention } from '@/types'
@@ -64,7 +65,9 @@ export default function WerkbonForm({ intervention }: Props) {
     followUp:    [],
     signature:   null,
   })
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLoading,    setPdfLoading]    = useState(false)
+  const [saveStatus,    setSaveStatus]    = useState<'idle' | 'saved' | 'error'>('idle')
+  const [deviceRefresh, setDeviceRefresh] = useState(0)
 
   // Generic updater for simple fields
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -143,7 +146,7 @@ export default function WerkbonForm({ intervention }: Props) {
     setPdfLoading(true)
     await new Promise(r => setTimeout(r, 200))
     try {
-      generateWerkbonPDF({
+      const pdfBlob = generateWerkbonPDF({
         customerName: intervention.customerName,
         siteName:     intervention.siteName,
         siteAddress:  intervention.siteAddress,
@@ -158,8 +161,29 @@ export default function WerkbonForm({ intervention }: Props) {
         followUp:     form.followUp,
         signature:    form.signature,
       })
+
+      // Persist completion data to the server
+      const fd = new FormData()
+      fd.append('changedBy',       intervention.technicians[0]?.technicianId ?? '')
+      fd.append('completionNotes', form.description)
+      fd.append('completionParts', JSON.stringify(form.parts))
+      if (form.workStart) fd.append('workStart', form.workStart)
+      if (form.workEnd)   fd.append('workEnd',   form.workEnd)
+      fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)
+      const res = await fetch(`/api/work-orders/${intervention.id}/complete`, {
+        method: 'POST',
+        body:   fd,
+      })
+      if (res.ok) {
+        setSaveStatus('saved')
+        setDeviceRefresh(k => k + 1)
+      } else {
+        console.error('Complete route error:', res.status, await res.text())
+        setSaveStatus('error')
+      }
     } catch (err) {
       console.error('PDF error:', err)
+      setSaveStatus('error')
     }
     setPdfLoading(false)
   }
@@ -173,18 +197,22 @@ export default function WerkbonForm({ intervention }: Props) {
           <p className="font-bold text-base text-ink">{intervention.customerName}</p>
           <p className="text-sm text-ink-soft">{intervention.siteName}</p>
           <p className="text-sm text-ink-soft">{intervention.siteAddress}, {intervention.siteCity}</p>
-          <div className="mt-2 pt-2 border-t border-stroke">
-            <p className="font-bold text-sm text-ink">
-              {intervention.deviceBrand} {intervention.deviceModel}
+          {intervention.description && (
+            <p className="text-sm mt-2 pt-2 border-t border-stroke italic text-brand-orange">
+              Melding: {intervention.description}
             </p>
-            {intervention.description && (
-              <p className="text-sm mt-1 italic text-brand-orange">
-                Melding: {intervention.description}
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </Section>
+
+      {/* ── Device panel (collapsible: detail + documents) ── */}
+      <DevicePanel
+        deviceId={intervention.deviceId}
+        brand={intervention.deviceBrand}
+        model={intervention.deviceModel}
+        currentWorkOrderId={intervention.id}
+        refreshKey={deviceRefresh}
+      />
 
       {/* ── Status ── */}
       <Section title="STATUS">
@@ -386,6 +414,17 @@ export default function WerkbonForm({ intervention }: Props) {
       >
         {pdfLoading ? 'PDF aanmaken...' : 'PDF Genereren & Opslaan'}
       </button>
+
+      {saveStatus === 'saved' && (
+        <p className="text-center text-sm font-semibold text-brand-green">
+          ✓ Werkbon opgeslagen
+        </p>
+      )}
+      {saveStatus === 'error' && (
+        <p className="text-center text-sm font-semibold text-brand-red">
+          ✗ Opslaan mislukt — zie console
+        </p>
+      )}
 
     </div>
   )

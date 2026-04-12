@@ -86,7 +86,7 @@ function textColor(doc: jsPDF, c: readonly [number, number, number]) {
   doc.setTextColor(c[0], c[1], c[2])
 }
 
-export function generateWerkbonPDF(data: PdfData): void {
+export function generateWerkbonPDF(data: PdfData): Blob {
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -358,5 +358,8 @@ export function generateWerkbonPDF(data: PdfData): void {
   // Filename: Werkbon_KlantNaam_YYYYMMDD.pdf
   const name = data.customerName.replace(/[^a-zA-Z0-9]/g, '_')
   const date = new Date().toISOString().split('T')[0]?.replace(/-/g, '')
+  const arrayBuffer = doc.output('arraybuffer')
+  const blob = new Blob([arrayBuffer], { type: 'application/pdf' })
   doc.save(`Werkbon_${name}_${date}.pdf`)
+  return blob
 }

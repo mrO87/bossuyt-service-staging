@@ -10,7 +10,7 @@ import {
   workOrders,
 } from '@/lib/db/schema'
 
-export const MAX_PLANNED_ITEMS = 6
+export const MAX_PLANNED_ITEMS = 8
 export const MAX_OPEN_ITEMS = 4
 
 type InterventionCoreRow = {

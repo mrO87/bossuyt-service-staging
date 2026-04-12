@@ -1,12 +1,15 @@
 import { relations } from 'drizzle-orm'
 import {
+  bigserial,
   boolean,
   doublePrecision,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
 } from 'drizzle-orm/pg-core'
 import type {
   InterventionSource,
@@ -93,6 +96,13 @@ export const workOrders = pgTable('work_orders', {
   statusArrivedAt: timestamp('status_arrived_at', { withTimezone: true }),
   statusOnderwegBy: text('status_onderweg_by'),
   createdBy: text('created_by'),
+  // Completion data — written when technician saves the werkbon
+  workStart:         timestamp('work_start', { withTimezone: true }),
+  workEnd:           timestamp('work_end',   { withTimezone: true }),
+  completionNotes:   text('completion_notes'),
+  completionParts:   text('completion_parts'),    // JSON string: PdfPart[]
+  completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
+  completedAt:       timestamp('completed_at', { withTimezone: true }),
 })
 
 export const workOrderAssignments = pgTable(
@@ -152,6 +162,22 @@ export const workOrderRelations = relations(workOrders, ({ one, many }) => ({
   assignments: many(workOrderAssignments),
 }))
 
+export const deviceDocuments = pgTable(
+  'device_documents',
+  {
+    id: text('id').primaryKey(),
+    brand: text('brand').notNull(),
+    model: text('model').notNull(),
+    schematicPath: text('schematic_path'),
+    explodedViewPath: text('exploded_view_path'),
+    serviceManualPath: text('service_manual_path'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (tbl) => ({
+    uniqueBrandModel: unique('device_documents_brand_model_unique').on(tbl.brand, tbl.model),
+  }),
+)
+
 export const technicianRelations = relations(technicians, ({ many }) => ({
   assignments: many(workOrderAssignments),
 }))
@@ -166,3 +192,19 @@ export const workOrderAssignmentRelations = relations(workOrderAssignments, ({ o
     references: [technicians.id],
   }),
 }))
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+// Every INSERT / UPDATE / DELETE on any table is captured here via a PostgreSQL
+// trigger (see lib/db/audit-triggers.sql). Application code should set the
+// session variable `app.current_user` before writes so the trigger can record
+// who made the change.
+export const auditLog = pgTable('audit_log', {
+  id:        bigserial('id', { mode: 'number' }).primaryKey(),
+  tableName: text('table_name').notNull(),
+  recordId:  text('record_id'),           // null for composite-PK tables
+  operation: text('operation').notNull(), // INSERT | UPDATE | DELETE
+  changedBy: text('changed_by'),          // technician id, 'admin', or null
+  changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+  oldData:   jsonb('old_data'),
+  newData:   jsonb('new_data'),
+})

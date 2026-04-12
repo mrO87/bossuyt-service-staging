@@ -15,6 +15,77 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.12',
+    date: '12 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Volledige auditlog op de database',
+        body:
+          'Elke INSERT, UPDATE en DELETE op alle tabellen (werkorders, klanten, sites, ' +
+          'toestellen, techniekers, toewijzingen, documenten) wordt automatisch gelogd ' +
+          'via PostgreSQL-triggers. De auditlog bevat de volledige oude en nieuwe rij ' +
+          'als JSON, tijdstip en wie de wijziging maakte.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Werkbon slaat start- en eindtijd op in de database',
+        body:
+          'Naast de omschrijving en onderdelen worden nu ook werkStart en werkEinde ' +
+          'als tijdstempel opgeslagen bij het afwerken van een werkbon. ' +
+          'Zo is de volledige tijdregistratie traceerbaar per job.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Auditlog weet wie een wijziging maakte',
+        body:
+          'De API-routes stellen een sessievariabele in (app.current_user) voor elke ' +
+          'databasetransactie. De trigger leest deze variabele en slaat het technician-id ' +
+          'of "admin" op in de log — zonder dat de logtabel zelf aangepast hoeft te worden.',
+      },
+    ],
+  },
+  {
+    version: 'v1.11',
+    date: '12 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Toestelkaart met documenten en historiek op de werkbon',
+        body:
+          'Op elke werkbon staat nu een inklapbare toestelkaart met merk, model, serienummer ' +
+          'en installatiedatum. Daaronder staan vier iconen: elektrisch schema, onderdelenlijst, ' +
+          'servicehandleiding en historiek. De drie documenten zijn gekoppeld aan het toesteltype ' +
+          '(brand + model), de historiek aan het serienummer.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Interventiegeschiedenis per toestel',
+        body:
+          'Het historiekicoon toont een badge met het aantal eerdere afgewerkte jobs voor dat ' +
+          'specifieke toestel. Klik erop om de lijst uit te klappen met datum, type en melding ' +
+          'van elke vorige interventie. De huidige job wordt automatisch uitgesloten.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'API voor toesteldocumenten en toestelhistoriek',
+        body:
+          'Twee nieuwe API-routes: GET /api/devices/documents haalt de 3 bestandspaden op per ' +
+          'brand+model, POST /api/devices/documents uploadt een PDF. GET /api/devices/[id]/history ' +
+          'geeft de afgewerkte werkorders terug voor een specifiek toestel.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Rijkere stagingdata met historisch toestel en extra open-pooljobs',
+        body:
+          'Winterhalter PT-L (Rustoord Ennea) heeft nu 3 historische jobs en staat vandaag ' +
+          'opnieuw ingepland als dringende storing. De open pool bevat 2 extra jobs: ' +
+          'Electrolux SkyLine Pro 20GN (WZC Helianthus) en Rational iCombi Pro 6-1/1 ' +
+          '(Hotel Scheldezicht).',
+      },
+    ],
+  },
+  {
     version: 'v1.10',
     date: '11 april 2026',
     changes: [
@@ -293,7 +364,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.10'
+const CURRENT_RELEASE_VERSION = 'v1.12'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
