@@ -157,74 +157,101 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 function HistoryList({ entries }: { entries: HistoryEntry[] }) {
+  // Index 0 (newest) starts expanded; all others start collapsed
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (entries.length === 0) return new Set()
+    return new Set([entries[0].id])
+  })
+
   if (entries.length === 0) {
     return <p className="text-xs text-ink-soft text-center py-3">Geen historiek beschikbaar</p>
+  }
+
+  function toggle(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
     <div className="space-y-3 mt-1">
       {entries.map(e => {
+        const isOpen = expanded.has(e.id)
         const parts: Array<{ code: string; description: string; quantity: number }> =
           e.parts ? (() => { try { return JSON.parse(e.parts!) } catch { return [] } })() : []
 
         return (
           <div key={e.id} className="rounded-xl border border-stroke bg-surface px-3 py-3 space-y-2">
-            {/* Header row: type + date */}
-            <div className="flex items-center justify-between gap-2">
+            {/* Header row: type + date + chevron — clickable to collapse/expand */}
+            <button
+              onClick={() => toggle(e.id)}
+              className="w-full flex items-center justify-between gap-2"
+            >
               <span className="text-xs font-bold text-ink">{TYPE_LABEL[e.type] ?? e.type}</span>
-              <span className="text-[10px] text-ink-soft flex-shrink-0">
-                {new Date(e.completedAt ?? e.plannedDate).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short', year: 'numeric' })}
-              </span>
-            </div>
-
-            {/* Probleem (original description) */}
-            {e.description && (
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-0.5">Probleem</p>
-                <p className="text-xs text-ink leading-snug">{e.description}</p>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] text-ink-soft">
+                  {new Date(e.completedAt ?? e.plannedDate).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+                <span className="text-ink-soft"><ChevronDown open={isOpen} /></span>
               </div>
-            )}
+            </button>
 
-            {/* Oplossing (technician notes) */}
-            {e.notes && (
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-0.5">Oplossing</p>
-                <p className="text-xs text-ink leading-snug">{e.notes}</p>
-              </div>
-            )}
+            {/* Detail section — only visible when expanded */}
+            {isOpen && (
+              <div className="space-y-2">
+                {/* Probleem (original description) */}
+                {e.description && (
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-0.5">Probleem</p>
+                    <p className="text-xs text-ink leading-snug">{e.description}</p>
+                  </div>
+                )}
 
-            {/* Onderdelen */}
-            {parts.length > 0 && (
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-1">Onderdelen</p>
-                <div className="space-y-0.5">
-                  {parts.map((p, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-xs text-ink">
-                      <span className="font-mono text-[10px] text-ink-soft w-4 text-center">{p.quantity}×</span>
-                      <span>{p.description || p.code || '—'}</span>
-                      {p.code && p.description && (
-                        <span className="text-[9px] text-ink-soft font-mono">({p.code})</span>
-                      )}
+                {/* Oplossing (technician notes) */}
+                {e.notes && (
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-0.5">Oplossing</p>
+                    <p className="text-xs text-ink leading-snug">{e.notes}</p>
+                  </div>
+                )}
+
+                {/* Onderdelen */}
+                {parts.length > 0 && (
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-ink-soft mb-1">Onderdelen</p>
+                    <div className="space-y-0.5">
+                      {parts.map((p, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-xs text-ink">
+                          <span className="font-mono text-[10px] text-ink-soft w-4 text-center">{p.quantity}×</span>
+                          <span>{p.description || p.code || '—'}</span>
+                          {p.code && p.description && (
+                            <span className="text-[9px] text-ink-soft font-mono">({p.code})</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* PDF link */}
-            {e.pdfPath && (
-              <a
-                href={e.pdfPath}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-orange underline underline-offset-2"
-              >
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 2h5l3 3v5H2V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                  <path d="M7 2v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                </svg>
-                Werkbon PDF
-              </a>
+                {/* PDF link */}
+                {e.pdfPath && (
+                  <a
+                    href={e.pdfPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-orange underline underline-offset-2"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 2h5l3 3v5H2V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                      <path d="M7 2v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                    </svg>
+                    Werkbon PDF
+                  </a>
+                )}
+              </div>
             )}
           </div>
         )
