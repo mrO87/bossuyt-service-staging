@@ -47,6 +47,7 @@ export default function SettingsSheet({ open, onClose }: Props) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-stroke">
           <h2 className="text-base font-bold text-ink">Instellingen</h2>
           <button
+            type="button"
             onClick={onClose}
             className="w-11 h-11 flex items-center justify-center rounded-full bg-surface text-ink-soft text-lg leading-none"
             aria-label="Sluiten"
@@ -65,6 +66,7 @@ export default function SettingsSheet({ open, onClose }: Props) {
             </p>
             <div className="flex rounded-xl overflow-hidden border border-stroke">
               <button
+                type="button"
                 onClick={() => updateSetting('startLocation', 'atelier')}
                 className={[
                   'flex-1 py-2.5 text-sm font-semibold transition-colors',
@@ -76,6 +78,7 @@ export default function SettingsSheet({ open, onClose }: Props) {
                 Atelier
               </button>
               <button
+                type="button"
                 onClick={() => updateSetting('startLocation', 'thuis')}
                 className={[
                   'flex-1 py-2.5 text-sm font-semibold transition-colors',
@@ -112,7 +115,11 @@ export default function SettingsSheet({ open, onClose }: Props) {
             <input
               type="time"
               value={settings.startTime}
-              onChange={(e) => updateSetting('startTime', e.target.value)}
+              onChange={(e) => {
+                if (/^\d{2}:\d{2}$/.test(e.target.value)) {
+                  updateSetting('startTime', e.target.value)
+                }
+              }}
               className="w-full px-3 py-2.5 rounded-xl border border-stroke bg-surface text-ink text-base font-semibold"
             />
           </div>

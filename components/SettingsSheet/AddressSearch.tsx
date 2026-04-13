@@ -27,6 +27,10 @@ export default function AddressSearch({ value, onChange }: Props) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    setQuery(value ? shortLabel(value.display) : '')
+  }, [value])
+
+  useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
