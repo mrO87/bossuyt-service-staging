@@ -67,7 +67,10 @@ export default function SettingsSheet({ open, onClose }: Props) {
             <div className="flex rounded-xl overflow-hidden border border-stroke">
               <button
                 type="button"
-                onClick={() => updateSetting('startLocation', 'atelier')}
+                onClick={() => {
+                  updateSetting('startLocation', 'atelier')
+                  updateSetting('homeAddress', null)
+                }}
                 className={[
                   'flex-1 py-2.5 text-sm font-semibold transition-colors',
                   settings.startLocation === 'atelier'

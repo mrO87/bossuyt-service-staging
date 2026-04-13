@@ -130,6 +130,7 @@ export default function DayView() {
             <p className="text-sm font-medium text-white">{done}/{total} afgewerkt</p>
           </div>
           <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
             className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
             aria-label="Instellingen openen"

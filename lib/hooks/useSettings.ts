@@ -30,7 +30,15 @@ function getInitialSettings(): Settings {
       const parsed = JSON.parse(stored)
       return {
         startLocation: parsed.startLocation === 'thuis' ? 'thuis' : DEFAULTS.startLocation,
-        homeAddress: parsed.homeAddress ?? DEFAULTS.homeAddress,
+        homeAddress:
+          parsed.homeAddress &&
+          typeof parsed.homeAddress.display === 'string' &&
+          typeof parsed.homeAddress.lat === 'number' &&
+          typeof parsed.homeAddress.lon === 'number' &&
+          isFinite(parsed.homeAddress.lat) &&
+          isFinite(parsed.homeAddress.lon)
+            ? parsed.homeAddress
+            : DEFAULTS.homeAddress,
         startTime: typeof parsed.startTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.startTime)
           ? parsed.startTime
           : DEFAULTS.startTime,
