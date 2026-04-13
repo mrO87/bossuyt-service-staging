@@ -10,6 +10,24 @@
 - **PDF**: jsPDF (client-side)
 - **Deployment**: Docker on Hetzner
 
+## Deployment Topology
+
+The server runs two separate compose targets from this repository:
+
+| Environment | Branch source | Compose file | Hostname | App container | DB container |
+|---|---|---|---|---|---|
+| Production | `production` | `docker-compose.yml` | `bossuyt-service.fixassistant.com` | `bossuyt_service_next-app-1` | `bossuyt_service_next-db-1` |
+| Staging | `main` | `docker-compose.staging.yml` | `staging.bossuyt.fixassistant.com` | `bossuyt-staging` | `bossuyt-db-staging` |
+
+### Deployment Guardrail
+
+When working on the server, always verify which hostname you are updating before running Docker commands.
+
+- Use `docker compose up --build -d` only for the live stack
+- Use `docker compose -f docker-compose.staging.yml up --build -d` for staging
+- Build staging from a `main` checkout or Git worktree, not from the live `production` checkout
+- Do not point staging work at `bossuyt-service.fixassistant.com`
+
 ## Data Model
 
 ### User

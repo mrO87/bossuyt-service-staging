@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bossuyt Service Next
 
-## Getting Started
+Field service app for Bossuyt technicians, built with Next.js 16, React 19, TypeScript, PostgreSQL, and Docker.
 
-First, run the development server:
+## Read first
+
+Before making changes, read:
+
+- `ARCHITECTURE.md` for the data model, offline sync strategy, and deployment topology
+- `PLANNING.md` for the current build phases and known issues
+- `CLAUDE.md` for project-specific assistant instructions and workflow rules
+
+## Local development
+
+Run the app locally:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Useful validation commands:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The local production-like Docker stack is:
 
-## Learn More
+```bash
+docker compose up --build
+```
 
-To learn more about Next.js, take a look at the following resources:
+That stack serves the app behind Traefik on the main hostname and should only be used when you intentionally want the production-shaped setup.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This repository has two Docker Compose entrypoints on the server:
 
-## Deploy on Vercel
+| Target | Branch source | Compose file | Hostname | Purpose |
+|---|---|---|---|---|
+| Production | `production` | `docker-compose.yml` | `bossuyt-service.fixassistant.com` | Live app |
+| Staging | `main` | `docker-compose.staging.yml` | `staging.bossuyt.fixassistant.com` | Safe pre-release testing |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Important rule
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Do **not** rebuild the production stack when the goal is only to update staging.
+
+Use the correct compose file for the correct hostname:
+
+```bash
+# Staging
+docker compose -f docker-compose.staging.yml up --build -d
+
+# Production
+docker compose up --build -d
+```
+
+If you are on the server, confirm the target hostname first and then rebuild only that stack.
+
+For staging, use a checkout or worktree that points at `main`. Do not rebuild staging from a `production` checkout and assume it will contain the newest app changes.
+
+## CLI instructions
+
+When an AI CLI or coding assistant works in this repository, it should follow this order:
+
+1. Read `ARCHITECTURE.md` and `PLANNING.md` before making assumptions.
+2. Check whether the task is for local development, staging, or production.
+3. Use a `main` checkout or worktree for staging builds.
+4. Use `docker-compose.staging.yml` for `staging.bossuyt.fixassistant.com`.
+5. Use `docker-compose.yml` only for `bossuyt-service.fixassistant.com`.
+6. Run `npm run lint` and `npm run build` after code changes.
+
+## Tech overview
+
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- PostgreSQL + Drizzle ORM
+- NextAuth beta
+- IndexedDB + offline-first sync flow
+- Web Push notifications

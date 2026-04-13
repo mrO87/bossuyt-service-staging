@@ -1,0 +1,62 @@
+# docker-compose.staging.yml — Tijdelijke testomgeving
+#
+# Gebruik:
+#   docker compose -f docker-compose.staging.yml up --build -d
+#   → beschikbaar op https://staging.bossuyt.fixassistant.com
+#
+# Stoppen na testen:
+#   docker compose -f docker-compose.staging.yml down
+#
+# De productie container (docker-compose.yml) wordt NIET geraakt.
+
+services:
+  app-staging:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        NEXT_PUBLIC_STAGING: "1"
+    container_name: bossuyt-staging
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL_STAGING_DOCKER:-postgres://bossuyt:${POSTGRES_PASSWORD}@db-staging:5432/bossuyt_staging}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: https://staging.bossuyt.fixassistant.com
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      ORS_API_KEY: ${ORS_API_KEY}
+      NODE_ENV: production
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.bossuyt-staging-v3.rule=Host(`staging.bossuyt.fixassistant.com`)"
+      - "traefik.http.routers.bossuyt-staging-v3.entrypoints=websecure"
+      - "traefik.http.routers.bossuyt-staging-v3.tls.certresolver=lets-encrypt"
+      - "traefik.http.services.bossuyt-staging-v3.loadbalancer.server.port=3000"
+    networks:
+      - traefik
+      - internal
+
+  db-staging:
+    image: postgres:16-alpine
+    container_name: bossuyt-db-staging
+    restart: "no"
+    environment:
+      POSTGRES_DB: bossuyt_staging
+      POSTGRES_USER: ${POSTGRES_USER:-bossuyt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_STAGING_PORT:-5433}:5432"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    networks:
+      - internal
+
+volumes:
+  postgres_staging_data:
+
+networks:
+  traefik:
+    external: true
+  internal:
+    driver: bridge

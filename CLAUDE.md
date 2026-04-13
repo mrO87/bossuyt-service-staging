@@ -19,6 +19,14 @@ Before working on this project, read:
 - `npm run build` — production build
 - `npm run lint` — eslint
 
+## CLI Workflow
+- Start by reading `ARCHITECTURE.md` and `PLANNING.md`
+- Confirm whether the task targets local dev, staging, or production
+- Use a `main` checkout or worktree when rebuilding staging
+- Use the `production` checkout only for the live stack
+- Never assume `docker compose up --build` is safe for staging
+- After code changes, run `npm run lint` and `npm run build`
+
 ## Project Rules
 - UI language: Dutch (Belgium) — nl-BE
 - Code, comments, variable names: English
@@ -28,8 +36,17 @@ Before working on this project, read:
 
 ## Deployment
 - Docker + nginx on Hetzner
-- Target: bossuyt-service.fixassistant.com
-- `docker compose up --build` to run locally on port 3080
+- Production hostname: `bossuyt-service.fixassistant.com`
+- Staging hostname: `staging.bossuyt.fixassistant.com`
+- Production branch source: `production`
+- Staging branch source: `main`
+- Production stack file: `docker-compose.yml`
+- Staging stack file: `docker-compose.staging.yml`
+- Production deploy: `docker compose up --build -d`
+- Staging deploy: `docker compose -f docker-compose.staging.yml up --build -d`
+- For staging, rebuild from a `main` checkout or worktree instead of the live checkout
+- Always match the compose file to the hostname before rebuilding containers
+- `docker compose up --build` can affect the production-shaped stack, so do not use it for staging by accident
 
 ## Teaching Mode — ALWAYS ACTIVE
 This project is a learning exercise. The user is learning to code.
