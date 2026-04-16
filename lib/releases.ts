@@ -15,6 +15,44 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.21',
+    date: '16 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Foto’s toevoegen aan de werkbon',
+        body:
+          'Op de werkbon kan je nu foto’s toevoegen via de camera van de telefoon of via ' +
+          'de galerij. De fotozone is mobielvriendelijk opgebouwd met grote knoppen, snelle ' +
+          'voorvertoning en verwijderen per foto.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Foto’s werken ook offline met sync-status',
+        body:
+          'Nieuwe foto’s worden eerst lokaal in IndexedDB bewaard en krijgen een duidelijke ' +
+          'status op de werkbon: nog niet gesynchroniseerd, synchroniseert of gesynchroniseerd. ' +
+          'Daardoor ziet de technieker meteen wat al veilig op de server staat.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Automatische verkleining van foto’s voor opslag',
+        body:
+          'Foto’s worden nu op het toestel verkleind en als lichtere JPEG opgeslagen vóór ze ' +
+          'offline bewaard of naar de server gestuurd worden. Dat beperkt opslaggebruik zonder ' +
+          'de praktische kwaliteit van servicefoto’s te verliezen.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'PDF toont of er foto’s zijn toegevoegd',
+        body:
+          'De gegenereerde werkbon-PDF bevat nu een duidelijke aanduiding of er foto’s aan de ' +
+          'werkbon gekoppeld zijn. Zo is in het document meteen zichtbaar dat er bijkomend ' +
+          'beeldmateriaal werd mee opgeslagen.',
+      },
+    ],
+  },
+  {
     version: 'v1.13',
     date: '12 april 2026',
     changes: [
@@ -392,7 +430,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.13'
+const CURRENT_RELEASE_VERSION = 'v1.21'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

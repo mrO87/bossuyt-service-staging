@@ -34,6 +34,7 @@ export interface PdfData {
   parts: PdfPart[]
   followUp: PdfFollowUp[]
   signature: string | null
+  hasPhotos: boolean
 }
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -316,6 +317,11 @@ export function generateWerkbonPDF(data: PdfData): Blob {
     })
     y += 4
   }
+
+  // ── Attachments ─────────────────────────────────────────────────────────────
+  sectionTitle('BIJLAGEN')
+  infoRow("Foto's toegevoegd:", data.hasPhotos ? 'Ja' : 'Nee')
+  y += 3
 
   // ── Signature ──────────────────────────────────────────────────────────────
   sectionTitle('HANDTEKENING KLANT')

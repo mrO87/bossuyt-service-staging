@@ -14,17 +14,27 @@
 
 import {
   cacheInterventions,
+  countPendingSyncEvents,
+  reconcileWerkbonPhotos,
   saveDayMeta,
+  setWerkbonPhotoSyncStatus,
   getDayMeta,
+  getPendingSyncEvents,
+  removePendingWrite,
+  updatePendingSyncEvent,
   type PendingWriteResult,
   type DayMeta,
+  type OfflineSyncEvent,
+  type WorkOrderExecutionSyncPayload,
 } from './idb'
 import type { Intervention } from '@/types'
+import type { UploadedWorkOrderPhotoDTO } from '@/types/sync'
 import type { RouteStep } from '@/types/planning'
 
 // How many of each type we cache at most
-const MAX_PLANNED = 6
+const MAX_PLANNED = 8
 const MAX_OPEN = 4
+const DAY_SYNC_REVISION = 2
 
 export interface SyncResult {
   success: boolean
@@ -46,7 +56,11 @@ export async function shouldSync(technicianId: string): Promise<boolean> {
   if (!meta) return true  // never synced
 
   const today = new Date().toISOString().slice(0, 10)  // 'YYYY-MM-DD'
-  return meta.date !== today || meta.technicianId !== technicianId
+  return (
+    meta.date !== today ||
+    meta.technicianId !== technicianId ||
+    meta.revision !== DAY_SYNC_REVISION
+  )
 }
 
 /**
@@ -86,6 +100,7 @@ export async function syncToday(technicianId: string): Promise<SyncResult> {
     const meta: DayMeta = {
       date: today,
       technicianId,
+      revision: DAY_SYNC_REVISION,
       cachedAt: new Date().toISOString(),
       totalPlanned: planned.length,
       totalOpen: open.length,
@@ -159,11 +174,7 @@ async function fetchDailyRoute(planned: Intervention[]): Promise<RouteStep[]> {
  * and try again next time (keeps things in the right order).
  */
 export async function syncPendingWrites(): Promise<PendingWriteResult> {
-  const {
-    getPendingWrites,
-    removePendingWrite,
-  } = await import('./idb')
-  const pending = await getPendingWrites()
+  const pending = await getPendingSyncEvents()
 
   let synced = 0
   let failed = 0
@@ -172,40 +183,125 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
 
   for (const write of pending) {
     try {
-      const res = await fetch(`/api/sync/write`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(write),
-      })
+      if (write.type === 'push_work_order_execution') {
+        await setWerkbonPhotoSyncStatus(write.entityId, 'syncing')
+      }
+
+      const res = await dispatchSyncEvent(write)
       if (res.ok) {
         const data = await res.json() as {
           planned?: Intervention[]
           open?: Intervention[]
+          uploadedPhotos?: UploadedWorkOrderPhotoDTO[]
         }
         if (data.planned && data.open) {
           await cacheInterventions([...data.planned, ...data.open])
         }
-        await removePendingWrite(write.id!)
+        if (write.type === 'push_work_order_execution' && data.uploadedPhotos) {
+          await reconcileWerkbonPhotos(write.entityId, data.uploadedPhotos)
+        }
+        if (typeof write.id === 'number') {
+          await removePendingWrite(write.id)
+        }
         synced++
-      } else if (res.status === 409 && write.type === 'update_sequence') {
+      } else if (res.status === 409 && write.type === 'reorder_work_orders') {
         const data = await res.json() as {
           planned: Intervention[]
           open: Intervention[]
         }
         await cacheInterventions([...data.planned, ...data.open])
-        await removePendingWrite(write.id!)
+        if (typeof write.id === 'number') {
+          await removePendingWrite(write.id)
+        }
         synced++
         conflict = true
         notice = 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
       } else {
+        await scheduleRetry(write, await res.text())
+        if (write.type === 'push_work_order_execution') {
+          await setWerkbonPhotoSyncStatus(write.entityId, 'failed')
+        }
         failed++
         break  // stop on first failure — maintain order
       }
-    } catch {
+    } catch (error) {
+      await scheduleRetry(
+        write,
+        error instanceof Error ? error.message : 'Synchronisatie mislukt',
+      )
+      if (write.type === 'push_work_order_execution') {
+        await setWerkbonPhotoSyncStatus(write.entityId, 'failed')
+      }
       failed++
       break
     }
   }
 
-  return { synced, failed, notice, conflict }
+  return {
+    synced,
+    failed,
+    notice,
+    conflict,
+    pending: await countPendingSyncEvents(),
+  }
+}
+
+export async function dispatchSyncEvent(write: OfflineSyncEvent): Promise<Response> {
+  if (write.type === 'reorder_work_orders') {
+    return fetch('/api/sync/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'update_sequence',
+        payload: write.payload,
+        syncEventId: write.syncEventId,
+        idempotencyKey: write.idempotencyKey,
+        localVersion: write.localVersion,
+      }),
+    })
+  }
+
+  const payload = write.payload as WorkOrderExecutionSyncPayload
+  const fd = new FormData()
+  fd.append('syncEventId', write.syncEventId)
+  fd.append('idempotencyKey', write.idempotencyKey)
+  fd.append('localVersion', String(write.localVersion))
+  fd.append('changedBy', payload.technicianId)
+  fd.append('status', payload.status)
+  fd.append('hasSignature', String(payload.hasSignature))
+  fd.append('completionNotes', payload.notes ?? '')
+  fd.append('completionParts', JSON.stringify(payload.rawParts))
+  fd.append('followUp', JSON.stringify(payload.followUp))
+  fd.append('photoMeta', JSON.stringify(payload.photos))
+  if (payload.workStart) fd.append('workStart', payload.workStart)
+  if (payload.workEnd) fd.append('workEnd', payload.workEnd)
+  fd.append('pdf', payload.pdfBlob, payload.pdfFileName)
+  payload.photoBlobs.forEach((photo) => {
+    fd.append('photos', photo.blob, photo.fileName)
+  })
+
+  return fetch(`/api/work-orders/${payload.workOrderId}/complete`, {
+    method: 'POST',
+    body: fd,
+  })
+}
+
+async function scheduleRetry(write: OfflineSyncEvent, lastError: string): Promise<void> {
+  if (typeof write.id !== 'number') {
+    return
+  }
+
+  await updatePendingSyncEvent(write.id, current => {
+    const attempts = current.attempts + 1
+    const delayMinutes = Math.min(60 * 24, 2 ** Math.min(attempts, 10))
+    const nextAttemptAt = new Date(Date.now() + delayMinutes * 60_000).toISOString()
+
+    return {
+      ...current,
+      attempts,
+      nextAttemptAt,
+      status: attempts >= current.maxAttempts ? 'dead_letter' : 'retry_scheduled',
+      lastError,
+    }
+  })
 }

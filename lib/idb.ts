@@ -13,7 +13,14 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
+import type { PdfFollowUp, PdfPart } from '@/lib/pdf'
 import type { Intervention } from '@/types'
+import type {
+  SyncEventStatus,
+  UploadedWorkOrderPhotoDTO,
+  WorkOrderExecutionDTO,
+} from '@/types/sync'
+import { buildIdempotencyKey } from '@/lib/sync-utils'
 
 // ---------- Schema ----------
 // This tells TypeScript exactly what's in each store.
@@ -29,11 +36,11 @@ interface BossuytDB extends DBSchema {
   }
   werkbonnen: {
     key: string                 // intervention id (1-to-1)
-    value: WerkbonCache
+    value: WerkbonCache | WerkbonDraft
   }
   pendingWrites: {
     key: number                 // auto-incremented
-    value: PendingWrite
+    value: PendingWrite | OfflineSyncEvent
     autoIncrement: true
   }
   dayMeta: {
@@ -52,6 +59,37 @@ export interface WerkbonCache {
   lastSavedAt: string
 }
 
+export type PhotoSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed'
+
+export interface WerkbonPhotoDraft {
+  localId: string
+  fileName: string
+  mimeType: string
+  originalSize: number
+  compressedSize: number
+  width: number
+  height: number
+  createdAt: string
+  syncStatus: PhotoSyncStatus
+  blob: Blob
+  serverPhotoId?: string
+  serverUrl?: string
+  uploadedAt?: string
+}
+
+export interface WerkbonDraft {
+  interventionId: string
+  status: string
+  workStart: string
+  workEnd: string
+  description: string
+  parts: PdfPart[]
+  followUp: PdfFollowUp[]
+  signature: string | null
+  photos: WerkbonPhotoDraft[]
+  lastSavedAt: string
+}
+
 export interface PendingWrite {
   id?: number
   type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence'
@@ -60,16 +98,68 @@ export interface PendingWrite {
   attempts: number
 }
 
+export type OfflineSyncEventType = 'reorder_work_orders' | 'push_work_order_execution'
+
+type ReorderWorkOrdersPayload = {
+  technicianId: string
+  date: string
+  planningVersion: number
+  orderedWorkOrderIds: string[]
+}
+
+export type WorkOrderExecutionSyncPayload = WorkOrderExecutionDTO & {
+  pdfBlob: Blob
+  pdfFileName: string
+  photoBlobs: Array<{
+    localId: string
+    fileName: string
+    mimeType: string
+    blob: Blob
+  }>
+  rawParts: Array<{
+    id: string
+    code: string
+    description: string
+    quantity: number
+    toOrder: boolean
+    urgent: boolean
+  }>
+}
+
+export type OfflineSyncEventPayload =
+  | ReorderWorkOrdersPayload
+  | WorkOrderExecutionSyncPayload
+
+export interface OfflineSyncEvent {
+  id?: number
+  syncEventId: string
+  type: OfflineSyncEventType
+  entityType: 'work_order'
+  entityId: string
+  payload: OfflineSyncEventPayload
+  createdAt: string
+  updatedAt: string
+  attempts: number
+  maxAttempts: number
+  status: Extract<SyncEventStatus, 'pending' | 'processing' | 'acked' | 'retry_scheduled' | 'dead_letter'>
+  nextAttemptAt: string
+  idempotencyKey: string
+  localVersion: number
+  lastError?: string
+}
+
 export interface PendingWriteResult {
   synced: number
   failed: number
   notice?: string
   conflict?: boolean
+  pending?: number
 }
 
 export interface DayMeta {
   date: string              // YYYY-MM-DD
   technicianId: string
+  revision: number
   cachedAt: string
   totalPlanned: number
   totalOpen: number
@@ -82,28 +172,118 @@ let dbPromise: Promise<IDBPDatabase<BossuytDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BossuytDB>('bossuyt-service', 1, {
+    dbPromise = openDB<BossuytDB>('bossuyt-service', 2, {
       upgrade(db) {
-        // "interventions" store
-        const intStore = db.createObjectStore('interventions', { keyPath: 'id' })
-        intStore.createIndex('by-source', 'source')
-        intStore.createIndex('by-status', 'status')
+        if (!db.objectStoreNames.contains('interventions')) {
+          const intStore = db.createObjectStore('interventions', { keyPath: 'id' })
+          intStore.createIndex('by-source', 'source')
+          intStore.createIndex('by-status', 'status')
+        }
 
-        // "werkbonnen" store — one per intervention
-        db.createObjectStore('werkbonnen', { keyPath: 'interventionId' })
+        if (!db.objectStoreNames.contains('werkbonnen')) {
+          db.createObjectStore('werkbonnen', { keyPath: 'interventionId' })
+        }
 
-        // "pendingWrites" — auto-increment key like an SQL sequence
-        db.createObjectStore('pendingWrites', {
-          keyPath: 'id',
-          autoIncrement: true,
-        })
+        if (!db.objectStoreNames.contains('pendingWrites')) {
+          db.createObjectStore('pendingWrites', {
+            keyPath: 'id',
+            autoIncrement: true,
+          })
+        }
 
-        // "dayMeta" — single record, key is always 'current'
-        db.createObjectStore('dayMeta', { keyPath: 'date' })
+        if (!db.objectStoreNames.contains('dayMeta')) {
+          db.createObjectStore('dayMeta', { keyPath: 'date' })
+        }
       },
     })
   }
   return dbPromise
+}
+
+function normalizeWerkbonDraft(record: WerkbonDraft | WerkbonCache | undefined): WerkbonDraft | undefined {
+  if (!record) {
+    return undefined
+  }
+
+  if ('status' in record && 'photos' in record) {
+    return {
+      ...record,
+      photos: record.photos.map(photo => ({
+        ...photo,
+        syncStatus: photo.syncStatus ?? 'pending',
+      })),
+    }
+  }
+
+  return {
+    interventionId: record.interventionId,
+    status: '',
+    workStart: '',
+    workEnd: '',
+    description: record.notes ?? '',
+    parts: [],
+    followUp: record.followUpRequired && record.followUpNote
+      ? [{
+          id: `legacy-follow-up-${record.interventionId}`,
+          description: record.followUpNote,
+          priority: 'gemiddeld',
+          dueDate: '',
+        }]
+      : [],
+    signature: record.signatureDataUrl ?? null,
+    photos: [],
+    lastSavedAt: record.lastSavedAt ?? new Date().toISOString(),
+  }
+}
+
+function createOfflineSyncEvent(input: {
+  syncEventId?: string
+  type: OfflineSyncEventType
+  entityId: string
+  payload: OfflineSyncEventPayload
+  idempotencyKey: string
+  localVersion: number
+  createdAt?: string
+}): OfflineSyncEvent {
+  const createdAt = input.createdAt ?? new Date().toISOString()
+
+  return {
+    syncEventId: input.syncEventId ?? crypto.randomUUID(),
+    type: input.type,
+    entityType: 'work_order',
+    entityId: input.entityId,
+    payload: input.payload,
+    createdAt,
+    updatedAt: createdAt,
+    attempts: 0,
+    maxAttempts: 7,
+    status: 'pending',
+    nextAttemptAt: createdAt,
+    idempotencyKey: input.idempotencyKey,
+    localVersion: input.localVersion,
+  }
+}
+
+function normalizePendingWrite(item: PendingWrite | OfflineSyncEvent): OfflineSyncEvent | null {
+  if ('syncEventId' in item && 'status' in item) {
+    return item
+  }
+
+  if (item.type !== 'update_sequence') {
+    return null
+  }
+
+  const payload = item.payload as ReorderWorkOrdersPayload
+  const localVersion = payload.planningVersion ?? 1
+
+  return createOfflineSyncEvent({
+    type: 'reorder_work_orders',
+    entityId: payload.orderedWorkOrderIds[0] ?? 'planning',
+    payload,
+    idempotencyKey: buildIdempotencyKey('reorder_work_orders', payload.technicianId, payload.date, localVersion),
+    localVersion,
+    createdAt: item.createdAt,
+  })
 }
 
 // ---------- Interventions ----------
@@ -174,16 +354,72 @@ export async function updateInterventionSequence(
 
 // ---------- Werkbonnen ----------
 
-/** Save werkbon form state — called on every change so data survives refresh */
-export async function saveWerkbon(data: WerkbonCache): Promise<void> {
+/** Save werkbon draft state — called on every change so data survives refresh */
+export async function saveWerkbonDraft(data: Omit<WerkbonDraft, 'lastSavedAt'>): Promise<void> {
   const db = await getDB()
   await db.put('werkbonnen', { ...data, lastSavedAt: new Date().toISOString() })
 }
 
-/** Load saved werkbon for an intervention */
-export async function loadWerkbon(interventionId: string): Promise<WerkbonCache | undefined> {
+/** Load saved werkbon draft for an intervention */
+export async function loadWerkbonDraft(interventionId: string): Promise<WerkbonDraft | undefined> {
   const db = await getDB()
-  return db.get('werkbonnen', interventionId)
+  const record = await db.get('werkbonnen', interventionId)
+  return normalizeWerkbonDraft(record)
+}
+
+export async function setWerkbonPhotoSyncStatus(
+  interventionId: string,
+  syncStatus: Extract<PhotoSyncStatus, 'pending' | 'syncing' | 'failed'>,
+): Promise<void> {
+  const db = await getDB()
+  const record = normalizeWerkbonDraft(await db.get('werkbonnen', interventionId))
+
+  if (!record) {
+    return
+  }
+
+  await db.put('werkbonnen', {
+    ...record,
+    photos: record.photos.map(photo => (
+      photo.syncStatus === 'synced'
+        ? photo
+        : { ...photo, syncStatus }
+    )),
+    lastSavedAt: new Date().toISOString(),
+  })
+}
+
+export async function reconcileWerkbonPhotos(
+  interventionId: string,
+  uploadedPhotos: UploadedWorkOrderPhotoDTO[],
+): Promise<void> {
+  const db = await getDB()
+  const record = normalizeWerkbonDraft(await db.get('werkbonnen', interventionId))
+
+  if (!record) {
+    return
+  }
+
+  const uploadedByLocalId = new Map(uploadedPhotos.map(photo => [photo.localId, photo]))
+
+  await db.put('werkbonnen', {
+    ...record,
+    photos: record.photos.map(photo => {
+      const uploaded = uploadedByLocalId.get(photo.localId)
+      if (!uploaded) {
+        return photo
+      }
+
+      return {
+        ...photo,
+        syncStatus: 'synced',
+        serverPhotoId: uploaded.photoId,
+        serverUrl: uploaded.url,
+        uploadedAt: uploaded.uploadedAt,
+      }
+    }),
+    lastSavedAt: new Date().toISOString(),
+  })
 }
 
 // ---------- Pending writes ----------
@@ -194,7 +430,47 @@ export async function enqueuePendingWrite(write: Omit<PendingWrite, 'id' | 'atte
   await db.add('pendingWrites', { ...write, attempts: 0 })
 }
 
-export async function removePendingWritesByType(type: PendingWrite['type']): Promise<void> {
+export async function enqueueReorderSyncEvent(input: ReorderWorkOrdersPayload & {
+  entityId: string
+  localVersion: number
+}): Promise<void> {
+  const db = await getDB()
+  const event = createOfflineSyncEvent({
+    type: 'reorder_work_orders',
+    entityId: input.entityId,
+    payload: {
+      technicianId: input.technicianId,
+      date: input.date,
+      planningVersion: input.planningVersion,
+      orderedWorkOrderIds: input.orderedWorkOrderIds,
+    },
+    idempotencyKey: buildIdempotencyKey('reorder_work_orders', input.technicianId, input.date, input.localVersion),
+    localVersion: input.localVersion,
+  })
+
+  await db.add('pendingWrites', event)
+}
+
+export async function enqueueWorkOrderExecutionSyncEvent(
+  payload: WorkOrderExecutionSyncPayload,
+  localVersion: number,
+): Promise<void> {
+  const db = await getDB()
+  const event = createOfflineSyncEvent({
+    syncEventId: payload.localEventId,
+    type: 'push_work_order_execution',
+    entityId: payload.workOrderId,
+    payload,
+    idempotencyKey: buildIdempotencyKey('push_work_order_execution', payload.workOrderId, localVersion, payload.localEventId),
+    localVersion,
+  })
+
+  await db.add('pendingWrites', event)
+}
+
+export async function removePendingWritesByType(
+  type: PendingWrite['type'] | OfflineSyncEvent['type'],
+): Promise<void> {
   const db = await getDB()
   const tx = db.transaction('pendingWrites', 'readwrite')
   const items = await tx.store.getAll()
@@ -208,16 +484,52 @@ export async function removePendingWritesByType(type: PendingWrite['type']): Pro
   await tx.done
 }
 
-/** Get all pending writes (to process when back online) */
-export async function getPendingWrites(): Promise<PendingWrite[]> {
+/** Get all raw pending queue entries, including legacy writes. */
+export async function getPendingWrites(): Promise<Array<PendingWrite | OfflineSyncEvent>> {
   const db = await getDB()
   return db.getAll('pendingWrites')
+}
+
+export async function getPendingSyncEvents(): Promise<OfflineSyncEvent[]> {
+  const db = await getDB()
+  const items = await db.getAll('pendingWrites')
+  const now = new Date().toISOString()
+
+  return items
+    .map(item => normalizePendingWrite(item))
+    .filter((item): item is OfflineSyncEvent => Boolean(item))
+    .filter(item => item.status !== 'dead_letter' && item.nextAttemptAt <= now)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
 /** Remove a pending write after it was successfully sent */
 export async function removePendingWrite(id: number): Promise<void> {
   const db = await getDB()
   await db.delete('pendingWrites', id)
+}
+
+export async function updatePendingSyncEvent(
+  eventId: number,
+  updater: (event: OfflineSyncEvent) => OfflineSyncEvent,
+): Promise<void> {
+  const db = await getDB()
+  const current = await db.get('pendingWrites', eventId)
+  const normalized = current ? normalizePendingWrite(current) : null
+
+  if (!normalized) {
+    return
+  }
+
+  await db.put('pendingWrites', {
+    ...updater(normalized),
+    id: eventId,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+export async function countPendingSyncEvents(): Promise<number> {
+  const items = await getPendingSyncEvents()
+  return items.filter(item => item.status !== 'acked').length
 }
 
 // ---------- Day metadata ----------

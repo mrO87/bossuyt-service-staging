@@ -27,6 +27,38 @@ export const technicians = pgTable('technicians', {
   active: boolean('active').notNull().default(true),
 })
 
+export const technicianAddresses = pgTable(
+  'technician_addresses',
+  {
+    id: text('id').primaryKey(),
+    technicianId: text('technician_id')
+      .notNull()
+      .references(() => technicians.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    street: text('street').notNull(),
+    houseNumber: text('house_number').notNull().default(''),
+    postalCode: text('postal_code').notNull(),
+    city: text('city').notNull(),
+    country: text('country').notNull().default('Belgium'),
+    lat: doublePrecision('lat').notNull(),
+    lon: doublePrecision('lon').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueAddressPerTechnician: unique('technician_addresses_unique_location').on(
+      table.technicianId,
+      table.street,
+      table.houseNumber,
+      table.postalCode,
+      table.city,
+      table.country,
+    ),
+  }),
+)
+
 export const customers = pgTable('customers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -103,6 +135,9 @@ export const workOrders = pgTable('work_orders', {
   completionParts:   text('completion_parts'),    // JSON string: PdfPart[]
   completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
   completedAt:       timestamp('completed_at', { withTimezone: true }),
+  executionLocalVersion: integer('execution_local_version').notNull().default(0),
+  lastExecutionSyncedVersion: integer('last_execution_synced_version').notNull().default(0),
+  executionSyncState: text('execution_sync_state').notNull().default('idle'),
 })
 
 export const workOrderAssignments = pgTable(
@@ -161,6 +196,7 @@ export const workOrderRelations = relations(workOrders, ({ one, many }) => ({
   }),
   assignments: many(workOrderAssignments),
   werkbonnen:  many(werkbonnen),
+  photos: many(werkbonPhotos),
 }))
 
 export const deviceDocuments = pgTable(
@@ -181,6 +217,14 @@ export const deviceDocuments = pgTable(
 
 export const technicianRelations = relations(technicians, ({ many }) => ({
   assignments: many(workOrderAssignments),
+  addresses: many(technicianAddresses),
+}))
+
+export const technicianAddressRelations = relations(technicianAddresses, ({ one }) => ({
+  technician: one(technicians, {
+    fields: [technicianAddresses.technicianId],
+    references: [technicians.id],
+  }),
 }))
 
 export const workOrderAssignmentRelations = relations(workOrderAssignments, ({ one }) => ({
@@ -218,6 +262,87 @@ export const werkbonnenRelations = relations(werkbonnen, ({ one }) => ({
     fields: [werkbonnen.workOrderId],
     references: [workOrders.id],
   }),
+}))
+
+export const werkbonPhotos = pgTable('werkbon_photos', {
+  id: text('id').primaryKey(),
+  werkbonId: text('werkbon_id')
+    .notNull()
+    .references(() => werkbonnen.id, { onDelete: 'cascade' }),
+  workOrderId: text('work_order_id')
+    .notNull()
+    .references(() => workOrders.id, { onDelete: 'cascade' }),
+  localPhotoId: text('local_photo_id'),
+  fileName: text('file_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  fileSize: integer('file_size').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  storagePath: text('storage_path').notNull(),
+  capturedAt: timestamp('captured_at', { withTimezone: true }),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const werkbonPhotoRelations = relations(werkbonPhotos, ({ one }) => ({
+  werkbon: one(werkbonnen, {
+    fields: [werkbonPhotos.werkbonId],
+    references: [werkbonnen.id],
+  }),
+  workOrder: one(workOrders, {
+    fields: [werkbonPhotos.workOrderId],
+    references: [workOrders.id],
+  }),
+}))
+
+export const syncMappings = pgTable(
+  'sync_mappings',
+  {
+    id: text('id').primaryKey(),
+    entityType: text('entity_type').notNull(),
+    localId: text('local_id').notNull(),
+    externalSystem: text('external_system').notNull(),
+    externalId: text('external_id').notNull(),
+    externalVersion: text('external_version'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueLocalEntity: unique('sync_mappings_entity_local_system_unique').on(
+      table.entityType,
+      table.localId,
+      table.externalSystem,
+    ),
+    uniqueExternalEntity: unique('sync_mappings_external_unique').on(
+      table.externalSystem,
+      table.externalId,
+    ),
+  }),
+)
+
+export const syncEvents = pgTable('sync_events', {
+  id: text('id').primaryKey(),
+  eventType: text('event_type').notNull(),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  status: text('status').notNull().default('pending'),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  payloadVersion: integer('payload_version').notNull().default(1),
+  localVersion: integer('local_version').notNull().default(1),
+  idempotencyKey: text('idempotency_key').notNull(),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(7),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+  firstAttemptAt: timestamp('first_attempt_at', { withTimezone: true }),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  lastErrorCode: text('last_error_code'),
+  lastErrorMessage: text('last_error_message'),
+  remoteCorrelationId: text('remote_correlation_id'),
+  resultPayload: jsonb('result_payload').$type<Record<string, unknown> | null>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  uniqueIdempotencyKey: unique('sync_events_idempotency_key_unique').on(table.idempotencyKey),
 }))
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

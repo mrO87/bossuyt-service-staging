@@ -1,11 +1,26 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import Image from 'next/image'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
 import type { PdfPart, PdfFollowUp } from '@/lib/pdf'
 import type { Intervention } from '@/types'
+import {
+  enqueueWorkOrderExecutionSyncEvent,
+  loadWerkbonDraft,
+  saveWerkbonDraft,
+  type WerkbonDraft,
+  type WerkbonPhotoDraft,
+} from '@/lib/idb'
+import { compressPhotoFile } from '@/lib/photos'
+import { syncPendingWrites } from '@/lib/sync'
+import { calculateDurationMinutes, toLocalVersion } from '@/lib/sync-utils'
+
+interface FormPhoto extends WerkbonPhotoDraft {
+  previewUrl: string
+}
 
 // Local state shape for the form
 interface FormState {
@@ -16,6 +31,7 @@ interface FormState {
   parts: PdfPart[]
   followUp: PdfFollowUp[]
   signature: string | null
+  photos: FormPhoto[]
 }
 
 const STATUS_OPTIONS = [
@@ -34,6 +50,105 @@ const PRIORITY_OPTIONS = [
 
 function now() {
   return new Date().toISOString()
+}
+
+function createPreviewUrl(blob: Blob) {
+  return URL.createObjectURL(blob)
+}
+
+function revokePreviewUrls(photos: FormPhoto[]) {
+  photos.forEach(photo => {
+    URL.revokeObjectURL(photo.previewUrl)
+  })
+}
+
+function buildInitialFormState(interventionStatus: string): FormState {
+  return {
+    status: interventionStatus,
+    workStart: '',
+    workEnd: '',
+    description: '',
+    parts: [],
+    followUp: [],
+    signature: null,
+    photos: [],
+  }
+}
+
+function draftToFormState(interventionStatus: string, draft?: WerkbonDraft): FormState {
+  if (!draft) {
+    return buildInitialFormState(interventionStatus)
+  }
+
+  return {
+    status: draft.status || interventionStatus,
+    workStart: draft.workStart,
+    workEnd: draft.workEnd,
+    description: draft.description,
+    parts: draft.parts,
+    followUp: draft.followUp,
+    signature: draft.signature,
+    photos: draft.photos.map(photo => ({
+      ...photo,
+      previewUrl: createPreviewUrl(photo.blob),
+    })),
+  }
+}
+
+function toStoredPhoto(photo: FormPhoto): WerkbonPhotoDraft {
+  const { previewUrl, ...storedPhoto } = photo
+  void previewUrl
+  return storedPhoto
+}
+
+function formToDraft(interventionId: string, form: FormState): Omit<WerkbonDraft, 'lastSavedAt'> {
+  return {
+    interventionId,
+    status: form.status,
+    workStart: form.workStart,
+    workEnd: form.workEnd,
+    description: form.description,
+    parts: form.parts,
+    followUp: form.followUp,
+    signature: form.signature,
+    photos: form.photos.map(toStoredPhoto),
+  }
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function photoStatusBadge(syncStatus: FormPhoto['syncStatus']) {
+  switch (syncStatus) {
+    case 'synced':
+      return {
+        icon: '✓',
+        label: 'Gesynchroniseerd',
+        className: 'bg-brand-green/10 text-brand-green border-brand-green/20',
+      }
+    case 'syncing':
+      return {
+        icon: '↻',
+        label: 'Synchroniseert',
+        className: 'bg-brand-blue/10 text-brand-blue border-brand-blue/20',
+      }
+    case 'failed':
+      return {
+        icon: '↻',
+        label: 'Wacht op nieuwe sync',
+        className: 'bg-brand-red/10 text-brand-red border-brand-red/20',
+      }
+    case 'pending':
+    default:
+      return {
+        icon: '↻',
+        label: 'Nog niet gesynchroniseerd',
+        className: 'bg-brand-orange/10 text-brand-orange border-brand-orange/20',
+      }
+  }
 }
 
 // Reusable section wrapper
@@ -56,18 +171,63 @@ interface Props {
 }
 
 export default function WerkbonForm({ intervention }: Props) {
-  const [form, setForm] = useState<FormState>({
-    status:      intervention.status,
-    workStart:   '',
-    workEnd:     '',
-    description: '',
-    parts:       [],
-    followUp:    [],
-    signature:   null,
-  })
+  const [form, setForm] = useState<FormState>(() => buildInitialFormState(intervention.status))
   const [pdfLoading,    setPdfLoading]    = useState(false)
-  const [saveStatus,    setSaveStatus]    = useState<'idle' | 'saved' | 'error'>('idle')
+  const [saveStatus,    setSaveStatus]    = useState<'idle' | 'saved' | 'queued' | 'error'>('idle')
   const [deviceRefresh, setDeviceRefresh] = useState(0)
+  const [draftReady, setDraftReady] = useState(false)
+  const livePhotosRef = useRef<FormPhoto[]>([])
+
+  useEffect(() => {
+    livePhotosRef.current = form.photos
+  }, [form.photos])
+
+  useEffect(() => {
+    return () => {
+      revokePreviewUrls(livePhotosRef.current)
+    }
+  }, [])
+
+  const replaceFormFromDraft = useCallback((draft?: WerkbonDraft) => {
+    setForm(prev => {
+      revokePreviewUrls(prev.photos)
+      return draftToFormState(intervention.status, draft)
+    })
+  }, [intervention.status])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function hydrateDraft() {
+      const draft = await loadWerkbonDraft(intervention.id)
+      if (cancelled) {
+        return
+      }
+
+      replaceFormFromDraft(draft)
+      setDraftReady(true)
+    }
+
+    void hydrateDraft()
+
+    return () => {
+      cancelled = true
+    }
+  }, [intervention.id, replaceFormFromDraft])
+
+  useEffect(() => {
+    if (!draftReady) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveWerkbonDraft(formToDraft(intervention.id, form))
+    }, 300)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [draftReady, form, intervention.id])
 
   // Generic updater for simple fields
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -141,11 +301,72 @@ export default function WerkbonForm({ intervention }: Props) {
     setForm(prev => ({ ...prev, signature: dataUrl }))
   }, [])
 
+  async function handlePhotoSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? [])
+
+    if (selectedFiles.length === 0) {
+      return
+    }
+
+    try {
+      const newPhotos = await Promise.all(selectedFiles.map(async (file): Promise<FormPhoto> => {
+        const compressed = await compressPhotoFile(file)
+
+        return {
+          localId: crypto.randomUUID(),
+          fileName: compressed.fileName,
+          mimeType: compressed.mimeType,
+          originalSize: compressed.originalSize,
+          compressedSize: compressed.compressedSize,
+          width: compressed.width,
+          height: compressed.height,
+          createdAt: now(),
+          syncStatus: 'pending',
+          blob: compressed.blob,
+          previewUrl: createPreviewUrl(compressed.blob),
+        }
+      }))
+
+      setForm(prev => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))
+      setSaveStatus('idle')
+    } catch (error) {
+      console.error('Photo import error:', error)
+      setSaveStatus('error')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  function removePhoto(localId: string) {
+    setForm(prev => {
+      const target = prev.photos.find(photo => photo.localId === localId)
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl)
+      }
+
+      return {
+        ...prev,
+        photos: prev.photos.filter(photo => photo.localId !== localId),
+      }
+    })
+  }
+
   // PDF
   async function handlePDF() {
     setPdfLoading(true)
     await new Promise(r => setTimeout(r, 200))
     try {
+      const localEventId = crypto.randomUUID()
+      const localVersion = toLocalVersion()
+      const queuedPhotos = form.photos.map(photo => (
+        photo.syncStatus === 'synced'
+          ? photo
+          : { ...photo, syncStatus: 'pending' as const }
+      ))
+
+      await saveWerkbonDraft(formToDraft(intervention.id, { ...form, photos: queuedPhotos }))
+      setForm(prev => ({ ...prev, photos: queuedPhotos }))
+
       const pdfBlob = generateWerkbonPDF({
         customerName: intervention.customerName,
         siteName:     intervention.siteName,
@@ -160,27 +381,102 @@ export default function WerkbonForm({ intervention }: Props) {
         parts:        form.parts,
         followUp:     form.followUp,
         signature:    form.signature,
+        hasPhotos:    queuedPhotos.length > 0,
       })
 
-      // Persist completion data to the server
-      const fd = new FormData()
-      fd.append('changedBy',       intervention.technicians[0]?.technicianId ?? '')
-      fd.append('completionNotes', form.description)
-      fd.append('completionParts', JSON.stringify(form.parts))
-      fd.append('followUp',        JSON.stringify(form.followUp))
-      if (form.workStart) fd.append('workStart', form.workStart)
-      if (form.workEnd)   fd.append('workEnd',   form.workEnd)
-      fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)
-      const res = await fetch(`/api/work-orders/${intervention.id}/complete`, {
-        method: 'POST',
-        body:   fd,
-      })
-      if (res.ok) {
-        setSaveStatus('saved')
-        setDeviceRefresh(k => k + 1)
+      const technicianId = intervention.technicians[0]?.technicianId ?? ''
+      const materialUsage = form.parts.map((part): {
+        localId: string
+        workOrderId: string
+        itemCode: string
+        description: string
+        quantity: number
+        unit: string
+        billable: boolean
+        toOrder: boolean
+        urgent: boolean
+      } => ({
+        localId: `${localEventId}:${part.id}`,
+        workOrderId: intervention.id,
+        itemCode: part.code,
+        description: part.description,
+        quantity: part.quantity,
+        unit: 'st',
+        billable: true,
+        toOrder: part.toOrder,
+        urgent: part.urgent,
+      }))
+
+      await enqueueWorkOrderExecutionSyncEvent({
+        localEventId,
+        workOrderId: intervention.id,
+        technicianId,
+        status: form.status,
+        notes: form.description,
+        workStart: form.workStart || undefined,
+        workEnd: form.workEnd || undefined,
+        capturedAt: new Date().toISOString(),
+        hasSignature: Boolean(form.signature),
+        followUp: form.followUp.map(item => ({
+          description: item.description,
+          priority: item.priority,
+          dueDate: item.dueDate || undefined,
+        })),
+        timeEntries: [{
+          localId: `${localEventId}:labour`,
+          workOrderId: intervention.id,
+          technicianId,
+          startAt: form.workStart || undefined,
+          endAt: form.workEnd || undefined,
+          durationMinutes: calculateDurationMinutes(form.workStart || undefined, form.workEnd || undefined),
+          activityType: 'labour',
+          billable: true,
+          source: 'field_app',
+        }],
+        materialUsage,
+        attachmentRefs: [
+          { type: 'pdf', fileName: `werkbon-${intervention.id}.pdf` },
+          ...queuedPhotos
+            .filter(photo => photo.syncStatus !== 'synced')
+            .map(photo => ({ type: 'photo' as const, fileName: photo.fileName })),
+        ],
+        photos: queuedPhotos
+          .filter(photo => photo.syncStatus !== 'synced')
+          .map(photo => ({
+            localId: photo.localId,
+            fileName: photo.fileName,
+            mimeType: photo.mimeType,
+            originalSize: photo.originalSize,
+            compressedSize: photo.compressedSize,
+            width: photo.width,
+            height: photo.height,
+            createdAt: photo.createdAt,
+          })),
+        pdfBlob,
+        pdfFileName: `werkbon-${intervention.id}.pdf`,
+        photoBlobs: queuedPhotos
+          .filter(photo => photo.syncStatus !== 'synced')
+          .map(photo => ({
+            localId: photo.localId,
+            fileName: photo.fileName,
+            mimeType: photo.mimeType,
+            blob: photo.blob,
+          })),
+        rawParts: form.parts,
+      }, localVersion)
+
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const result = await syncPendingWrites()
+        const latestDraft = await loadWerkbonDraft(intervention.id)
+        replaceFormFromDraft(latestDraft)
+        if (result.failed === 0) {
+          setSaveStatus('saved')
+          setDeviceRefresh(k => k + 1)
+        } else {
+          setSaveStatus('queued')
+        }
       } else {
-        console.error('Complete route error:', res.status, await res.text())
-        setSaveStatus('error')
+        setSaveStatus('queued')
       }
     } catch (err) {
       console.error('PDF error:', err)
@@ -402,6 +698,85 @@ export default function WerkbonForm({ intervention }: Props) {
         </div>
       </Section>
 
+      {/* ── Photos ── */}
+      <Section title="FOTO'S">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-soft">
+            Neem een foto met de camera of kies bestaande foto&apos;s. De app verkleint ze automatisch voor opslag.
+          </p>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="flex items-center justify-center rounded-xl border-2 border-dashed border-brand-blue bg-brand-blue/5 px-4 py-4 text-center font-semibold text-brand-blue">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoSelection}
+                className="hidden"
+              />
+              Foto nemen
+            </label>
+            <label className="flex items-center justify-center rounded-xl border-2 border-dashed border-stroke bg-surface px-4 py-4 text-center font-semibold text-ink">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handlePhotoSelection}
+                className="hidden"
+              />
+              Uit galerij kiezen
+            </label>
+          </div>
+
+          {form.photos.length === 0 ? (
+            <p className="rounded-xl border border-stroke bg-surface px-4 py-6 text-center text-sm text-ink-faint">
+              Nog geen foto&apos;s toegevoegd
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {form.photos.map(photo => {
+                const badge = photoStatusBadge(photo.syncStatus)
+
+                return (
+                  <div key={photo.localId} className="overflow-hidden rounded-xl border border-stroke bg-surface">
+                    <Image
+                      src={photo.previewUrl}
+                      alt={photo.fileName}
+                      width={photo.width}
+                      height={photo.height}
+                      unoptimized
+                      className="h-48 w-full bg-black object-cover"
+                    />
+                    <div className="flex flex-col gap-3 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-ink">{photo.fileName}</p>
+                          <p className="text-xs text-ink-soft">
+                            {formatFileSize(photo.compressedSize)} opgeslagen · {photo.width} × {photo.height}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(photo.localId)}
+                          className="rounded-lg border border-stroke px-3 py-1.5 text-sm font-medium text-ink-soft"
+                        >
+                          Verwijderen
+                        </button>
+                      </div>
+
+                      <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                        <span aria-hidden="true">{badge.icon}</span>
+                        <span>{badge.label}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </Section>
+
       {/* ── Signature ── */}
       <Section title="HANDTEKENING KLANT">
         <SignaturePad signature={form.signature} onSignatureChange={handleSignature} />
@@ -419,6 +794,11 @@ export default function WerkbonForm({ intervention }: Props) {
       {saveStatus === 'saved' && (
         <p className="text-center text-sm font-semibold text-brand-green">
           ✓ Werkbon opgeslagen
+        </p>
+      )}
+      {saveStatus === 'queued' && (
+        <p className="text-center text-sm font-semibold text-brand-orange">
+          ✓ Offline opgeslagen — synchroniseert zodra je weer online bent
         </p>
       )}
       {saveStatus === 'error' && (
