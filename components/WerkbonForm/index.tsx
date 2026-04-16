@@ -269,14 +269,14 @@ export default function WerkbonForm({ intervention }: Props) {
 
   function handleCameraChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
-    event.target.value = ''
     void queuePhotos(files)
+    event.target.value = ''
   }
 
   function handleGalleryChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
-    event.target.value = ''
     void queuePhotos(files)
+    event.target.value = ''
   }
 
   useEffect(() => {
