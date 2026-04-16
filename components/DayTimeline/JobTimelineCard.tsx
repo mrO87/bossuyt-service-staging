@@ -148,7 +148,7 @@ export function JobTimelineCard({
                     }`}
                     title={tech.name}
                   >
-                    <span className="text-white text-[10px] font-bold">
+                    <span className="text-white text-[11px] font-bold">
                       {tech.initials}
                     </span>
                   </div>

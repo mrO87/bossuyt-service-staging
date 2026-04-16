@@ -19,6 +19,15 @@ export interface PdfFollowUp {
   dueDate: string
 }
 
+export interface PdfTaskItem {
+  id: string
+  title: string
+  assigneeName: string
+  priority: 'laag' | 'normaal' | 'hoog' | 'dringend'
+  dueDate: string
+  statusLabel: string
+}
+
 export interface PdfData {
   customerName: string
   siteName: string
@@ -33,6 +42,7 @@ export interface PdfData {
   description: string
   parts: PdfPart[]
   followUp: PdfFollowUp[]
+  tasks?: PdfTaskItem[]
   signature: string | null
 }
 
@@ -72,7 +82,9 @@ const STATUS_LABELS: Record<string, string> = {
 const PRIORITY_COLORS: Record<string, readonly [number, number, number]> = {
   laag:      C.green,
   gemiddeld: C.blue,
+  normaal:   C.blue,
   hoog:      C.orange,
+  dringend:  C.red,
 }
 
 // jsPDF types don't accept spread of readonly tuples — use this helper instead
@@ -281,6 +293,36 @@ export function generateWerkbonPDF(data: PdfData): Blob {
         doc.text('Gebruikt', mL + cW - 3, y + 3.5, { align: 'right' })
       }
       y += 6.5
+    })
+    y += 4
+  }
+
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  if (data.tasks && data.tasks.length > 0) {
+    sectionTitle('ACTIVITEITEN')
+    data.tasks.forEach((task, i) => {
+      checkPage(12)
+      if (i % 2 === 0) {
+        fill(doc, C.rowAlt)
+        doc.rect(mL, y - 1, cW, 9.5, 'F')
+      }
+      const priorityColor = PRIORITY_COLORS[task.priority] || C.blue
+      fill(doc, priorityColor)
+      doc.circle(mL + 4, y + 3, 1.8, 'F')
+
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      textColor(doc, C.textDark)
+      doc.text(task.title, mL + 8, y + 4)
+
+      doc.setFont('helvetica', 'normal')
+      textColor(doc, C.textGray)
+      doc.text(`${task.assigneeName} • ${task.statusLabel}`, mL + 8, y + 7.5)
+
+      if (task.dueDate) {
+        doc.text(fmtDate(task.dueDate), mL + cW - 3, y + 4, { align: 'right' })
+      }
+      y += 9.5
     })
     y += 4
   }

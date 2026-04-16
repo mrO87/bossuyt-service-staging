@@ -23,7 +23,7 @@ import type { Intervention } from '@/types'
 import type { RouteStep } from '@/types/planning'
 
 // How many of each type we cache at most
-const MAX_PLANNED = 6
+const MAX_PLANNED = 10
 const MAX_OPEN = 4
 
 export interface SyncResult {

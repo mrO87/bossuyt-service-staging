@@ -12,6 +12,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
+import { useSettings } from '@/lib/hooks/useSettings'
+import { useTasks } from '@/lib/task-store'
 import type { InterventionStatus, InterventionType } from '@/types'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
@@ -104,6 +106,8 @@ export default function DayView() {
   const today = new Date()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
+  const { currentUser, getOpenTaskCountForUser } = useTasks()
+  const { settings } = useSettings()
   const {
     planned,
     open: openPool,
@@ -111,7 +115,8 @@ export default function DayView() {
     total,
     error: dayDataError,
     notice,
-  } = useDayData()
+  } = useDayData(currentUser.id)
+  const openTaskCount = getOpenTaskCountForUser(currentUser.id)
 
   return (
     <div className="min-h-screen bg-surface">
@@ -132,10 +137,15 @@ export default function DayView() {
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
+            className="relative w-10 h-10 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
             aria-label="Instellingen openen"
           >
-            <span className="text-white text-xs font-bold">OP</span>
+            <span className="text-white text-sm font-bold">{currentUser.initials}</span>
+            {openTaskCount > 0 && (
+              <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-brand-red text-[10px] font-bold text-white flex items-center justify-center">
+                {openTaskCount}
+              </span>
+            )}
           </button>
         </div>
       </header>
@@ -192,7 +202,7 @@ export default function DayView() {
           <span className="text-[11px] text-ink-soft">sleep om te herschikken</span>
         </div>
 
-        <DayTimeline plannedInterventions={planned} />
+          <DayTimeline plannedInterventions={planned} settings={settings} />
 
         {/* ---------- Open pool ---------- */}
         <div className="flex items-center justify-between mt-8 mb-2">

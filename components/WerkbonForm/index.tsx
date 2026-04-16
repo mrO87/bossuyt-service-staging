@@ -1,96 +1,252 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
-import type { PdfPart, PdfFollowUp } from '@/lib/pdf'
-import type { Intervention } from '@/types'
+import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
+import { getUserById, users } from '@/lib/mock-data'
+import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
+import { useTasks } from '@/lib/task-store'
+import type { Intervention, Task, TaskStatus, TaskType, User } from '@/types'
 
-// Local state shape for the form
 interface FormState {
   status: string
   workStart: string
   workEnd: string
   description: string
   parts: PdfPart[]
-  followUp: PdfFollowUp[]
   signature: string | null
 }
 
-const STATUS_OPTIONS = [
-  { value: 'gepland',          label: 'Gepland',             activeClass: 'bg-stroke text-ink-soft border-stroke',                inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'onderweg',         label: 'Onderweg',            activeClass: 'bg-brand-orange text-white border-brand-orange',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'bezig',            label: 'Bezig',               activeClass: 'bg-brand-blue text-white border-brand-blue',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen', activeClass: 'bg-brand-red text-white border-brand-red',             inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'afgewerkt',        label: 'Afgewerkt',           activeClass: 'bg-brand-green text-white border-brand-green',         inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-]
+interface ActivityEditorState {
+  type: TaskType
+  title: string
+  description: string
+  assigneeValue: string
+  dueDate: string
+  status: TaskStatus
+}
 
-const PRIORITY_OPTIONS = [
-  { value: 'laag',      label: 'Laag',      activeClass: 'bg-brand-green text-white border-brand-green',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'gemiddeld', label: 'Gemiddeld', activeClass: 'bg-brand-blue text-white border-brand-blue',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'hoog',      label: 'Hoog',      activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-] as const
+const STATUS_OPTIONS = [
+  { value: 'gepland', label: 'Gepland', activeClass: 'bg-stroke text-ink-soft border-stroke', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'onderweg', label: 'Onderweg', activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'bezig', label: 'Bezig', activeClass: 'bg-brand-blue text-white border-brand-blue', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen', activeClass: 'bg-brand-red text-white border-brand-red', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'afgewerkt', label: 'Afgewerkt', activeClass: 'bg-brand-green text-white border-brand-green', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+]
 
 function now() {
   return new Date().toISOString()
 }
 
-// Reusable section wrapper
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function getRoleLabel(role: User['role']): string {
+  switch (role) {
+    case 'technician': return 'Techniekers'
+    case 'admin': return 'Admin'
+    case 'office': return 'Office'
+    case 'warehouse': return 'Magazijn'
+    case 'hr': return 'HR'
+    default: return role
+  }
+}
+
+const GROUP_ASSIGNMENT_OPTIONS: Array<{ value: string, label: string }> = [
+  { value: 'group:technician', label: 'Groep - Techniekers' },
+  { value: 'group:admin', label: 'Groep - Admin' },
+  { value: 'group:office', label: 'Groep - Office' },
+  { value: 'group:warehouse', label: 'Groep - Magazijn' },
+  { value: 'group:hr', label: 'Groep - HR' },
+]
+
+function getAssignmentValue(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
+  if (task.assigneeType === 'group' && task.assigneeRole) {
+    return `group:${task.assigneeRole}`
+  }
+
+  return `user:${task.assigneeUserId ?? ''}`
+}
+
+function parseAssignmentValue(value: string): Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'> {
+  if (value.startsWith('group:')) {
+    return {
+      assigneeType: 'group',
+      assigneeRole: value.replace('group:', '') as User['role'],
+      assigneeUserId: undefined,
+    }
+  }
+
+  return {
+    assigneeType: 'user',
+    assigneeUserId: value.replace('user:', ''),
+    assigneeRole: undefined,
+  }
+}
+
+function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
+  if (task.assigneeType === 'group' && task.assigneeRole) {
+    return getRoleLabel(task.assigneeRole)
+  }
+
+  return getUserById(task.assigneeUserId ?? '')?.name ?? 'Onbekende gebruiker'
+}
+
+function buildEditorState(task: Task): ActivityEditorState {
+  return {
+    type: task.type,
+    title: task.title,
+    description: task.description ?? '',
+    assigneeValue: getAssignmentValue(task),
+    dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+    status: task.status,
+  }
+}
+
+function createEmptyEditorState(currentUserId: string): ActivityEditorState {
+  return {
+    type: 'todo',
+    title: '',
+    description: '',
+    assigneeValue: `user:${currentUserId}`,
+    dueDate: '',
+    status: 'open',
+  }
+}
+
+function formatActivityDueDate(value?: string): string {
+  if (!value) return 'Geen vervaldatum'
+
+  return new Date(value).toLocaleDateString('nl-BE')
+}
+
+function Section({
+  title,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+  badge,
+  id,
+  actionLabel,
+  onActionClick,
+}: {
+  title: string
+  children: React.ReactNode
+  collapsible?: boolean
+  defaultOpen?: boolean
+  badge?: string
+  id?: string
+  actionLabel?: string
+  onActionClick?: () => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
-    <div className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
-        <div className="w-1 h-4 rounded-full bg-brand-orange" />
-        <p className="font-bold text-sm tracking-wide text-white">{title}</p>
-      </div>
-      <div className="p-4">
-        {children}
-      </div>
+    <div id={id} className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
+      {collapsible ? (
+        <div className="flex items-center justify-between gap-2 bg-brand-dark px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setOpen(prev => !prev)}
+            className="flex flex-1 items-center justify-between gap-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-4 rounded-full bg-brand-orange" />
+              <p className="font-bold text-sm tracking-wide text-white">{title}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {badge && (
+                <span className="rounded-full bg-brand-mid px-2 py-0.5 text-[11px] font-medium text-white">
+                  {badge}
+                </span>
+              )}
+              <span className="text-sm text-white">{open ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {actionLabel && onActionClick && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!open) {
+                  setOpen(true)
+                }
+                onActionClick()
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange text-lg font-bold text-white"
+              aria-label={actionLabel}
+            >
+              +
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
+          <div className="w-1 h-4 rounded-full bg-brand-orange" />
+          <p className="font-bold text-sm tracking-wide text-white">{title}</p>
+        </div>
+      )}
+
+      {(!collapsible || open) && (
+        <div className="p-4">{children}</div>
+      )}
     </div>
   )
 }
 
 interface Props {
   intervention: Intervention
+  initialActivityId?: string
 }
 
-export default function WerkbonForm({ intervention }: Props) {
-  const [form, setForm] = useState<FormState>({
-    status:      intervention.status,
-    workStart:   '',
-    workEnd:     '',
-    description: '',
-    parts:       [],
-    followUp:    [],
-    signature:   null,
-  })
-  const [pdfLoading,    setPdfLoading]    = useState(false)
-  const [saveStatus,    setSaveStatus]    = useState<'idle' | 'saved' | 'error'>('idle')
-  const [deviceRefresh, setDeviceRefresh] = useState(0)
+export default function WerkbonForm({ intervention, initialActivityId }: Props) {
+  const { currentUser, tasks, createTask, updateTask } = useTasks()
+  const werkbonId = `wb-${intervention.id}`
 
-  // Generic updater for simple fields
+  const [form, setForm] = useState<FormState>({
+    status: intervention.status,
+    workStart: '',
+    workEnd: '',
+    description: '',
+    parts: [],
+    signature: null,
+  })
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [deviceRefresh, setDeviceRefresh] = useState(0)
+  const [taskError, setTaskError] = useState('')
+  const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(initialActivityId ?? null)
+  const [editorState, setEditorState] = useState<ActivityEditorState | null>(() => {
+    const initialTask = initialActivityId
+      ? tasks.find(task => task.werkbonId === werkbonId && task.id === initialActivityId)
+      : undefined
+
+    return initialTask ? buildEditorState(initialTask) : null
+  })
+
+  const linkedTasks = useMemo(() => (
+    [...tasks.filter(task => task.werkbonId === werkbonId)]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  ), [tasks, werkbonId])
+
+  const openTaskCount = linkedTasks.filter(task => isTaskOpen(task.status)).length
+
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
-  // Time buttons
   function markStartWork() {
     setForm(prev => ({ ...prev, workStart: now(), status: 'bezig' }))
   }
+
   function markEndWork() {
     setForm(prev => ({ ...prev, workEnd: now(), status: 'afgewerkt' }))
   }
 
-  // Convert the "HH:mm" value from a <input type="time"> back into an ISO
-  // timestamp on the same calendar day as the original entry (or today if
-  // no time was set yet). Keeps the stored value format consistent with
-  // the buttons (always an ISO string).
   function setTimeField(field: 'workStart' | 'workEnd', hhmm: string) {
     if (!hhmm) {
       setForm(prev => ({ ...prev, [field]: '' }))
       return
     }
+
     const [h, m] = hhmm.split(':').map(Number)
     setForm(prev => {
       const base = prev[field] ? new Date(prev[field]) : new Date()
@@ -99,85 +255,192 @@ export default function WerkbonForm({ intervention }: Props) {
     })
   }
 
-  // Convert an ISO timestamp to the "HH:mm" shape that <input type="time"> needs.
   function isoToHHMM(iso: string): string {
     if (!iso) return ''
-    const d = new Date(iso)
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const value = new Date(iso)
+    return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
   }
 
-  // Parts
   function addPart() {
     const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder: false, urgent: false }
     setForm(prev => ({ ...prev, parts: [...prev.parts, part] }))
   }
+
   function updatePart(id: string, field: keyof PdfPart, value: string | number | boolean) {
     setForm(prev => ({
       ...prev,
-      parts: prev.parts.map(p => p.id === id ? { ...p, [field]: value } : p)
+      parts: prev.parts.map(part => part.id === id ? { ...part, [field]: value } : part),
     }))
   }
+
   function removePart(id: string) {
-    setForm(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }))
+    setForm(prev => ({ ...prev, parts: prev.parts.filter(part => part.id !== id) }))
   }
 
-  // Follow-up
-  function addFollowUp() {
-    const f: PdfFollowUp = { id: `f-${Date.now()}`, description: '', priority: 'gemiddeld', dueDate: '' }
-    setForm(prev => ({ ...prev, followUp: [...prev.followUp, f] }))
-  }
-  function updateFollowUp(id: string, field: keyof PdfFollowUp, value: string) {
-    setForm(prev => ({
-      ...prev,
-      followUp: prev.followUp.map(f => f.id === id ? { ...f, [field]: value } : f)
-    }))
-  }
-  function removeFollowUp(id: string) {
-    setForm(prev => ({ ...prev, followUp: prev.followUp.filter(f => f.id !== id) }))
+  function openTaskEditor(task: Task) {
+    setEditingTaskId(task.id)
+    setEditorState(buildEditorState(task))
+    setTaskError('')
   }
 
-  // Signature
+  function openNewTaskEditor() {
+    setEditingTaskId('new')
+    setEditorState(createEmptyEditorState(currentUser.id))
+    setTaskError('')
+  }
+
+  function closeTaskEditor() {
+    setEditingTaskId(null)
+    setEditorState(null)
+  }
+
+  function updateEditorField<K extends keyof ActivityEditorState>(field: K, value: ActivityEditorState[K]) {
+    setEditorState(prev => prev ? { ...prev, [field]: value } : prev)
+  }
+
+  function handleMarkTaskDone(task: Task) {
+    if (!canManageTask(task, currentUser)) return
+
+    const description = editingTaskId === task.id ? editorState?.description : task.description
+    const assignment = editingTaskId === task.id && editorState
+      ? parseAssignmentValue(editorState.assigneeValue)
+      : {
+          assigneeType: task.assigneeType,
+          assigneeUserId: task.assigneeUserId,
+          assigneeRole: task.assigneeRole,
+        }
+
+    updateTask(task.id, {
+      type: editingTaskId === task.id ? editorState?.type : task.type,
+      title: editingTaskId === task.id ? editorState?.title : task.title,
+      description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      dueDate: editingTaskId === task.id ? editorState?.dueDate : task.dueDate,
+      status: 'klaar',
+    })
+    closeTaskEditor()
+  }
+
+  function handleCancelTask(task: Task) {
+    if (!canManageTask(task, currentUser)) return
+
+    updateTask(task.id, { status: 'geannuleerd' })
+    closeTaskEditor()
+  }
+
+  function handleSaveTask(task: Task) {
+    if (!editorState || !canManageTask(task, currentUser)) return
+
+    if (!editorState.title.trim()) {
+      setTaskError('Geef eerst een samenvatting voor de activiteit in.')
+      return
+    }
+
+    if (!editorState.dueDate) {
+      setTaskError('Kies eerst een vervaldatum voor de activiteit.')
+      return
+    }
+
+    const assignment = parseAssignmentValue(editorState.assigneeValue)
+    updateTask(task.id, {
+      type: editorState.type,
+      title: editorState.title,
+      description: editorState.description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      dueDate: editorState.dueDate,
+      status: editorState.status,
+    })
+    setTaskError('')
+    closeTaskEditor()
+  }
+
+  function handleCreateActivity() {
+    if (!editorState || editingTaskId !== 'new') return
+
+    if (!editorState.title.trim()) {
+      setTaskError('Geef eerst een samenvatting voor de activiteit in.')
+      return
+    }
+
+    if (!editorState.dueDate) {
+      setTaskError('Kies eerst een vervaldatum voor de activiteit.')
+      return
+    }
+
+    const assignment = parseAssignmentValue(editorState.assigneeValue)
+    createTask({
+      type: editorState.type,
+      title: editorState.title,
+      description: editorState.description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      createdByUserId: currentUser.id,
+      priority: 'normaal',
+      dueDate: editorState.dueDate,
+      werkbonId,
+      interventionId: intervention.id,
+    })
+    setTaskError('')
+    closeTaskEditor()
+  }
+
   const handleSignature = useCallback((dataUrl: string | null) => {
     setForm(prev => ({ ...prev, signature: dataUrl }))
   }, [])
 
-  // PDF
   async function handlePDF() {
     setPdfLoading(true)
-    await new Promise(r => setTimeout(r, 200))
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    const pdfTasks: PdfTaskItem[] = linkedTasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      assigneeName: getAssignmentLabel(task),
+      priority: task.priority,
+      dueDate: task.dueDate ?? '',
+      statusLabel: getTaskStatusLabel(task.status),
+    }))
+
     try {
       const pdfBlob = generateWerkbonPDF({
         customerName: intervention.customerName,
-        siteName:     intervention.siteName,
-        siteAddress:  intervention.siteAddress,
-        siteCity:     intervention.siteCity,
-        deviceBrand:  intervention.deviceBrand  || '',
-        deviceModel:  intervention.deviceModel  || '',
-        status:       form.status,
-        workStart:    form.workStart,
-        workEnd:      form.workEnd,
-        description:  form.description,
-        parts:        form.parts,
-        followUp:     form.followUp,
-        signature:    form.signature,
+        siteName: intervention.siteName,
+        siteAddress: intervention.siteAddress,
+        siteCity: intervention.siteCity,
+        deviceBrand: intervention.deviceBrand || '',
+        deviceModel: intervention.deviceModel || '',
+        status: form.status,
+        workStart: form.workStart,
+        workEnd: form.workEnd,
+        description: form.description,
+        parts: form.parts,
+        followUp: [],
+        tasks: pdfTasks,
+        signature: form.signature,
       })
 
-      // Persist completion data to the server
       const fd = new FormData()
-      fd.append('changedBy',       intervention.technicians[0]?.technicianId ?? '')
+      fd.append('changedBy', intervention.technicians[0]?.technicianId ?? '')
       fd.append('completionNotes', form.description)
       fd.append('completionParts', JSON.stringify(form.parts))
-      fd.append('followUp',        JSON.stringify(form.followUp))
+      fd.append('followUp', JSON.stringify(linkedTasks))
       if (form.workStart) fd.append('workStart', form.workStart)
-      if (form.workEnd)   fd.append('workEnd',   form.workEnd)
+      if (form.workEnd) fd.append('workEnd', form.workEnd)
       fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)
+
       const res = await fetch(`/api/work-orders/${intervention.id}/complete`, {
         method: 'POST',
-        body:   fd,
+        body: fd,
       })
+
       if (res.ok) {
         setSaveStatus('saved')
-        setDeviceRefresh(k => k + 1)
+        setDeviceRefresh(current => current + 1)
       } else {
         console.error('Complete route error:', res.status, await res.text())
         setSaveStatus('error')
@@ -186,13 +449,12 @@ export default function WerkbonForm({ intervention }: Props) {
       console.error('PDF error:', err)
       setSaveStatus('error')
     }
+
     setPdfLoading(false)
   }
 
   return (
     <div className="flex flex-col gap-4 pb-10">
-
-      {/* ── Info card ── */}
       <Section title="KLANT & TOESTEL">
         <div className="flex flex-col gap-1">
           <p className="font-bold text-base text-ink">{intervention.customerName}</p>
@@ -206,7 +468,6 @@ export default function WerkbonForm({ intervention }: Props) {
         </div>
       </Section>
 
-      {/* ── Device panel (collapsible: detail + documents) ── */}
       <DevicePanel
         deviceId={intervention.deviceId}
         brand={intervention.deviceBrand}
@@ -215,36 +476,34 @@ export default function WerkbonForm({ intervention }: Props) {
         refreshKey={deviceRefresh}
       />
 
-      {/* ── Status ── */}
       <Section title="STATUS">
         <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map(s => (
+          {STATUS_OPTIONS.map(status => (
             <button
-              key={s.value}
-              onClick={() => update('status', s.value)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === s.value ? s.activeClass : s.inactiveClass}`}
+              key={status.value}
+              type="button"
+              onClick={() => update('status', status.value)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === status.value ? status.activeClass : status.inactiveClass}`}
             >
-              {s.label}
+              {status.label}
             </button>
           ))}
         </div>
       </Section>
 
-      {/* ── Time registration ── */}
       <Section title="TIJDREGISTRATIE">
-        {/* Editable time inputs — tap to adjust the recorded time */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           {[
             { label: 'Werk start', value: form.workStart, field: 'workStart' as const },
-            { label: 'Werk einde', value: form.workEnd,   field: 'workEnd'   as const },
-          ].map(t => (
-            <label key={t.label} className="rounded-xl p-3 text-center bg-surface block">
-              <p className="text-xs mb-1 text-ink-soft">{t.label}</p>
-              {t.value ? (
+            { label: 'Werk einde', value: form.workEnd, field: 'workEnd' as const },
+          ].map(item => (
+            <label key={item.label} className="rounded-xl p-3 text-center bg-surface block">
+              <p className="text-xs mb-1 text-ink-soft">{item.label}</p>
+              {item.value ? (
                 <input
                   type="time"
-                  value={isoToHHMM(t.value)}
-                  onChange={e => setTimeField(t.field, e.target.value)}
+                  value={isoToHHMM(item.value)}
+                  onChange={event => setTimeField(item.field, event.target.value)}
                   className="w-full text-xl font-bold text-ink bg-transparent text-center outline-none"
                 />
               ) : (
@@ -254,10 +513,10 @@ export default function WerkbonForm({ intervention }: Props) {
           ))}
         </div>
 
-        {/* Action buttons — show progressively */}
         <div className="flex flex-col gap-2">
           {!form.workStart && (
             <button
+              type="button"
               onClick={markStartWork}
               className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue"
             >
@@ -266,6 +525,7 @@ export default function WerkbonForm({ intervention }: Props) {
           )}
           {form.workStart && !form.workEnd && (
             <button
+              type="button"
               onClick={markEndWork}
               className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-green"
             >
@@ -275,45 +535,44 @@ export default function WerkbonForm({ intervention }: Props) {
         </div>
       </Section>
 
-      {/* ── Work description ── */}
       <Section title="OMSCHRIJVING WERKZAAMHEDEN">
         <textarea
           rows={5}
           placeholder="Beschrijf de uitgevoerde werkzaamheden..."
           value={form.description}
-          onChange={e => update('description', e.target.value)}
+          onChange={event => update('description', event.target.value)}
           className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink"
         />
       </Section>
 
-      {/* ── Parts ── */}
       <Section title="GEBRUIKTE ONDERDELEN">
         <div className="flex flex-col gap-3">
           {form.parts.length === 0 && (
             <p className="text-sm text-center py-2 text-ink-faint">Nog geen onderdelen toegevoegd</p>
           )}
+
           {form.parts.map(part => (
             <div key={part.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
               <div className="flex gap-2">
                 <input
                   placeholder="Artikelcode"
                   value={part.code}
-                  onChange={e => updatePart(part.id, 'code', e.target.value)}
+                  onChange={event => updatePart(part.id, 'code', event.target.value)}
                   className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
                 />
                 <input
                   type="number"
                   min={1}
                   value={part.quantity}
-                  onChange={e => updatePart(part.id, 'quantity', parseInt(e.target.value) || 1)}
+                  onChange={event => updatePart(part.id, 'quantity', parseInt(event.target.value) || 1)}
                   className="w-16 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
                 />
-                <button onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
+                <button type="button" onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
               </div>
               <input
                 placeholder="Omschrijving onderdeel"
                 value={part.description}
-                onChange={e => updatePart(part.id, 'description', e.target.value)}
+                onChange={event => updatePart(part.id, 'description', event.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
               />
               <div className="flex items-center gap-4">
@@ -321,7 +580,7 @@ export default function WerkbonForm({ intervention }: Props) {
                   <input
                     type="checkbox"
                     checked={part.toOrder}
-                    onChange={e => updatePart(part.id, 'toOrder', e.target.checked)}
+                    onChange={event => updatePart(part.id, 'toOrder', event.target.checked)}
                     className="w-4 h-4 rounded"
                   />
                   Te bestellen
@@ -331,7 +590,7 @@ export default function WerkbonForm({ intervention }: Props) {
                     <input
                       type="checkbox"
                       checked={part.urgent}
-                      onChange={e => updatePart(part.id, 'urgent', e.target.checked)}
+                      onChange={event => updatePart(part.id, 'urgent', event.target.checked)}
                       className="w-4 h-4 rounded"
                     />
                     Dringend
@@ -340,7 +599,9 @@ export default function WerkbonForm({ intervention }: Props) {
               </div>
             </div>
           ))}
+
           <button
+            type="button"
             onClick={addPart}
             className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
           >
@@ -349,66 +610,298 @@ export default function WerkbonForm({ intervention }: Props) {
         </div>
       </Section>
 
-      {/* ── Follow-up ── */}
-      <Section title="OPVOLGACTIES">
+      <Section
+        id="activiteiten"
+        title="ACTIVITEITEN"
+        collapsible
+        defaultOpen
+        badge={`${openTaskCount} open`}
+        actionLabel="Nieuwe activiteit"
+        onActionClick={openNewTaskEditor}
+      >
         <div className="flex flex-col gap-3">
-          {form.followUp.length === 0 && (
-            <p className="text-sm text-center py-2 text-ink-faint">Geen opvolgacties</p>
+          {linkedTasks.length === 0 && (
+            <p className="text-sm text-center py-2 text-ink-faint">Nog geen activiteiten op deze werkbon</p>
           )}
-          {form.followUp.map(f => (
-            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-3 bg-surface border border-stroke">
-              {/* Description row */}
-              <div className="flex gap-2">
-                <input
-                  placeholder="Beschrijving actie..."
-                  value={f.description}
-                  onChange={e => updateFollowUp(f.id, 'description', e.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
-                />
-                <button onClick={() => removeFollowUp(f.id)} className="px-2 text-lg text-brand-red">×</button>
-              </div>
 
-              {/* Priority — three-level segmented control */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {PRIORITY_OPTIONS.map(p => (
-                  <button
-                    key={p.value}
-                    onClick={() => updateFollowUp(f.id, 'priority', p.value)}
-                    className={`py-1.5 rounded-lg text-xs font-semibold border transition-colors ${f.priority === p.value ? p.activeClass : p.inactiveClass}`}
+          {editingTaskId === 'new' && editorState && (
+            <div className="rounded-xl border border-brand-orange/30 bg-white p-3">
+              <p className="text-sm font-bold text-ink">Nieuwe activiteit</p>
+              <p className="mt-1 text-xs text-ink-soft">Deze activiteit verschijnt meteen bij de verantwoordelijke gebruiker.</p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-ink-soft">Soort taak</span>
+                  <select
+                    value={editorState.type}
+                    onChange={event => updateEditorField('type', event.target.value as TaskType)}
+                    className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
                   >
-                    {p.label}
-                  </button>
-                ))}
+                    {TASK_TYPE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-ink-soft">Verval datum</span>
+                  <input
+                    type="date"
+                    value={editorState.dueDate}
+                    onChange={event => updateEditorField('dueDate', event.target.value)}
+                    className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                  />
+                </label>
               </div>
 
-              {/* Due date — small inline row aligned right */}
-              <div className="flex items-center justify-end gap-2">
-                <label className="text-[11px] uppercase tracking-wide text-ink-soft">Tegen</label>
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Samenvatting</span>
                 <input
-                  type="date"
-                  value={f.dueDate}
-                  onChange={e => updateFollowUp(f.id, 'dueDate', e.target.value)}
-                  className="rounded-md px-2 py-1 text-xs outline-none bg-white border border-stroke text-ink"
+                  value={editorState.title}
+                  onChange={event => updateEditorField('title', event.target.value)}
+                  placeholder="Bijvoorbeeld: bestellen onderdelen"
+                  className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
                 />
+              </label>
+
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Toegewezen aan</span>
+                <select
+                  value={editorState.assigneeValue}
+                  onChange={event => updateEditorField('assigneeValue', event.target.value)}
+                  className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                >
+                  <optgroup label="Personen">
+                    {users.filter(user => user.active).map(user => (
+                      <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Groepen">
+                    {GROUP_ASSIGNMENT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Notitie</span>
+                <textarea
+                  rows={4}
+                  value={editorState.description}
+                  onChange={event => updateEditorField('description', event.target.value)}
+                  placeholder="Schrijf hier extra context, opvolging of afspraken..."
+                  className="rounded-lg px-3 py-2 text-sm outline-none resize-none bg-surface border border-stroke text-ink"
+                />
+              </label>
+
+              {taskError && (
+                <p className="mt-3 text-xs font-medium text-brand-red">{taskError}</p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={handleCreateActivity}
+                  className="text-brand-orange"
+                >
+                  Opslaan
+                </button>
+                <button
+                  type="button"
+                  onClick={closeTaskEditor}
+                  className="text-ink-soft"
+                >
+                  Sluiten
+                </button>
               </div>
             </div>
-          ))}
-          <button
-            onClick={addFollowUp}
-            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
-          >
-            + Opvolgactie toevoegen
-          </button>
+          )}
+
+          {linkedTasks.map(task => {
+            const canManage = canManageTask(task, currentUser)
+            const isEditing = editingTaskId === task.id && editorState !== null
+            const creator = getUserById(task.createdByUserId)
+            const assignmentLabel = getAssignmentLabel(task)
+            const dueDateLabel = formatActivityDueDate(task.dueDate)
+
+            return (
+              <div
+                key={task.id}
+                className={`rounded-xl p-3 flex flex-col gap-3 bg-surface border ${editingTaskId === task.id ? 'border-brand-orange ring-1 ring-brand-orange/30' : 'border-stroke'}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">
+                    {creator?.initials ?? '??'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ink">
+                      <span className="text-ink-soft">{dueDateLabel}:</span>{' '}
+                      <span className="font-bold">{task.title}</span>{' '}
+                      <span className="text-ink-soft">toegewezen aan</span>{' '}
+                      <span>{assignmentLabel}</span>
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      {canManage && !isEditing && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkTaskDone(task)}
+                            className="text-brand-green"
+                          >
+                            ✅ Gereed
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openTaskEditor(task)}
+                            className="text-ink-soft"
+                          >
+                            ✏️ Bewerken
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelTask(task)}
+                            className="text-brand-red"
+                          >
+                            ❌ Annuleren
+                          </button>
+                        </>
+                      )}
+                      {!canManage && (
+                        <span className="text-ink-soft">{getTaskStatusLabel(task.status)}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {isEditing && editorState && (
+                  <div className="rounded-xl border border-brand-orange/30 bg-white p-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Soort taak</span>
+                        <select
+                          value={editorState.type}
+                          onChange={event => updateEditorField('type', event.target.value as TaskType)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          {TASK_TYPE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Verval datum</span>
+                        <input
+                          type="date"
+                          value={editorState.dueDate}
+                          onChange={event => updateEditorField('dueDate', event.target.value)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="mt-3 flex flex-col gap-1">
+                      <span className="text-xs font-medium text-ink-soft">Samenvatting</span>
+                      <input
+                        value={editorState.title}
+                        onChange={event => updateEditorField('title', event.target.value)}
+                        placeholder="Bijvoorbeeld: bestellen onderdelen"
+                        className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                      />
+                    </label>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Toegewezen aan</span>
+                        <select
+                          value={editorState.assigneeValue}
+                          onChange={event => updateEditorField('assigneeValue', event.target.value)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          <optgroup label="Personen">
+                            {users.filter(user => user.active).map(user => (
+                              <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Groepen">
+                            {GROUP_ASSIGNMENT_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Status</span>
+                        <select
+                          value={editorState.status}
+                          onChange={event => updateEditorField('status', event.target.value as TaskStatus)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          <option value="open">Open</option>
+                          <option value="gepland">Gepland</option>
+                          <option value="bezig">Bezig</option>
+                          <option value="wacht_op_info">Wacht op info</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="mt-3 flex flex-col gap-1">
+                      <span className="text-xs font-medium text-ink-soft">Notitie</span>
+                      <textarea
+                        rows={4}
+                        value={editorState.description}
+                        onChange={event => updateEditorField('description', event.target.value)}
+                        placeholder="Schrijf hier extra context, opvolging of afspraken..."
+                        className="rounded-lg px-3 py-2 text-sm outline-none resize-none bg-surface border border-stroke text-ink"
+                      />
+                    </label>
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => handleMarkTaskDone(task)}
+                        className="text-brand-green"
+                      >
+                        ✅ Gereed
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelTask(task)}
+                        className="text-brand-red"
+                      >
+                        ❌ Annuleren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveTask(task)}
+                        className="text-brand-orange"
+                      >
+                        Opslaan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeTaskEditor}
+                        className="text-ink-soft"
+                      >
+                        Sluiten
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </Section>
 
-      {/* ── Signature ── */}
       <Section title="HANDTEKENING KLANT">
         <SignaturePad signature={form.signature} onSignatureChange={handleSignature} />
       </Section>
 
-      {/* ── PDF button ── */}
       <button
+        type="button"
         onClick={handlePDF}
         disabled={pdfLoading}
         className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange"
@@ -426,7 +919,6 @@ export default function WerkbonForm({ intervention }: Props) {
           ✗ Opslaan mislukt — zie console
         </p>
       )}
-
     </div>
   )
 }

@@ -15,6 +15,8 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
 import type { Intervention } from '@/types'
+import { getStartAddressFromSettings, getStartCoordinatesFromSettings, type Settings } from '@/lib/hooks/useSettings'
+import type { Coordinates } from '@/lib/routing/IRoutingService'
 import { mockTravel } from './mockRouting'
 import type {
   RouteState,
@@ -28,14 +30,13 @@ import type {
   TravelItem,
 } from './types'
 
-// Bossuyt Depot — Industriepark-Noord 7, Sint-Niklaas
-const DEPOT_LAT = 51.1480
-const DEPOT_LON = 4.1709
-const DEFAULT_START_ADDRESS = 'Bossuyt Depot · Sint-Niklaas'
 const DEFAULT_BREAK_MINUTES = 30
 const ROUTE_REFRESH_DEBOUNCE_MS = 350
 
-type RouteRefreshInputs = Pick<RouteState, 'movableItems' | 'startAddress' | 'endAddress' | 'sameAsStart'>
+type RouteRefreshInputs = Pick<RouteState, 'movableItems' | 'startAddress' | 'endAddress' | 'sameAsStart'> & {
+  startFallback?: Coordinates
+  endFallback?: Coordinates
+}
 
 /** Insert a 30-minute midday break in the middle of the job list. */
 function insertMiddayBreak(jobs: JobItem[]): MovableItem[] {
@@ -53,20 +54,18 @@ function insertMiddayBreak(jobs: JobItem[]): MovableItem[] {
 /** Build the list of GPS stops for the route API, skipping breaks. */
 function buildRouteStops(
   movableItems: MovableItem[],
-  startLat: number,
-  startLon: number,
-  endLat: number,
-  endLon: number,
+  start: Coordinates,
+  end: Coordinates,
 ): { lat: number; lon: number }[] {
   const stops: { lat: number; lon: number }[] = [
-    { lat: startLat, lon: startLon },
+    start,
   ]
   for (const item of movableItems) {
     if (item.kind === 'job' && item.intervention.siteLat && item.intervention.siteLon) {
       stops.push({ lat: item.intervention.siteLat, lon: item.intervention.siteLon })
     }
   }
-  stops.push({ lat: endLat, lon: endLon })
+  stops.push(end)
   return stops
 }
 
@@ -75,16 +74,20 @@ function buildRouteRequest(
   startAddress: string,
   endAddress: string,
   sameAsStart: boolean,
+  startFallback?: Coordinates,
+  endFallback?: Coordinates,
 ) {
   return {
     stops: buildRouteStops(
       movableItems,
-      DEPOT_LAT, DEPOT_LON,
-      DEPOT_LAT, DEPOT_LON,
+      startFallback ?? { lat: 50.8582720, lon: 3.2584752 },
+      endFallback ?? startFallback ?? { lat: 50.8582720, lon: 3.2584752 },
     ),
     startAddress,
     endAddress,
     sameAsStart,
+    startFallback,
+    endFallback,
   }
 }
 
@@ -100,8 +103,10 @@ function buildRouteRefreshRequest({
   startAddress,
   endAddress,
   sameAsStart,
+  startFallback,
+  endFallback,
 }: RouteRefreshInputs) {
-  return buildRouteRequest(movableItems, startAddress, endAddress, sameAsStart)
+  return buildRouteRequest(movableItems, startAddress, endAddress, sameAsStart, startFallback, endFallback)
 }
 
 function getRouteRefreshKey({
@@ -109,12 +114,16 @@ function getRouteRefreshKey({
   startAddress,
   endAddress,
   sameAsStart,
+  startFallback,
+  endFallback,
 }: RouteRefreshInputs) {
   return JSON.stringify({
     itemIds: movableItems.map(item => item.id),
     startAddress,
     endAddress,
     sameAsStart,
+    startFallback,
+    endFallback,
   })
 }
 
@@ -167,7 +176,10 @@ function findCoordAnchorAfter(anchors: Array<{ kind: string; id: string }>, inde
   return 'end'
 }
 
-export function useRouteTimeline(plannedInterventions: Intervention[]) {
+export function useRouteTimeline(plannedInterventions: Intervention[], settings: Settings) {
+  const configuredStartAddress = useMemo(() => getStartAddressFromSettings(settings), [settings])
+  const configuredStartCoordinates = useMemo(() => getStartCoordinatesFromSettings(settings), [settings])
+
   const initialState = useMemo<RouteState>(() => {
     const jobs: JobItem[] = plannedInterventions.map(intervention => ({
       kind: 'job',
@@ -175,12 +187,12 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
       intervention,
     }))
     return {
-      startAddress: DEFAULT_START_ADDRESS,
-      endAddress: DEFAULT_START_ADDRESS,
+      startAddress: configuredStartAddress,
+      endAddress: configuredStartAddress,
       sameAsStart: true,
       movableItems: insertMiddayBreak(jobs),
     }
-  }, [plannedInterventions])
+  }, [configuredStartAddress, plannedInterventions])
 
   const [state, setState] = useState<RouteState>(initialState)
   const [travelOverrides, setTravelOverrides] = useState<Map<string, { minutes: number; km: number }> | null>(null)
@@ -188,14 +200,24 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
   const fetchIdRef = useRef(0)
   const lastExternalJobSignatureRef = useRef('')
   const { movableItems, startAddress, endAddress, sameAsStart } = state
+  const startFallback = useMemo(
+    () => (startAddress === configuredStartAddress ? configuredStartCoordinates : undefined),
+    [configuredStartAddress, configuredStartCoordinates, startAddress],
+  )
+  const endFallback = useMemo(() => {
+    if (sameAsStart) return startFallback
+    return endAddress === configuredStartAddress ? configuredStartCoordinates : undefined
+  }, [configuredStartAddress, configuredStartCoordinates, endAddress, sameAsStart, startFallback])
   const routeRefreshRequest = useMemo(
     () => buildRouteRefreshRequest({
       movableItems,
       startAddress,
       endAddress,
       sameAsStart,
+      startFallback,
+      endFallback,
     }),
-    [movableItems, startAddress, endAddress, sameAsStart],
+    [movableItems, startAddress, endAddress, sameAsStart, startFallback, endFallback],
   )
   const routeRefreshKey = useMemo(
     () => getRouteRefreshKey({
@@ -203,8 +225,10 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
       startAddress,
       endAddress,
       sameAsStart,
+      startFallback,
+      endFallback,
     }),
-    [movableItems, startAddress, endAddress, sameAsStart],
+    [movableItems, startAddress, endAddress, sameAsStart, startFallback, endFallback],
   )
   const lastSuccessfulRouteKeyRef = useRef<string | null>(null)
 
@@ -227,6 +251,14 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
     lastSuccessfulRouteKeyRef.current = null
   }, [initialState.movableItems, plannedInterventions])
 
+  useEffect(() => {
+    setState(prev => ({
+      ...prev,
+      startAddress: configuredStartAddress,
+      endAddress: prev.sameAsStart ? configuredStartAddress : prev.endAddress,
+    }))
+  }, [configuredStartAddress])
+
   // Fetch real travel times from ORS whenever the route inputs change.
   useEffect(() => {
     const id = ++fetchIdRef.current
@@ -235,10 +267,6 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
     if (stops.length < 2) return
 
     let cancelled = false
-
-    if (routeRefreshKey !== lastSuccessfulRouteKeyRef.current) {
-      setTravelOverrides(null)
-    }
 
     const refreshRoute = async () => {
       setRouteLoading(true)
@@ -249,6 +277,9 @@ export function useRouteTimeline(plannedInterventions: Intervention[]) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(routeRefreshRequest),
         })
+        if (!response.ok) {
+          return
+        }
         const data = await response.json()
 
         if (cancelled || id !== fetchIdRef.current) return

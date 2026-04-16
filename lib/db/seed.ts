@@ -37,8 +37,8 @@ async function seed() {
   await db.insert(technicians).values([
     {
       id: 'u1',
-      name: 'Olivier Bossuyt',
-      initials: 'OB',
+      name: 'Olivier Pierrard',
+      initials: 'OP',
       email: 'olivier@fixassistant.com',
       role: 'technician',
       active: true,

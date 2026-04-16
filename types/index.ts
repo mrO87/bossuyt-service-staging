@@ -108,7 +108,7 @@ export interface User {
   name: string
   initials: string
   email: string
-  role: 'technician' | 'office' | 'admin'
+  role: 'technician' | 'office' | 'admin' | 'hr' | 'warehouse'
   active: boolean
 }
 
@@ -145,6 +145,33 @@ export interface FollowUpAction {
   dueDate?: string
   done: boolean
   doneAt?: string
+}
+
+export type TaskPriority = 'laag' | 'normaal' | 'hoog' | 'dringend'
+
+export type TaskStatus = 'open' | 'gepland' | 'bezig' | 'wacht_op_info' | 'klaar' | 'geannuleerd'
+
+export type TaskType = 'email' | 'bellen' | 'bericht' | 'afspraak' | 'todo' | 'bestelling' | 'offerte'
+
+export type TaskAssignmentType = 'user' | 'group'
+
+export interface Task {
+  id: string
+  type: TaskType
+  title: string
+  description?: string
+  assigneeType: TaskAssignmentType
+  assigneeUserId?: string
+  assigneeRole?: User['role']
+  createdByUserId: string
+  priority: TaskPriority
+  status: TaskStatus
+  werkbonId?: string
+  interventionId?: string
+  dueDate?: string
+  completedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Notification {

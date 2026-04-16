@@ -14,24 +14,61 @@ interface NominatimResult {
   display_name: string
 }
 
+const geocodeCache = new Map<string, Promise<Coordinates | null>>()
+
+function normalizeQuery(query: string): string {
+  return query
+    .trim()
+    .replace(/·/g, ', ')
+    .replace(/\bte\b/gi, ' ')
+    .replace(/\s+in\s+/gi, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function buildCandidateQueries(query: string, country: string): string[] {
+  const normalized = normalizeQuery(query)
+  const variants = [
+    `${query.trim()}, ${country}`,
+    `${normalized}, ${country}`,
+    `${normalized.replace(/\s+(\d+[A-Za-z/-]*)\s+/, ' $1, ')}, ${country}`,
+    `${normalized.replace(/\s+/, ', ')}, ${country}`,
+  ]
+
+  return [...new Set(variants.filter(candidate => candidate.trim().length > 0))]
+}
+
 async function geocodeQuery(query: string): Promise<Coordinates | null> {
+  const cached = geocodeCache.get(query)
+  if (cached) {
+    return cached
+  }
+
   const url = new URL('https://nominatim.openstreetmap.org/search')
   url.searchParams.set('q', query)
   url.searchParams.set('format', 'json')
   url.searchParams.set('limit', '1')
+  url.searchParams.set('countrycodes', 'be')
 
-  const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'BossuytServiceApp/1.0' },
+  const request = fetch(url.toString(), {
+    headers: {
+      'User-Agent': 'BossuytServiceApp/1.0',
+      'Accept-Language': 'nl-BE,nl;q=0.9,en;q=0.8',
+    },
   })
-  if (!res.ok) return null
+    .then(async res => {
+      if (!res.ok) return null
 
-  const data: NominatimResult[] = await res.json()
-  if (data.length === 0) return null
+      const data: NominatimResult[] = await res.json()
+      if (data.length === 0) return null
 
-  return {
-    lat: parseFloat(data[0].lat),
-    lon: parseFloat(data[0].lon),
-  }
+      return {
+        lat: parseFloat(data[0].lat),
+        lon: parseFloat(data[0].lon),
+      }
+    })
+
+  geocodeCache.set(query, request)
+  return request
 }
 
 export async function geocodeAddress(
@@ -50,9 +87,12 @@ export async function geocodeSearchQuery(
   const trimmed = query.trim()
   if (!trimmed) return null
 
-  const normalized = trimmed
-    .replaceAll('·', ',')
-    .replaceAll(/\s+/g, ' ')
+  for (const candidate of buildCandidateQueries(trimmed, country)) {
+    const result = await geocodeQuery(candidate)
+    if (result) {
+      return result
+    }
+  }
 
-  return geocodeQuery(`${normalized}, ${country}`)
+  return null
 }

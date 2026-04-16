@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
     startAddress?: string
     endAddress?: string
     sameAsStart?: boolean
+    startFallback?: Coordinates
+    endFallback?: Coordinates
   }
 
   if (!body.stops || body.stops.length < 2) {
@@ -35,20 +37,31 @@ export async function POST(req: NextRequest) {
   const resolvedStops = [...body.stops]
 
   const resolveEndpoint = async (
-    fallback: Coordinates,
     address?: string,
+    fallback?: Coordinates,
   ): Promise<Coordinates> => {
-    if (!address) return fallback
+    if (!address?.trim()) {
+      if (fallback) return fallback
+      throw new Error('Adres ontbreekt')
+    }
+
     const geocoded = await geocodeSearchQuery(address)
-    return geocoded ?? fallback
+    if (geocoded) return geocoded
+    if (fallback) return fallback
+    throw new Error(`Adres niet gevonden: ${address}`)
   }
 
-  resolvedStops[0] = await resolveEndpoint(resolvedStops[0], body.startAddress)
+  try {
+    resolvedStops[0] = await resolveEndpoint(body.startAddress, body.startFallback)
 
-  const lastIndex = resolvedStops.length - 1
-  resolvedStops[lastIndex] = body.sameAsStart
-    ? resolvedStops[0]
-    : await resolveEndpoint(resolvedStops[lastIndex], body.endAddress)
+    const lastIndex = resolvedStops.length - 1
+    resolvedStops[lastIndex] = body.sameAsStart
+      ? resolvedStops[0]
+      : await resolveEndpoint(body.endAddress, body.endFallback)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Adres niet gevonden'
+    return NextResponse.json({ error: message }, { status: 422 })
+  }
 
   // Dev fallback: return mock travel times when no ORS key
   if (!process.env.ORS_API_KEY) {

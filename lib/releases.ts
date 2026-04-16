@@ -15,6 +15,36 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.20',
+    date: '14 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Activiteiten direct op de werkbon',
+        body:
+          'Open activiteiten staan nu in het avatar- en instellingenmenu met een teller, ' +
+          'en linken rechtstreeks naar de juiste werkbon. In de activiteitenlog kan je ' +
+          'activiteiten compacter bekijken, aanmaken en beheren.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Planning en instellingen lopen nu consistenter samen',
+        body:
+          'Startuur, startlocatie en thuisadres gebruiken nu gedeelde settings in plaats ' +
+          'van losse lokale staten. Daardoor blijven avatar, planning en routeberekening ' +
+          'beter op elkaar afgestemd.',
+      },
+      {
+        label: 'Fix',
+        title: 'Adressen met natuurlijke schrijfwijze werken beter',
+        body:
+          'Adresinvoer zoals "Lintsesteenweg 25 in Kontich" wordt nu robuuster genormaliseerd ' +
+          'voor zowel de zoekbalk als de route-geocoder. Daardoor blijven zoekresultaten en ' +
+          'dynamische reistijden beter werken bij vrije invoer.',
+      },
+    ],
+  },
+  {
     version: 'v1.13',
     date: '12 april 2026',
     changes: [
@@ -392,7 +422,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.13'
+const CURRENT_RELEASE_VERSION = 'v1.20'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

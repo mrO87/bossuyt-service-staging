@@ -80,6 +80,25 @@ export interface DayMeta {
 // Version number: increment this when you change the schema.
 let dbPromise: Promise<IDBPDatabase<BossuytDB>> | null = null
 
+function deriveInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+function normalizeIntervention(item: Intervention): Intervention {
+  return {
+    ...item,
+    technicians: item.technicians.map(technician => ({
+      ...technician,
+      initials: deriveInitials(technician.name),
+    })),
+  }
+}
+
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
     dbPromise = openDB<BossuytDB>('bossuyt-service', 1, {
@@ -114,7 +133,7 @@ export async function cacheInterventions(items: Intervention[]): Promise<void> {
   // Use a transaction so all writes succeed or all fail — no half-saved state
   const tx = db.transaction('interventions', 'readwrite')
   await tx.store.clear()                         // wipe old day's data
-  await Promise.all(items.map(i => tx.store.put(i)))
+  await Promise.all(items.map(i => tx.store.put(normalizeIntervention(i))))
   await tx.done
 }
 
@@ -122,25 +141,26 @@ export async function cacheInterventions(items: Intervention[]): Promise<void> {
 export async function getPlannedInterventions(): Promise<Intervention[]> {
   const db = await getDB()
   // Use the index we created — much faster than scanning all records
-  return db.getAllFromIndex('interventions', 'by-source', 'planned')
+  return (await db.getAllFromIndex('interventions', 'by-source', 'planned')).map(normalizeIntervention)
 }
 
 /** Get all open pool interventions (technician picks from these) */
 export async function getOpenInterventions(): Promise<Intervention[]> {
   const db = await getDB()
-  return db.getAllFromIndex('interventions', 'by-source', 'reactive')
+  return (await db.getAllFromIndex('interventions', 'by-source', 'reactive')).map(normalizeIntervention)
 }
 
 /** Get a single intervention by id */
 export async function getIntervention(id: string): Promise<Intervention | undefined> {
   const db = await getDB()
-  return db.get('interventions', id)
+  const item = await db.get('interventions', id)
+  return item ? normalizeIntervention(item) : undefined
 }
 
 /** Save or refresh one intervention without clearing the full day cache */
 export async function upsertIntervention(item: Intervention): Promise<void> {
   const db = await getDB()
-  await db.put('interventions', item)
+  await db.put('interventions', normalizeIntervention(item))
 }
 
 /** Update status of an intervention in local cache */
@@ -151,7 +171,7 @@ export async function updateInterventionStatus(
   const db = await getDB()
   const item = await db.get('interventions', id)
   if (item) {
-    await db.put('interventions', { ...item, status })
+    await db.put('interventions', normalizeIntervention({ ...item, status }))
   }
 }
 
@@ -168,7 +188,7 @@ export async function updateInterventionSequence(
     const technicians = item.technicians.map(t =>
       t.isLead ? { ...t, plannedOrder: sequence } : t
     )
-    await db.put('interventions', { ...item, technicians })
+    await db.put('interventions', normalizeIntervention({ ...item, technicians }))
   }
 }
 

@@ -1,6 +1,6 @@
 # Bossuyt Service — Planning
 
-## Current State (v1.13)
+## Current State (v1.20)
 
 The app is a mobile-first field service PWA for Bossuyt technicians.
 Staging: https://staging.bossuyt.fixassistant.com

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import type { HomeAddress } from '@/lib/hooks/useSettings'
+import { formatAddressLabel, type HomeAddress } from '@/lib/hooks/useSettings'
 
 interface NominatimResult {
   display_name: string
@@ -14,20 +14,64 @@ interface Props {
   onChange: (addr: HomeAddress) => void
 }
 
-function shortLabel(displayName: string): string {
-  // "Straat 1, Gemeente, Provincie, België" → "Straat 1, Gemeente"
-  return displayName.split(',').slice(0, 2).join(',').trim()
+function normalizeQuery(text: string): string {
+  return text
+    .trim()
+    .replace(/\bte\b/gi, ' ')
+    .replace(/\s+in\s+/gi, ' ')
+    .replace(/\s*,\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function buildCandidateQueries(query: string): string[] {
+  const normalized = normalizeQuery(query)
+  const variants = [
+    query.trim(),
+    normalized,
+    normalized.replace(/\s+(\d+[A-Za-z/-]*)\s+/, ' $1, '),
+    normalized.replace(/\s+/, ', '),
+  ]
+
+  return [...new Set(variants.filter(candidate => candidate.length >= 3))]
+}
+
+async function fetchSuggestions(query: string): Promise<NominatimResult[]> {
+  const candidateQueries = buildCandidateQueries(query)
+  const results: NominatimResult[] = []
+  const seen = new Set<string>()
+
+  for (const candidate of candidateQueries) {
+    const url =
+      `https://nominatim.openstreetmap.org/search` +
+      `?format=json&countrycodes=be&limit=5&q=${encodeURIComponent(candidate)}`
+    const res = await fetch(url)
+    if (!res.ok) continue
+
+    const data: NominatimResult[] = await res.json()
+    data.forEach(result => {
+      const key = `${result.lat},${result.lon}`
+      if (seen.has(key)) return
+      seen.add(key)
+      results.push(result)
+    })
+
+    if (results.length >= 5) {
+      return results.slice(0, 5)
+    }
+  }
+
+  return results
 }
 
 export default function AddressSearch({ value, onChange }: Props) {
-  const [query, setQuery] = useState(value ? shortLabel(value.display) : '')
+  const [query, setQuery] = useState(value ? formatAddressLabel(value.display) : '')
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    setQuery(value ? shortLabel(value.display) : '')
+    setQuery(value ? formatAddressLabel(value.display) : '')
   }, [value])
 
   useEffect(() => {
@@ -50,16 +94,7 @@ export default function AddressSearch({ value, onChange }: Props) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const url =
-          `https://nominatim.openstreetmap.org/search` +
-          `?format=json&countrycodes=be&limit=5&q=${encodeURIComponent(text)}`
-        const res = await fetch(url)
-        if (!res.ok) {
-          setSuggestions([])
-          setOpen(false)
-          return
-        }
-        const data: NominatimResult[] = await res.json()
+        const data = await fetchSuggestions(text)
         setSuggestions(data)
         setOpen(data.length > 0)
       } catch {
@@ -78,7 +113,7 @@ export default function AddressSearch({ value, onChange }: Props) {
       lat: parseFloat(result.lat),
       lon: parseFloat(result.lon),
     })
-    setQuery(shortLabel(result.display_name))
+    setQuery(formatAddressLabel(result.display_name))
     setSuggestions([])
     setOpen(false)
   }
@@ -106,7 +141,7 @@ export default function AddressSearch({ value, onChange }: Props) {
               onClick={() => select(s)}
               className="w-full text-left px-3 py-2.5 text-sm text-ink hover:bg-surface border-b last:border-b-0 border-stroke"
             >
-              {shortLabel(s.display_name)}
+              {formatAddressLabel(s.display_name)}
             </button>
           ))}
         </div>

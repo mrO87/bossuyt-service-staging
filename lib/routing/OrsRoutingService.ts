@@ -1,4 +1,5 @@
 import { IRoutingService, RouteResult, Coordinates } from './IRoutingService'
+import { applyTravelMargin } from './travelMargin'
 
 export class OrsRoutingService implements IRoutingService {
   private readonly baseUrl = 'https://api.openrouteservice.org/v2'
@@ -22,11 +23,11 @@ export class OrsRoutingService implements IRoutingService {
     if (!res.ok) throw new Error(`ORS error: ${res.status}`)
     const data = await res.json()
     const summary = data.routes[0].summary
-    return {
+    return applyTravelMargin({
       distanceKm: Math.round(summary.distance / 100) / 10,
       travelMinutes: Math.round(summary.duration / 60),
       provider: 'ors',
-    }
+    })
   }
 
   async getRouteMatrix(stops: Coordinates[]): Promise<RouteResult[][]> {
@@ -40,7 +41,7 @@ export class OrsRoutingService implements IRoutingService {
     })
     const data = await res.json()
     return data.durations.map((row: number[], i: number) =>
-      row.map((sec: number, j: number) => ({
+      row.map((sec: number, j: number) => applyTravelMargin({
         distanceKm: Math.round(data.distances[i][j] / 100) / 10,
         travelMinutes: Math.round(sec / 60),
         provider: 'ors',

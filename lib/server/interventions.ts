@@ -10,7 +10,7 @@ import {
   workOrders,
 } from '@/lib/db/schema'
 
-export const MAX_PLANNED_ITEMS = 8
+export const MAX_PLANNED_ITEMS = 10
 export const MAX_OPEN_ITEMS = 4
 
 type InterventionCoreRow = {
@@ -48,6 +48,15 @@ type AssignmentRow = {
   isLead: boolean
   accepted: boolean
   plannedOrder: number
+}
+
+function deriveInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() ?? '')
+    .join('')
 }
 
 function getDayBounds(date: string): { start: Date; end: Date } {
@@ -124,7 +133,7 @@ async function fetchAssignmentsForWorkOrders(workOrderIds: string[]): Promise<Ma
     current.push({
       technicianId: row.technicianId,
       name: row.technicianName,
-      initials: row.technicianInitials,
+      initials: deriveInitials(row.technicianName),
       isLead: row.isLead,
       accepted: row.accepted,
       plannedOrder: row.plannedOrder,

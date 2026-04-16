@@ -31,6 +31,7 @@ import {
 } from '@dnd-kit/sortable'
 
 import type { Intervention } from '@/types'
+import type { Settings } from '@/lib/hooks/useSettings'
 import { useRouteTimeline } from './useRouteTimeline'
 import { DaySummary } from './DaySummary'
 import { StartEndAddressControls } from './StartEndAddressControls'
@@ -42,8 +43,10 @@ import { enqueuePendingWrite, removePendingWritesByType, updateInterventionSeque
 
 export function DayTimeline({
   plannedInterventions,
+  settings,
 }: {
   plannedInterventions: Intervention[]
+  settings: Settings
 }) {
   const router = useRouter()
   const {
@@ -55,7 +58,7 @@ export function DayTimeline({
     setStartAddress,
     setEndAddress,
     setSameAsStart,
-  } = useRouteTimeline(plannedInterventions)
+  } = useRouteTimeline(plannedInterventions, settings)
 
   // dnd-kit sensors. Touch sensor needs a deliberate hold before activating
   // so the rest of the card stays scrollable.
