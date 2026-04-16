@@ -16,11 +16,17 @@ import {
   cacheInterventions,
   saveDayMeta,
   getDayMeta,
+  getWorkOrderPhotoBlob,
+  markWorkOrderPhotoFailed,
+  markWorkOrderPhotoPending,
+  markWorkOrderPhotoUploaded,
+  type PendingWrite,
   type PendingWriteResult,
   type DayMeta,
 } from './idb'
 import type { Intervention } from '@/types'
 import type { RouteStep } from '@/types/planning'
+import type { WorkOrderPhotoRecord } from '@/types'
 
 // How many of each type we cache at most
 const MAX_PLANNED = 10
@@ -172,6 +178,18 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
 
   for (const write of pending) {
     try {
+      if (write.type === 'upload_work_order_photo') {
+        const uploaded = await uploadPendingWorkOrderPhoto(write)
+        if (uploaded) {
+          await removePendingWrite(write.id!)
+          synced++
+        } else {
+          failed++
+          break
+        }
+        continue
+      }
+
       const res = await fetch(`/api/sync/write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,4 +226,66 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
   }
 
   return { synced, failed, notice, conflict }
+}
+
+type UploadWorkOrderPhotoPayload = {
+  photoId: string
+  workOrderId: string
+  fileName: string
+  mimeType: string
+  changedBy?: string | null
+}
+
+function isUploadWorkOrderPhotoPayload(payload: Record<string, unknown>): payload is UploadWorkOrderPhotoPayload {
+  return (
+    typeof payload.photoId === 'string' &&
+    typeof payload.workOrderId === 'string' &&
+    typeof payload.fileName === 'string' &&
+    typeof payload.mimeType === 'string'
+  )
+}
+
+async function uploadPendingWorkOrderPhoto(write: PendingWrite): Promise<boolean> {
+  if (!isUploadWorkOrderPhotoPayload(write.payload)) {
+    return false
+  }
+
+  const payload = write.payload
+  await markWorkOrderPhotoPending(payload.photoId)
+
+  const blob = await getWorkOrderPhotoBlob(payload.photoId)
+  if (!blob) {
+    await markWorkOrderPhotoFailed(payload.photoId, 'Lokale foto niet gevonden')
+    return false
+  }
+
+  const formData = new FormData()
+  formData.append('photoId', payload.photoId)
+  formData.append('changedBy', payload.changedBy ?? '')
+  formData.append(
+    'file',
+    new File([blob], payload.fileName, { type: blob.type || payload.mimeType || 'image/jpeg' }),
+  )
+
+  try {
+    const res = await fetch(`/api/work-orders/${payload.workOrderId}/photos`, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!res.ok) {
+      await markWorkOrderPhotoFailed(payload.photoId, `Upload mislukt (${res.status})`)
+      return false
+    }
+
+    const data = await res.json() as { photo: WorkOrderPhotoRecord }
+    await markWorkOrderPhotoUploaded(payload.photoId, {
+      serverPath: data.photo.storagePath,
+      uploadedAt: data.photo.uploadedAt,
+    })
+    return true
+  } catch {
+    await markWorkOrderPhotoFailed(payload.photoId, 'Upload mislukt')
+    return false
+  }
 }

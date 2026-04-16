@@ -127,6 +127,34 @@ export interface Werkbon {
   syncedAt?: string
 }
 
+export type WorkOrderPhotoSyncStatus = 'pending' | 'uploaded' | 'failed'
+
+export interface WorkOrderPhotoDraft {
+  id: string
+  workOrderId: string
+  fileName: string
+  mimeType: string
+  size: number
+  localBlobKey: string
+  createdAt: string
+  syncStatus: WorkOrderPhotoSyncStatus
+  serverPath?: string
+  uploadedAt?: string
+  errorMessage?: string
+}
+
+export interface WorkOrderPhotoRecord {
+  id: string
+  workOrderId: string
+  fileName: string
+  mimeType: string
+  size: number
+  storagePath: string
+  createdAt: string
+  uploadedAt: string
+  changedBy?: string | null
+}
+
 export interface WerkbonArticle {
   id: string
   werkbonId: string

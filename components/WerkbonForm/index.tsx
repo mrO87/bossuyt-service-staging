@@ -1,14 +1,30 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import Image from 'next/image'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
 import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
+import {
+  createWorkOrderPhotoDraft,
+  enqueuePendingWrite,
+  getWorkOrderPhotoBlob,
+  listWorkOrderPhotos,
+} from '@/lib/idb'
 import { getUserById, users } from '@/lib/mock-data'
+import { syncPendingWrites } from '@/lib/sync'
 import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
 import { useTasks } from '@/lib/task-store'
-import type { Intervention, Task, TaskStatus, TaskType, User } from '@/types'
+import type {
+  Intervention,
+  Task,
+  TaskStatus,
+  TaskType,
+  User,
+  WorkOrderPhotoDraft,
+  WorkOrderPhotoSyncStatus,
+} from '@/types'
 
 interface FormState {
   status: string
@@ -197,6 +213,53 @@ interface Props {
   initialActivityId?: string
 }
 
+interface PhotoCard extends WorkOrderPhotoDraft {
+  previewUrl: string | null
+}
+
+function getPhotoStatusMeta(status: WorkOrderPhotoSyncStatus): {
+  label: string
+  badgeClassName: string
+} {
+  if (status === 'uploaded') {
+    return {
+      label: 'Geupload',
+      badgeClassName: 'bg-brand-green text-white',
+    }
+  }
+
+  if (status === 'failed') {
+    return {
+      label: 'Mislukt',
+      badgeClassName: 'bg-brand-red text-white',
+    }
+  }
+
+  return {
+    label: 'Wacht op upload',
+    badgeClassName: 'bg-brand-orange text-white',
+  }
+}
+
+function PhotoStatusBadge({ status }: { status: WorkOrderPhotoSyncStatus }) {
+  const meta = getPhotoStatusMeta(status)
+
+  return (
+    <div
+      className={`absolute right-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-bold shadow-sm ${meta.badgeClassName}`}
+      title={meta.label}
+    >
+      {status === 'uploaded' ? (
+        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <span>{status === 'failed' ? '!' : '...'}</span>
+      )}
+    </div>
+  )
+}
+
 export default function WerkbonForm({ intervention, initialActivityId }: Props) {
   const { currentUser, tasks, createTask, updateTask } = useTasks()
   const werkbonId = `wb-${intervention.id}`
@@ -214,6 +277,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [deviceRefresh, setDeviceRefresh] = useState(0)
   const [taskError, setTaskError] = useState('')
   const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(initialActivityId ?? null)
+  const [photos, setPhotos] = useState<PhotoCard[]>([])
+  const [photoActionBusy, setPhotoActionBusy] = useState(false)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement | null>(null)
+  const previewUrlsRef = useRef<string[]>([])
   const [editorState, setEditorState] = useState<ActivityEditorState | null>(() => {
     const initialTask = initialActivityId
       ? tasks.find(task => task.werkbonId === werkbonId && task.id === initialActivityId)
@@ -392,6 +460,140 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const handleSignature = useCallback((dataUrl: string | null) => {
     setForm(prev => ({ ...prev, signature: dataUrl }))
   }, [])
+
+  const refreshPhotos = useCallback(async () => {
+    const drafts = await listWorkOrderPhotos(intervention.id)
+    const next = await Promise.all(
+      drafts.map(async draft => {
+        const blob = await getWorkOrderPhotoBlob(draft.localBlobKey)
+        return {
+          ...draft,
+          previewUrl: blob ? URL.createObjectURL(blob) : null,
+        }
+      }),
+    )
+
+    previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+    previewUrlsRef.current = next
+      .map(item => item.previewUrl)
+      .filter((url): url is string => Boolean(url))
+
+    setPhotos(next)
+  }, [intervention.id])
+
+  const syncPhotosIfPossible = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    await syncPendingWrites()
+    await refreshPhotos()
+  }, [refreshPhotos])
+
+  const queuePhotos = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+
+    const selectedImages = Array.from(files).filter(file => file.type.startsWith('image/'))
+    if (selectedImages.length === 0) return
+
+    setPhotoActionBusy(true)
+
+    try {
+      for (const file of selectedImages) {
+        const draft = await createWorkOrderPhotoDraft({
+          workOrderId: intervention.id,
+          file,
+          fileName: file.name || `foto-${Date.now()}.jpg`,
+        })
+
+        await enqueuePendingWrite({
+          type: 'upload_work_order_photo',
+          payload: {
+            photoId: draft.id,
+            workOrderId: intervention.id,
+            fileName: draft.fileName,
+            mimeType: draft.mimeType,
+            changedBy: intervention.technicians[0]?.technicianId ?? null,
+          },
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      await refreshPhotos()
+      await syncPhotosIfPossible()
+    } finally {
+      setPhotoActionBusy(false)
+    }
+  }, [intervention.id, intervention.technicians, refreshPhotos, syncPhotosIfPossible])
+
+  function handleCameraChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files
+    event.target.value = ''
+    void queuePhotos(files)
+  }
+
+  function handleGalleryChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files
+    event.target.value = ''
+    void queuePhotos(files)
+  }
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadPhotos() {
+      const drafts = await listWorkOrderPhotos(intervention.id)
+      const next = await Promise.all(
+        drafts.map(async draft => {
+          const blob = await getWorkOrderPhotoBlob(draft.localBlobKey)
+          return {
+            ...draft,
+            previewUrl: blob ? URL.createObjectURL(blob) : null,
+          }
+        }),
+      )
+
+      if (!isActive) {
+        next.forEach(item => {
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+        })
+        return
+      }
+
+      previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      previewUrlsRef.current = next
+        .map(item => item.previewUrl)
+        .filter((url): url is string => Boolean(url))
+
+      setPhotos(next)
+    }
+
+    void loadPhotos()
+
+    return () => {
+      isActive = false
+      previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+      previewUrlsRef.current = []
+    }
+  }, [intervention.id])
+
+  useEffect(() => {
+    function handleOnline() {
+      void syncPhotosIfPossible()
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline)
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void syncPhotosIfPossible()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline)
+      }
+    }
+  }, [syncPhotosIfPossible])
 
   async function handlePDF() {
     setPdfLoading(true)
@@ -607,6 +809,91 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
           >
             + Onderdeel toevoegen
           </button>
+        </div>
+      </Section>
+
+      <Section title="FOTO'S">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-soft">
+            Voeg een foto toe via de camera of kies er een uit de galerij. Nieuwe foto's blijven lokaal bewaard tot er opnieuw verbinding is.
+          </p>
+
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCameraChange}
+          />
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleGalleryChange}
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={photoActionBusy}
+              className="rounded-xl bg-brand-blue px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+            >
+              Foto nemen
+            </button>
+            <button
+              type="button"
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={photoActionBusy}
+              className="rounded-xl border border-stroke bg-surface px-4 py-3 text-sm font-bold text-ink disabled:opacity-60"
+            >
+              Foto kiezen
+            </button>
+          </div>
+
+          {photos.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-stroke bg-surface px-3 py-4 text-center text-sm text-ink-soft">
+              Nog geen foto&apos;s toegevoegd
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {photos.map(photo => {
+                const statusMeta = getPhotoStatusMeta(photo.syncStatus)
+
+                return (
+                  <div key={photo.id} className="overflow-hidden rounded-xl border border-stroke bg-surface">
+                    <div className="relative aspect-square bg-white">
+                      {photo.previewUrl ? (
+                        <Image
+                          src={photo.previewUrl}
+                          alt={photo.fileName}
+                          fill
+                          unoptimized
+                          sizes="50vw"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-sm font-medium text-ink-soft">
+                          Geen voorbeeld
+                        </div>
+                      )}
+                      <PhotoStatusBadge status={photo.syncStatus} />
+                    </div>
+                    <div className="flex flex-col gap-1 p-3">
+                      <p className="truncate text-sm font-semibold text-ink">{photo.fileName}</p>
+                      <p className="text-xs text-ink-soft">{statusMeta.label}</p>
+                      {photo.syncStatus === 'failed' && photo.errorMessage && (
+                        <p className="text-xs text-brand-red">{photo.errorMessage}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </Section>
 
