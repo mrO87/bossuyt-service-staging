@@ -220,6 +220,27 @@ export const werkbonnenRelations = relations(werkbonnen, ({ one }) => ({
   }),
 }))
 
+export const workOrderPhotos = pgTable('work_order_photos', {
+  id: text('id').primaryKey(),
+  workOrderId: text('work_order_id')
+    .notNull()
+    .references(() => workOrders.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+  storagePath: text('storage_path').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  changedBy: text('changed_by'),
+})
+
+export const workOrderPhotosRelations = relations(workOrderPhotos, ({ one }) => ({
+  workOrder: one(workOrders, {
+    fields: [workOrderPhotos.workOrderId],
+    references: [workOrders.id],
+  }),
+}))
+
 // ── Audit log ─────────────────────────────────────────────────────────────────
 // Every INSERT / UPDATE / DELETE on any table is captured here via a PostgreSQL
 // trigger (see lib/db/audit-triggers.sql). Application code should set the

@@ -13,7 +13,11 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
-import type { Intervention } from '@/types'
+import type {
+  Intervention,
+  WorkOrderPhotoDraft,
+  WorkOrderPhotoSyncStatus,
+} from '@/types'
 
 // ---------- Schema ----------
 // This tells TypeScript exactly what's in each store.
@@ -30,6 +34,18 @@ interface BossuytDB extends DBSchema {
   werkbonnen: {
     key: string                 // intervention id (1-to-1)
     value: WerkbonCache
+  }
+  workOrderPhotos: {
+    key: string
+    value: WorkOrderPhotoDraft
+    indexes: {
+      'by-workOrderId': string
+      'by-syncStatus': WorkOrderPhotoSyncStatus
+    }
+  }
+  photoBlobs: {
+    key: string
+    value: Blob
   }
   pendingWrites: {
     key: number                 // auto-incremented
@@ -54,7 +70,7 @@ export interface WerkbonCache {
 
 export interface PendingWrite {
   id?: number
-  type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence'
+  type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence' | 'upload_work_order_photo'
   payload: Record<string, unknown>
   createdAt: string
   attempts: number
@@ -82,24 +98,42 @@ let dbPromise: Promise<IDBPDatabase<BossuytDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BossuytDB>('bossuyt-service', 1, {
+    dbPromise = openDB<BossuytDB>('bossuyt-service', 2, {
       upgrade(db) {
         // "interventions" store
-        const intStore = db.createObjectStore('interventions', { keyPath: 'id' })
-        intStore.createIndex('by-source', 'source')
-        intStore.createIndex('by-status', 'status')
+        if (!db.objectStoreNames.contains('interventions')) {
+          const intStore = db.createObjectStore('interventions', { keyPath: 'id' })
+          intStore.createIndex('by-source', 'source')
+          intStore.createIndex('by-status', 'status')
+        }
 
         // "werkbonnen" store — one per intervention
-        db.createObjectStore('werkbonnen', { keyPath: 'interventionId' })
+        if (!db.objectStoreNames.contains('werkbonnen')) {
+          db.createObjectStore('werkbonnen', { keyPath: 'interventionId' })
+        }
+
+        if (!db.objectStoreNames.contains('workOrderPhotos')) {
+          const photoStore = db.createObjectStore('workOrderPhotos', { keyPath: 'id' })
+          photoStore.createIndex('by-workOrderId', 'workOrderId')
+          photoStore.createIndex('by-syncStatus', 'syncStatus')
+        }
+
+        if (!db.objectStoreNames.contains('photoBlobs')) {
+          db.createObjectStore('photoBlobs')
+        }
 
         // "pendingWrites" — auto-increment key like an SQL sequence
-        db.createObjectStore('pendingWrites', {
-          keyPath: 'id',
-          autoIncrement: true,
-        })
+        if (!db.objectStoreNames.contains('pendingWrites')) {
+          db.createObjectStore('pendingWrites', {
+            keyPath: 'id',
+            autoIncrement: true,
+          })
+        }
 
         // "dayMeta" — single record, key is always 'current'
-        db.createObjectStore('dayMeta', { keyPath: 'date' })
+        if (!db.objectStoreNames.contains('dayMeta')) {
+          db.createObjectStore('dayMeta', { keyPath: 'date' })
+        }
       },
     })
   }
@@ -184,6 +218,85 @@ export async function saveWerkbon(data: WerkbonCache): Promise<void> {
 export async function loadWerkbon(interventionId: string): Promise<WerkbonCache | undefined> {
   const db = await getDB()
   return db.get('werkbonnen', interventionId)
+}
+
+export async function createWorkOrderPhotoDraft(input: {
+  workOrderId: string
+  file: Blob
+  fileName: string
+}): Promise<WorkOrderPhotoDraft> {
+  const db = await getDB()
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+  const draft: WorkOrderPhotoDraft = {
+    id,
+    workOrderId: input.workOrderId,
+    fileName: input.fileName,
+    mimeType: input.file.type || 'image/jpeg',
+    size: input.file.size,
+    localBlobKey: id,
+    createdAt,
+    syncStatus: 'pending',
+  }
+
+  const tx = db.transaction(['workOrderPhotos', 'photoBlobs'], 'readwrite')
+  await tx.objectStore('workOrderPhotos').put(draft)
+  await tx.objectStore('photoBlobs').put(input.file, draft.localBlobKey)
+  await tx.done
+  return draft
+}
+
+export async function listWorkOrderPhotos(workOrderId: string): Promise<WorkOrderPhotoDraft[]> {
+  const db = await getDB()
+  const items = await db.getAllFromIndex('workOrderPhotos', 'by-workOrderId', workOrderId)
+  return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export async function getWorkOrderPhotoBlob(localBlobKey: string): Promise<Blob | undefined> {
+  const db = await getDB()
+  return db.get('photoBlobs', localBlobKey)
+}
+
+async function updateWorkOrderPhotoDraft(
+  photoId: string,
+  updater: (draft: WorkOrderPhotoDraft) => WorkOrderPhotoDraft,
+): Promise<void> {
+  const db = await getDB()
+  const current = await db.get('workOrderPhotos', photoId)
+  if (!current) return
+  await db.put('workOrderPhotos', updater(current))
+}
+
+export async function markWorkOrderPhotoPending(photoId: string): Promise<void> {
+  await updateWorkOrderPhotoDraft(photoId, draft => ({
+    ...draft,
+    syncStatus: 'pending',
+    errorMessage: undefined,
+  }))
+}
+
+export async function markWorkOrderPhotoUploaded(
+  photoId: string,
+  input: { serverPath: string; uploadedAt: string },
+): Promise<void> {
+  await updateWorkOrderPhotoDraft(photoId, draft => ({
+    ...draft,
+    syncStatus: 'uploaded',
+    serverPath: input.serverPath,
+    uploadedAt: input.uploadedAt,
+    errorMessage: undefined,
+  }))
+}
+
+export async function markWorkOrderPhotoFailed(
+  photoId: string,
+  errorMessage: string,
+): Promise<void> {
+  await updateWorkOrderPhotoDraft(photoId, draft => ({
+    ...draft,
+    syncStatus: 'failed',
+    errorMessage,
+  }))
 }
 
 // ---------- Pending writes ----------
