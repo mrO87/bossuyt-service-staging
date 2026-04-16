@@ -15,6 +15,33 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.21',
+    date: '16 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Foto’s toevoegen aan de werkbon',
+        body:
+          'Op de werkbon staat nu een aparte fotozone waar de technieker een foto kan nemen ' +
+          'met de camera of een bestaande foto uit de galerij kan kiezen.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Foto’s blijven lokaal bewaard tot er verbinding is',
+        body:
+          'Nieuwe werkbonfoto’s worden eerst lokaal opgeslagen in IndexedDB. Daardoor gaan ' +
+          'ze niet verloren als de technieker offline werkt of tijdelijk geen bereik heeft.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Duidelijke sync-status per foto',
+        body:
+          'Elke foto toont nu een kleine statusbadge: wacht op upload, mislukt of succesvol ' +
+          'geupload. Zo ziet de technieker meteen wat al veilig op de server staat.',
+      },
+    ],
+  },
+  {
     version: 'v1.20',
     date: '14 april 2026',
     changes: [

@@ -815,7 +815,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       <Section title="FOTO'S">
         <div className="flex flex-col gap-3">
           <p className="text-sm text-ink-soft">
-            Voeg een foto toe via de camera of kies er een uit de galerij. Nieuwe foto's blijven lokaal bewaard tot er opnieuw verbinding is.
+            Voeg een foto toe via de camera of kies er een uit de galerij. Nieuwe foto&apos;s blijven lokaal bewaard tot er opnieuw verbinding is.
           </p>
 
           <input
