@@ -56,6 +56,10 @@ interface BossuytDB extends DBSchema {
     key: string                 // always 'current'
     value: DayMeta
   }
+  task_commands: {
+    key:   string       // clientId
+    value: TaskCommand
+  }
 }
 
 export interface WerkbonCache {
@@ -91,6 +95,16 @@ export interface DayMeta {
   totalOpen: number
 }
 
+export interface TaskCommand {
+  clientId:  string    // crypto.randomUUID() — doubles as idempotency key
+  endpoint:  string    // e.g. '/api/tasks'
+  method:    string    // 'POST' | 'PATCH'
+  body:      Record<string, unknown>
+  createdAt: string    // ISO — replay in this order
+  synced:    boolean
+  error?:    string    // set on permanent 4xx failure
+}
+
 // ---------- Singleton ----------
 // We open the DB once and reuse the connection.
 // Version number: increment this when you change the schema.
@@ -98,7 +112,7 @@ let dbPromise: Promise<IDBPDatabase<BossuytDB>> | null = null
 
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BossuytDB>('bossuyt-service', 2, {
+    dbPromise = openDB<BossuytDB>('bossuyt-service', 3, {
       upgrade(db) {
         // "interventions" store
         if (!db.objectStoreNames.contains('interventions')) {
@@ -133,6 +147,10 @@ export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
         // "dayMeta" — single record, key is always 'current'
         if (!db.objectStoreNames.contains('dayMeta')) {
           db.createObjectStore('dayMeta', { keyPath: 'date' })
+        }
+
+        if (!db.objectStoreNames.contains('task_commands')) {
+          db.createObjectStore('task_commands', { keyPath: 'clientId' })
         }
       },
     })
@@ -345,4 +363,41 @@ export async function getDayMeta(): Promise<DayMeta | undefined> {
   // We always store with the date as key, get the most recent
   const all = await db.getAll('dayMeta')
   return all.sort((a, b) => b.date.localeCompare(a.date))[0]
+}
+
+// ---------- Task commands (offline task queue) ----------
+
+/** Queue a task API call for later sync if the device is offline. */
+export async function enqueueTaskCommand(
+  command: Omit<TaskCommand, 'createdAt' | 'synced'>,
+): Promise<void> {
+  const db = await getDB()
+  await db.put('task_commands', {
+    ...command,
+    createdAt: new Date().toISOString(),
+    synced:    false,
+  })
+}
+
+/** Get all unsynced task commands in creation order. */
+export async function getUnsyncedTaskCommands(): Promise<TaskCommand[]> {
+  const db  = await getDB()
+  const all = await db.getAll('task_commands')
+  return all
+    .filter(c => !c.synced)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+/** Mark a task command as successfully synced. */
+export async function markTaskCommandSynced(clientId: string): Promise<void> {
+  const db  = await getDB()
+  const cmd = await db.get('task_commands', clientId)
+  if (cmd) await db.put('task_commands', { ...cmd, synced: true })
+}
+
+/** Mark a task command as permanently failed (4xx response). */
+export async function markTaskCommandFailed(clientId: string, error: string): Promise<void> {
+  const db  = await getDB()
+  const cmd = await db.get('task_commands', clientId)
+  if (cmd) await db.put('task_commands', { ...cmd, error })
 }
