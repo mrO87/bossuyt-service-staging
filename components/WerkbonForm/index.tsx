@@ -246,7 +246,7 @@ function PhotoStatusBadge({ status }: { status: WorkOrderPhotoSyncStatus }) {
 
   return (
     <div
-      className={`absolute right-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-bold shadow-sm ${meta.badgeClassName}`}
+      className={`absolute bottom-1.5 right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold shadow-sm ${meta.badgeClassName}`}
       title={meta.label}
     >
       {status === 'uploaded' ? (
@@ -279,6 +279,8 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(initialActivityId ?? null)
   const [photos, setPhotos] = useState<PhotoCard[]>([])
   const [photoActionBusy, setPhotoActionBusy] = useState(false)
+  const [renamingPhotoId, setRenamingPhotoId] = useState<string | null>(null)
+  const [renamingValue, setRenamingValue] = useState('')
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const previewUrlsRef = useRef<string[]>([])
@@ -522,6 +524,20 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       setPhotoActionBusy(false)
     }
   }, [intervention.id, intervention.technicians, refreshPhotos, syncPhotosIfPossible])
+
+  function handleDeletePhoto(photoId: string) {
+    setPhotos(prev => {
+      const photo = prev.find(p => p.id === photoId)
+      if (photo?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl)
+      return prev.filter(p => p.id !== photoId)
+    })
+  }
+
+  function commitRename(photoId: string) {
+    const trimmed = renamingValue.trim()
+    if (trimmed) setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, fileName: trimmed } : p))
+    setRenamingPhotoId(null)
+  }
 
   function handleCameraChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
@@ -859,39 +875,66 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
               Nog geen foto&apos;s toegevoegd
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {photos.map(photo => {
-                const statusMeta = getPhotoStatusMeta(photo.syncStatus)
-
-                return (
-                  <div key={photo.id} className="overflow-hidden rounded-xl border border-stroke bg-surface">
-                    <div className="relative aspect-square bg-white">
-                      {photo.previewUrl ? (
-                        <Image
-                          src={photo.previewUrl}
-                          alt={photo.fileName}
-                          fill
-                          unoptimized
-                          sizes="50vw"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm font-medium text-ink-soft">
-                          Geen voorbeeld
-                        </div>
-                      )}
-                      <PhotoStatusBadge status={photo.syncStatus} />
-                    </div>
-                    <div className="flex flex-col gap-1 p-3">
-                      <p className="truncate text-sm font-semibold text-ink">{photo.fileName}</p>
-                      <p className="text-xs text-ink-soft">{statusMeta.label}</p>
-                      {photo.syncStatus === 'failed' && photo.errorMessage && (
-                        <p className="text-xs text-brand-red">{photo.errorMessage}</p>
-                      )}
-                    </div>
+            <div className="grid grid-cols-3 gap-2">
+              {photos.map(photo => (
+                <div key={photo.id} className="overflow-hidden rounded-xl border border-stroke bg-surface">
+                  <div className="relative aspect-square bg-white">
+                    {photo.previewUrl ? (
+                      <Image
+                        src={photo.previewUrl}
+                        alt={photo.fileName}
+                        fill
+                        unoptimized
+                        sizes="33vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs font-medium text-ink-soft">
+                        Geen voorbeeld
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePhoto(photo.id)}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
+                      title="Verwijderen"
+                    >
+                      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M2.5 4.5h11M6 4.5V3h4v1.5M5 4.5v8h6v-8H5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M7 7v3M9 7v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <PhotoStatusBadge status={photo.syncStatus} />
                   </div>
-                )
-              })}
+                  <div className="flex flex-col gap-0.5 p-1.5">
+                    {renamingPhotoId === photo.id ? (
+                      <input
+                        autoFocus
+                        value={renamingValue}
+                        onChange={e => setRenamingValue(e.target.value)}
+                        onBlur={() => commitRename(photo.id)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') commitRename(photo.id)
+                          if (e.key === 'Escape') setRenamingPhotoId(null)
+                        }}
+                        className="w-full truncate rounded border border-brand-orange bg-white px-1 py-0.5 text-xs font-semibold text-ink outline-none"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setRenamingPhotoId(photo.id); setRenamingValue(photo.fileName) }}
+                        className="truncate text-left text-xs font-semibold text-ink"
+                        title="Klik om naam te wijzigen"
+                      >
+                        {photo.fileName}
+                      </button>
+                    )}
+                    {photo.syncStatus === 'failed' && photo.errorMessage && (
+                      <p className="text-xs text-brand-red">{photo.errorMessage}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
