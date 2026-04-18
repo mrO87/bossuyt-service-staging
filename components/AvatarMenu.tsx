@@ -1,75 +1,75 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSettings } from '@/lib/hooks/useSettings'
 import { getInterventionById } from '@/lib/mock-data'
 import { isTaskAssignedToUser, isTaskOpen } from '@/lib/task-meta'
 import { useTasks } from '@/lib/task-store'
-import AddressSearch from './AddressSearch'
-import OvertimeWidget from './OvertimeWidget'
+import AddressSearch from '@/components/SettingsSheet/AddressSearch'
+import OvertimeWidget from '@/components/SettingsSheet/OvertimeWidget'
 
-interface Props {
-  open: boolean
-  onClose: () => void
+function getRoleLabel(role: string): string {
+  switch (role) {
+    case 'technician': return 'Technieker'
+    case 'admin': return 'Admin'
+    case 'office': return 'Office'
+    case 'warehouse': return 'Magazijn'
+    case 'hr': return 'HR'
+    default: return role
+  }
 }
 
-export default function SettingsSheet({ open, onClose }: Props) {
+export default function AvatarMenu() {
   const router = useRouter()
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [open, setOpen] = useState(false)
+  const [tasksOpen, setTasksOpen] = useState(false)
   const { settings, updateSetting } = useSettings()
   const { currentUser, tasks, getOpenTaskCountForUser } = useTasks()
-  const [tasksOpen, setTasksOpen] = useState(false)
-  const openTasks = tasks.filter(task => isTaskAssignedToUser(task, currentUser) && isTaskOpen(task.status))
+
+  const openTasks = useMemo(() => (
+    tasks.filter(task => isTaskAssignedToUser(task, currentUser) && isTaskOpen(task.status))
+  ), [currentUser, tasks])
+
   const openTaskCount = getOpenTaskCountForUser(currentUser.id)
 
-  // Lock body scroll while sheet is open
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
-  }, [open])
+    function handleClickOutside(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
-    <>
-      {/* Overlay */}
-      <div
-        onClick={onClose}
-        className={[
-          'fixed inset-0 z-40 bg-black/40 transition-opacity duration-300',
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
-        ].join(' ')}
-      />
-
-      {/* Sheet */}
-      <div
-        className={[
-          'fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl',
-          'transition-transform duration-300',
-          open ? 'translate-y-0' : 'translate-y-full',
-        ].join(' ')}
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="relative w-10 h-10 rounded-full flex items-center justify-center bg-brand-orange text-white shadow-sm"
+        aria-label="Open gebruikersmenu"
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-stroke" />
-        </div>
+        <span className="text-sm font-bold">{currentUser.initials}</span>
+        {openTaskCount > 0 && (
+          <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-brand-red text-[10px] font-bold text-white flex items-center justify-center">
+            {openTaskCount}
+          </span>
+        )}
+      </button>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-stroke">
-          <h2 className="text-base font-bold text-ink">Instellingen</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-11 h-11 flex items-center justify-center rounded-full bg-surface text-ink-soft text-lg leading-none"
-            aria-label="Sluiten"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="px-4 py-4 space-y-5 pb-10 max-h-[80vh] overflow-y-auto">
+      {open && (
+        <div className="absolute right-0 top-12 z-30 w-80 rounded-2xl border border-stroke bg-white p-4 shadow-xl max-h-[85vh] overflow-y-auto">
+          <div className="border-b border-stroke pb-3 mb-4">
+            <p className="font-bold text-sm text-ink">{currentUser.name}</p>
+            <p className="text-xs text-ink-soft">{getRoleLabel(currentUser.role)}</p>
+          </div>
 
           {/* — Startlocatie — */}
-          <div>
+          <div className="mb-5">
             <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
               Startlocatie
             </p>
@@ -120,7 +120,7 @@ export default function SettingsSheet({ open, onClose }: Props) {
           </div>
 
           {/* — Gewenst startuur — */}
-          <div>
+          <div className="mb-5">
             <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
               Gewenst startuur
             </p>
@@ -137,13 +137,14 @@ export default function SettingsSheet({ open, onClose }: Props) {
           </div>
 
           {/* — Overuren — */}
-          <div>
+          <div className="mb-5">
             <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
               Overuren
             </p>
             <OvertimeWidget startTime={settings.startTime} saldo={null} />
           </div>
 
+          {/* — Open activiteiten — */}
           <div>
             <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
               Open activiteiten
@@ -184,7 +185,8 @@ export default function SettingsSheet({ open, onClose }: Props) {
                       key={task.id}
                       type="button"
                       onClick={() => {
-                        onClose()
+                        setOpen(false)
+                        setTasksOpen(false)
                         router.push(task.interventionId ? `/interventions/${task.interventionId}?activity=${task.id}#activiteiten` : '/activiteiten')
                       }}
                       className="w-full rounded-xl border border-stroke bg-white px-3 py-2 text-left"
@@ -198,9 +200,8 @@ export default function SettingsSheet({ open, onClose }: Props) {
               </div>
             )}
           </div>
-
         </div>
-      </div>
-    </>
+      )}
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
@@ -12,9 +12,16 @@ import {
   getWorkOrderPhotoBlob,
   listWorkOrderPhotos,
 } from '@/lib/idb'
+import { getUserById, users } from '@/lib/mock-data'
 import { syncPendingWrites } from '@/lib/sync'
+import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
+import { useTasks } from '@/lib/task-store'
 import type {
   Intervention,
+  Task,
+  TaskStatus,
+  TaskType,
+  User,
   WorkOrderPhotoDraft,
   WorkOrderPhotoSyncStatus,
 } from '@/types'
@@ -29,6 +36,17 @@ interface FormState {
   followUp: PdfFollowUp[]
   signature: string | null
 }
+
+interface ActivityEditorState {
+  type: TaskType
+  title: string
+  description: string
+  assigneeValue: string
+  dueDate: string
+  status: TaskStatus
+}
+
+type ExpandedActivityId = string | 'new' | null
 
 const STATUS_OPTIONS = [
   { value: 'gepland',          label: 'Gepland',             activeClass: 'bg-stroke text-ink-soft border-stroke',                inactiveClass: 'bg-surface text-ink-soft border-stroke' },
@@ -48,23 +66,156 @@ function now() {
   return new Date().toISOString()
 }
 
-// Reusable section wrapper
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function getRoleLabel(role: User['role']): string {
+  switch (role) {
+    case 'technician': return 'Techniekers'
+    case 'admin': return 'Admin'
+    case 'office': return 'Office'
+    case 'warehouse': return 'Magazijn'
+    case 'hr': return 'HR'
+    default: return role
+  }
+}
+
+const GROUP_ASSIGNMENT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'group:technician', label: 'Groep - Techniekers' },
+  { value: 'group:admin', label: 'Groep - Admin' },
+  { value: 'group:office', label: 'Groep - Office' },
+  { value: 'group:warehouse', label: 'Groep - Magazijn' },
+  { value: 'group:hr', label: 'Groep - HR' },
+]
+
+function getAssignmentValue(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
+  if (task.assigneeType === 'group' && task.assigneeRole) {
+    return `group:${task.assigneeRole}`
+  }
+
+  return `user:${task.assigneeUserId ?? ''}`
+}
+
+function parseAssignmentValue(value: string): Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'> {
+  if (value.startsWith('group:')) {
+    return {
+      assigneeType: 'group',
+      assigneeRole: value.replace('group:', '') as User['role'],
+      assigneeUserId: undefined,
+    }
+  }
+
+  return {
+    assigneeType: 'user',
+    assigneeUserId: value.replace('user:', ''),
+    assigneeRole: undefined,
+  }
+}
+
+function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
+  if (task.assigneeType === 'group' && task.assigneeRole) {
+    return getRoleLabel(task.assigneeRole)
+  }
+
+  return getUserById(task.assigneeUserId ?? '')?.name ?? 'Onbekende gebruiker'
+}
+
+function buildEditorState(task: Task): ActivityEditorState {
+  return {
+    type: task.type,
+    title: task.title,
+    description: task.description ?? '',
+    assigneeValue: getAssignmentValue(task),
+    dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+    status: task.status,
+  }
+}
+
+function createEmptyEditorState(currentUserId: string): ActivityEditorState {
+  return {
+    type: 'todo',
+    title: '',
+    description: '',
+    assigneeValue: `user:${currentUserId}`,
+    dueDate: '',
+    status: 'open',
+  }
+}
+
+function formatActivityDueDate(value?: string): string {
+  if (!value) return 'Geen vervaldatum'
+
+  return new Date(value).toLocaleDateString('nl-BE')
+}
+
+function Section({
+  title,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+  badge,
+  id,
+  actionLabel,
+  onActionClick,
+}: {
+  title: string
+  children: React.ReactNode
+  collapsible?: boolean
+  defaultOpen?: boolean
+  badge?: string
+  id?: string
+  actionLabel?: string
+  onActionClick?: () => void
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
-    <div className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
-        <div className="w-1 h-4 rounded-full bg-brand-orange" />
-        <p className="font-bold text-sm tracking-wide text-white">{title}</p>
-      </div>
-      <div className="p-4">
-        {children}
-      </div>
+    <div id={id} className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
+      {collapsible ? (
+        <div className="flex items-center justify-between gap-2 px-4 py-3 bg-brand-dark">
+          <button
+            type="button"
+            onClick={() => setOpen(prev => !prev)}
+            className="flex flex-1 items-center justify-between gap-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-4 rounded-full bg-brand-orange" />
+              <p className="font-bold text-sm tracking-wide text-white">{title}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {badge && (
+                <span className="rounded-full bg-brand-mid px-2 py-0.5 text-[11px] font-medium text-white">
+                  {badge}
+                </span>
+              )}
+              <span className="text-sm text-white">{open ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {actionLabel && onActionClick && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!open) setOpen(true)
+                onActionClick()
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-orange text-lg font-bold text-white"
+              aria-label={actionLabel}
+            >
+              +
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
+          <div className="w-1 h-4 rounded-full bg-brand-orange" />
+          <p className="font-bold text-sm tracking-wide text-white">{title}</p>
+        </div>
+      )}
+      {(!collapsible || open) && <div className="p-4">{children}</div>}
     </div>
   )
 }
 
 interface Props {
   intervention: Intervention
+  initialActivityId?: string
 }
 
 interface PhotoCard extends WorkOrderPhotoDraft {
@@ -100,11 +251,11 @@ function PhotoStatusBadge({ status }: { status: WorkOrderPhotoSyncStatus }) {
 
   return (
     <div
-      className={`absolute right-2 top-2 flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-bold shadow-sm ${meta.badgeClassName}`}
+      className={`absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-bold shadow-sm ${meta.badgeClassName}`}
       title={meta.label}
     >
       {status === 'uploaded' ? (
-        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" aria-hidden="true">
+        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" aria-hidden="true">
           <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : (
@@ -114,7 +265,10 @@ function PhotoStatusBadge({ status }: { status: WorkOrderPhotoSyncStatus }) {
   )
 }
 
-export default function WerkbonForm({ intervention }: Props) {
+export default function WerkbonForm({ intervention, initialActivityId }: Props) {
+  const { currentUser, tasks, createTask, updateTask } = useTasks()
+  const werkbonId = `wb-${intervention.id}`
+
   const [form, setForm] = useState<FormState>({
     status:      intervention.status,
     workStart:   '',
@@ -127,11 +281,26 @@ export default function WerkbonForm({ intervention }: Props) {
   const [pdfLoading,    setPdfLoading]    = useState(false)
   const [saveStatus,    setSaveStatus]    = useState<'idle' | 'saved' | 'error'>('idle')
   const [deviceRefresh, setDeviceRefresh] = useState(0)
+  const [taskError, setTaskError] = useState('')
+  const [expandedActivityId, setExpandedActivityId] = useState<ExpandedActivityId>(initialActivityId ?? null)
+  const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(initialActivityId ?? null)
   const [photos, setPhotos] = useState<PhotoCard[]>([])
   const [photoActionBusy, setPhotoActionBusy] = useState(false)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const previewUrlsRef = useRef<string[]>([])
+  const [editorState, setEditorState] = useState<ActivityEditorState | null>(() => {
+    const initialTask = initialActivityId
+      ? tasks.find(task => task.werkbonId === werkbonId && task.id === initialActivityId)
+      : undefined
+
+    return initialTask ? buildEditorState(initialTask) : null
+  })
+  const linkedTasks = useMemo(() => (
+    [...tasks.filter(task => task.werkbonId === werkbonId)]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  ), [tasks, werkbonId])
+  const openTaskCount = linkedTasks.filter(task => isTaskOpen(task.status)).length
 
   // Generic updater for simple fields
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -198,6 +367,136 @@ export default function WerkbonForm({ intervention }: Props) {
   }
   function removeFollowUp(id: string) {
     setForm(prev => ({ ...prev, followUp: prev.followUp.filter(f => f.id !== id) }))
+  }
+
+  function openTaskEditor(task: Task) {
+    setExpandedActivityId(task.id)
+    setEditingTaskId(task.id)
+    setEditorState(buildEditorState(task))
+    setTaskError('')
+  }
+
+  function openNewTaskEditor() {
+    setExpandedActivityId('new')
+    setEditingTaskId('new')
+    setEditorState(createEmptyEditorState(currentUser.id))
+    setTaskError('')
+  }
+
+  function closeTaskEditor() {
+    setEditingTaskId(null)
+    setEditorState(null)
+    setTaskError('')
+  }
+
+  function toggleActivity(taskId: string) {
+    setExpandedActivityId(prev => prev === taskId ? null : taskId)
+    if (editingTaskId === taskId) {
+      closeTaskEditor()
+    }
+  }
+
+  function closeExpandedActivity(taskId: string) {
+    if (editingTaskId === taskId) {
+      closeTaskEditor()
+    }
+    setExpandedActivityId(prev => prev === taskId ? null : prev)
+  }
+
+  function updateEditorField<K extends keyof ActivityEditorState>(field: K, value: ActivityEditorState[K]) {
+    setEditorState(prev => prev ? { ...prev, [field]: value } : prev)
+  }
+
+  function handleMarkTaskDone(task: Task) {
+    if (!canManageTask(task, currentUser)) return
+
+    const description = editingTaskId === task.id ? editorState?.description : task.description
+    const assignment = editingTaskId === task.id && editorState
+      ? parseAssignmentValue(editorState.assigneeValue)
+      : {
+          assigneeType: task.assigneeType,
+          assigneeUserId: task.assigneeUserId,
+          assigneeRole: task.assigneeRole,
+        }
+
+    updateTask(task.id, {
+      type: editingTaskId === task.id ? editorState?.type : task.type,
+      title: editingTaskId === task.id ? editorState?.title : task.title,
+      description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      dueDate: editingTaskId === task.id ? editorState?.dueDate : task.dueDate,
+      status: 'klaar',
+    })
+    closeTaskEditor()
+  }
+
+  function handleCancelTask(task: Task) {
+    if (!canManageTask(task, currentUser)) return
+
+    updateTask(task.id, { status: 'geannuleerd' })
+    closeTaskEditor()
+  }
+
+  function handleSaveTask(task: Task) {
+    if (!editorState || !canManageTask(task, currentUser)) return
+
+    if (!editorState.title.trim()) {
+      setTaskError('Geef eerst een samenvatting voor de activiteit in.')
+      return
+    }
+
+    if (!editorState.dueDate) {
+      setTaskError('Kies eerst een vervaldatum voor de activiteit.')
+      return
+    }
+
+    const assignment = parseAssignmentValue(editorState.assigneeValue)
+    updateTask(task.id, {
+      type: editorState.type,
+      title: editorState.title,
+      description: editorState.description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      dueDate: editorState.dueDate,
+      status: editorState.status,
+    })
+    setTaskError('')
+    closeTaskEditor()
+    setExpandedActivityId(null)
+  }
+
+  function handleCreateActivity() {
+    if (!editorState || editingTaskId !== 'new') return
+
+    if (!editorState.title.trim()) {
+      setTaskError('Geef eerst een samenvatting voor de activiteit in.')
+      return
+    }
+
+    if (!editorState.dueDate) {
+      setTaskError('Kies eerst een vervaldatum voor de activiteit.')
+      return
+    }
+
+    const assignment = parseAssignmentValue(editorState.assigneeValue)
+    createTask({
+      type: editorState.type,
+      title: editorState.title,
+      description: editorState.description,
+      assigneeType: assignment.assigneeType,
+      assigneeUserId: assignment.assigneeUserId,
+      assigneeRole: assignment.assigneeRole,
+      createdByUserId: currentUser.id,
+      priority: 'normaal',
+      dueDate: editorState.dueDate,
+      werkbonId,
+      interventionId: intervention.id,
+    })
+    setTaskError('')
+    closeTaskEditor()
   }
 
   // Signature
@@ -619,34 +918,34 @@ export default function WerkbonForm({ intervention }: Props) {
             onChange={handleGalleryChange}
           />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
             <button
               onClick={() => cameraInputRef.current?.click()}
               disabled={photoActionBusy}
-              className="rounded-xl bg-brand-blue px-4 py-3 text-sm font-bold text-white disabled:opacity-60"
+              className="rounded-lg bg-brand-blue px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60 sm:px-3 sm:py-2 sm:text-sm"
             >
               Foto nemen
             </button>
             <button
               onClick={() => galleryInputRef.current?.click()}
               disabled={photoActionBusy}
-              className="rounded-xl border border-stroke bg-surface px-4 py-3 text-sm font-bold text-ink disabled:opacity-60"
+              className="rounded-lg border border-stroke bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-ink disabled:opacity-60 sm:px-3 sm:py-2 sm:text-sm"
             >
               Foto kiezen
             </button>
           </div>
 
           {photos.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-stroke bg-surface px-3 py-4 text-center text-sm text-ink-soft">
+            <p className="rounded-lg border border-dashed border-stroke bg-surface px-3 py-2.5 text-center text-[11px] text-ink-soft sm:text-sm">
               Nog geen foto&apos;s toegevoegd
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
               {photos.map(photo => {
                 const statusMeta = getPhotoStatusMeta(photo.syncStatus)
 
                 return (
-                  <div key={photo.id} className="overflow-hidden rounded-xl border border-stroke bg-surface">
+                  <div key={photo.id} className="overflow-hidden rounded-lg border border-stroke bg-surface">
                     <div className="relative aspect-square bg-white">
                       {photo.previewUrl ? (
                         <Image
@@ -664,11 +963,11 @@ export default function WerkbonForm({ intervention }: Props) {
                       )}
                       <PhotoStatusBadge status={photo.syncStatus} />
                     </div>
-                    <div className="flex flex-col gap-1 p-3">
-                      <p className="truncate text-sm font-semibold text-ink">{photo.fileName}</p>
-                      <p className="text-xs text-ink-soft">{statusMeta.label}</p>
+                    <div className="flex flex-col gap-0.5 p-1.5 sm:p-2">
+                      <p className="truncate text-xs font-semibold text-ink sm:text-sm">{photo.fileName}</p>
+                      <p className="text-[11px] text-ink-soft">{statusMeta.label}</p>
                       {photo.syncStatus === 'failed' && photo.errorMessage && (
-                        <p className="text-xs text-brand-red">{photo.errorMessage}</p>
+                        <p className="text-[11px] text-brand-red">{photo.errorMessage}</p>
                       )}
                     </div>
                   </div>
@@ -676,6 +975,282 @@ export default function WerkbonForm({ intervention }: Props) {
               })}
             </div>
           )}
+        </div>
+      </Section>
+
+      <Section
+        id="activiteiten"
+        title="ACTIVITEITEN"
+        collapsible
+        defaultOpen
+        badge={`${openTaskCount} open`}
+        actionLabel="Nieuwe activiteit"
+        onActionClick={openNewTaskEditor}
+      >
+        <div className="flex flex-col gap-3">
+          {linkedTasks.length === 0 && (
+            <p className="text-sm text-center py-2 text-ink-faint">Nog geen activiteiten op deze werkbon</p>
+          )}
+
+          {expandedActivityId === 'new' && editingTaskId === 'new' && editorState && (
+            <div className="rounded-xl border border-brand-orange/30 bg-white p-3">
+              <p className="text-sm font-bold text-ink">Nieuwe activiteit</p>
+              <p className="mt-1 text-xs text-ink-soft">Deze activiteit verschijnt meteen bij de verantwoordelijke gebruiker.</p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-ink-soft">Soort taak</span>
+                  <select
+                    value={editorState.type}
+                    onChange={event => updateEditorField('type', event.target.value as TaskType)}
+                    className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                  >
+                    {TASK_TYPE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-ink-soft">Vervaldatum</span>
+                  <input
+                    type="date"
+                    value={editorState.dueDate}
+                    onChange={event => updateEditorField('dueDate', event.target.value)}
+                    className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Samenvatting</span>
+                <input
+                  value={editorState.title}
+                  onChange={event => updateEditorField('title', event.target.value)}
+                  placeholder="Bijvoorbeeld: bestellen onderdelen"
+                  className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                />
+              </label>
+
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Toegewezen aan</span>
+                <select
+                  value={editorState.assigneeValue}
+                  onChange={event => updateEditorField('assigneeValue', event.target.value)}
+                  className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                >
+                  <optgroup label="Personen">
+                    {users.filter(user => user.active).map(user => (
+                      <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Groepen">
+                    {GROUP_ASSIGNMENT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+
+              <label className="mt-3 flex flex-col gap-1">
+                <span className="text-xs font-medium text-ink-soft">Notitie</span>
+                <textarea
+                  rows={4}
+                  value={editorState.description}
+                  onChange={event => updateEditorField('description', event.target.value)}
+                  placeholder="Schrijf hier extra context, opvolging of afspraken..."
+                  className="rounded-lg px-3 py-2 text-sm outline-none resize-none bg-surface border border-stroke text-ink"
+                />
+              </label>
+
+              {taskError && (
+                <p className="mt-3 text-xs font-medium text-brand-red">{taskError}</p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                <button type="button" onClick={handleCreateActivity} className="text-brand-orange">
+                  Opslaan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeTaskEditor()
+                    setExpandedActivityId(null)
+                  }}
+                  className="text-ink-soft"
+                >
+                  Sluiten
+                </button>
+              </div>
+            </div>
+          )}
+
+          {linkedTasks.map(task => {
+            const canManage = canManageTask(task, currentUser)
+            const isEditing = editingTaskId === task.id && editorState !== null
+            const isExpanded = expandedActivityId === task.id
+            const creator = getUserById(task.createdByUserId)
+            const assignmentLabel = getAssignmentLabel(task)
+            const dueDateLabel = formatActivityDueDate(task.dueDate)
+
+            return (
+              <div
+                key={task.id}
+                className={`rounded-xl p-3 flex flex-col gap-3 bg-surface border ${isEditing ? 'border-brand-orange ring-1 ring-brand-orange/30' : 'border-stroke'}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">
+                    {creator?.initials ?? '??'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-ink">
+                      <span className="text-ink-soft">{dueDateLabel}:</span>{' '}
+                      <span className="font-bold">{task.title}</span>{' '}
+                      <span className="text-ink-soft">toegewezen aan</span>{' '}
+                      <span>{assignmentLabel}</span>
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      {canManage && !isEditing && (
+                        <>
+                          <button type="button" onClick={() => handleMarkTaskDone(task)} className="text-brand-green">
+                            ✅ Gereed
+                          </button>
+                          <button type="button" onClick={() => openTaskEditor(task)} className="text-ink-soft">
+                            ✏️ Bewerken
+                          </button>
+                          <button type="button" onClick={() => handleCancelTask(task)} className="text-brand-red">
+                            ❌ Annuleren
+                          </button>
+                        </>
+                      )}
+                      {!canManage && (
+                        <span className="text-ink-soft">{getTaskStatusLabel(task.status)}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleActivity(task.id)}
+                    className="shrink-0 text-sm text-ink-soft"
+                    aria-label={isExpanded ? 'Activiteit inklappen' : 'Activiteit uitklappen'}
+                  >
+                    {isExpanded ? '▾' : '▸'}
+                  </button>
+                </div>
+
+                {isExpanded && isEditing && editorState && (
+                  <div className="rounded-xl border border-brand-orange/30 bg-white p-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Soort taak</span>
+                        <select
+                          value={editorState.type}
+                          onChange={event => updateEditorField('type', event.target.value as TaskType)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          {TASK_TYPE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Vervaldatum</span>
+                        <input
+                          type="date"
+                          value={editorState.dueDate}
+                          onChange={event => updateEditorField('dueDate', event.target.value)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="mt-3 flex flex-col gap-1">
+                      <span className="text-xs font-medium text-ink-soft">Samenvatting</span>
+                      <input
+                        value={editorState.title}
+                        onChange={event => updateEditorField('title', event.target.value)}
+                        placeholder="Bijvoorbeeld: bestellen onderdelen"
+                        className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                      />
+                    </label>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Toegewezen aan</span>
+                        <select
+                          value={editorState.assigneeValue}
+                          onChange={event => updateEditorField('assigneeValue', event.target.value)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          <optgroup label="Personen">
+                            {users.filter(user => user.active).map(user => (
+                              <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Groepen">
+                            {GROUP_ASSIGNMENT_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-ink-soft">Status</span>
+                        <select
+                          value={editorState.status}
+                          onChange={event => updateEditorField('status', event.target.value as TaskStatus)}
+                          className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                        >
+                          <option value="open">Open</option>
+                          <option value="gepland">Gepland</option>
+                          <option value="bezig">Bezig</option>
+                          <option value="wacht_op_info">Wacht op info</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="mt-3 flex flex-col gap-1">
+                      <span className="text-xs font-medium text-ink-soft">Notitie</span>
+                      <textarea
+                        rows={4}
+                        value={editorState.description}
+                        onChange={event => updateEditorField('description', event.target.value)}
+                        placeholder="Schrijf hier extra context, opvolging of afspraken..."
+                        className="rounded-lg px-3 py-2 text-sm outline-none resize-none bg-surface border border-stroke text-ink"
+                      />
+                    </label>
+
+                    {taskError && (
+                      <p className="mt-3 text-xs font-medium text-brand-red">{taskError}</p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs font-medium">
+                      <button type="button" onClick={() => handleMarkTaskDone(task)} className="text-brand-green">
+                        ✅ Gereed
+                      </button>
+                      <button type="button" onClick={() => handleCancelTask(task)} className="text-brand-red">
+                        ❌ Annuleren
+                      </button>
+                      <button type="button" onClick={() => handleSaveTask(task)} className="text-brand-orange">
+                        Opslaan
+                      </button>
+                      <button type="button" onClick={() => closeExpandedActivity(task.id)} className="text-ink-soft">
+                        Sluiten
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isExpanded && !isEditing && task.description && (
+                  <div className="rounded-xl border border-stroke bg-white p-3 text-sm text-ink-soft">
+                    {task.description}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </Section>
 

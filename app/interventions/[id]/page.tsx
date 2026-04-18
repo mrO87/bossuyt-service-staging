@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import AvatarMenu from '@/components/AvatarMenu'
 import WerkbonForm from '@/components/WerkbonForm'
 import type { Intervention } from '@/types'
 import { getIntervention, upsertIntervention } from '@/lib/idb'
@@ -20,8 +21,10 @@ function BossuytLogo() {
 export default function InterventionPage() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
+  const searchParams = useSearchParams()
   const [intervention, setIntervention] = useState<Intervention | null>(null)
   const [loading, setLoading] = useState(true)
+  const initialActivityId = searchParams.get('activity') ?? undefined
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +73,18 @@ export default function InterventionPage() {
     }
   }, [id])
 
+  useEffect(() => {
+    if (loading || !intervention || typeof window === 'undefined') return
+    if (window.location.hash !== '#activiteiten') return
+
+    const scrollToActivities = () => {
+      document.getElementById('activiteiten')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+
+    const timeoutId = window.setTimeout(scrollToActivities, 50)
+    return () => window.clearTimeout(timeoutId)
+  }, [intervention, loading])
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F4F6F8' }}>
@@ -104,13 +119,16 @@ export default function InterventionPage() {
             <p className="text-xs leading-tight" style={{ color: '#6B7280' }}>werkbon</p>
           </div>
         </div>
-        <button
-          onClick={() => router.push('/')}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium"
-          style={{ backgroundColor: '#3A3F45', color: '#fff' }}
-        >
-          ← Terug
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: '#3A3F45', color: '#fff' }}
+          >
+            ← Terug
+          </button>
+          <AvatarMenu />
+        </div>
       </header>
 
       {/* Urgency bar */}
@@ -121,7 +139,11 @@ export default function InterventionPage() {
       )}
 
       <main className="px-4 py-4">
-        <WerkbonForm intervention={intervention} />
+        <WerkbonForm
+          key={`${intervention.id}-${initialActivityId ?? 'default'}`}
+          intervention={intervention}
+          initialActivityId={initialActivityId}
+        />
       </main>
 
     </div>

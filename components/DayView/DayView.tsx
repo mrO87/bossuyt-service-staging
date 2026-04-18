@@ -9,13 +9,13 @@
  * De open pool blijft als aparte sectie onderaan staan.
  */
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import SettingsSheet from '@/components/SettingsSheet'
+import AvatarMenu from '@/components/AvatarMenu'
 import type { InterventionStatus, InterventionType } from '@/types'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
 import { useDayData } from '@/lib/useDayData'
+import { useTasks } from '@/lib/task-store'
 
 // ---------- helpers ----------
 
@@ -102,8 +102,8 @@ function Badge({ className, label }: { className: string; label: string }) {
 export default function DayView() {
   const router = useRouter()
   const today = new Date()
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
+  const { currentUser } = useTasks()
   const {
     planned,
     open: openPool,
@@ -111,8 +111,7 @@ export default function DayView() {
     total,
     error: dayDataError,
     notice,
-  } = useDayData()
-
+  } = useDayData(currentUser.id)
   return (
     <div className="min-h-screen bg-surface">
       {/* Header */}
@@ -129,14 +128,7 @@ export default function DayView() {
             <p className="text-xs text-ink-soft">Vandaag</p>
             <p className="text-sm font-medium text-white">{done}/{total} afgewerkt</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
-            aria-label="Instellingen openen"
-          >
-            <span className="text-white text-xs font-bold">OP</span>
-          </button>
+          <AvatarMenu />
         </div>
       </header>
 
@@ -249,7 +241,6 @@ export default function DayView() {
         )}
       </main>
 
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

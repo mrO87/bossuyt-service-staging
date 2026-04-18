@@ -1,4 +1,4 @@
-import type { Customer, Site, Contact, Device, Intervention } from '@/types'
+import type { Customer, Site, Contact, Device, Intervention, Task, User } from '@/types'
 
 // ============================================================
 // CUSTOMERS (billing entities)
@@ -1124,6 +1124,110 @@ export const interventions: Intervention[] = [
   },
 ]
 
+const seedCreatedAt = new Date().toISOString()
+const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+export const tasks: Task[] = [
+  {
+    id: 't1',
+    type: 'bellen',
+    title: 'Bel klant voor vervolgbezoek',
+    description: 'Bevestig wanneer het onderdeel binnenkomt en plan een nieuw bezoek in.',
+    assigneeType: 'user',
+    assigneeUserId: 'u1',
+    createdByUserId: 'u3',
+    priority: 'hoog',
+    status: 'open',
+    werkbonId: 'wb-i1',
+    interventionId: 'i1',
+    dueDate: tomorrow,
+    createdAt: seedCreatedAt,
+    updatedAt: seedCreatedAt,
+  },
+  {
+    id: 't2',
+    type: 'bestelling',
+    title: 'Bestel sproeiarm set',
+    description: 'Bestellen voor de Electrolux Glasswasher 50 op deze werkbon.',
+    assigneeType: 'user',
+    assigneeUserId: 'u4',
+    createdByUserId: 'u1',
+    priority: 'dringend',
+    status: 'bezig',
+    werkbonId: 'wb-i1',
+    interventionId: 'i1',
+    dueDate: tomorrow,
+    createdAt: seedCreatedAt,
+    updatedAt: seedCreatedAt,
+  },
+  {
+    id: 't3',
+    type: 'bericht',
+    title: 'Vraag foto van typeplaatje op',
+    description: 'Klant heeft serienummer niet bevestigd. Extra foto nodig voor magazijn.',
+    assigneeType: 'user',
+    assigneeUserId: 'u2',
+    createdByUserId: 'u3',
+    priority: 'normaal',
+    status: 'wacht_op_info',
+    werkbonId: 'wb-i2',
+    interventionId: 'i2',
+    dueDate: nextWeek,
+    createdAt: seedCreatedAt,
+    updatedAt: seedCreatedAt,
+  },
+]
+
+// ============================================================
+// USERS (demo users across the organization)
+// ============================================================
+
+export const users: User[] = [
+  {
+    id: 'u1',
+    name: 'Olivier Pierrard',
+    initials: 'OP',
+    email: 'olivier@bossuyt-service.be',
+    role: 'technician',
+    active: true,
+  },
+  {
+    id: 'u2',
+    name: 'Jonas Declercq',
+    initials: 'JD',
+    email: 'jonas@bossuyt-service.be',
+    role: 'technician',
+    active: true,
+  },
+  {
+    id: 'u3',
+    name: 'Els Van Damme',
+    initials: 'EV',
+    email: 'els@bossuyt-service.be',
+    role: 'admin',
+    active: true,
+  },
+  {
+    id: 'u4',
+    name: 'Tom Magazijn',
+    initials: 'TM',
+    email: 'magazijn@bossuyt-service.be',
+    role: 'warehouse',
+    active: true,
+  },
+  {
+    id: 'u5',
+    name: 'Sarah HR',
+    initials: 'SH',
+    email: 'hr@bossuyt-service.be',
+    role: 'hr',
+    active: true,
+  },
+]
+
+export const currentUserId = 'u1'
+
 // ============================================================
 // HELPER FUNCTIONS
 // used to look up related data without a database
@@ -1157,4 +1261,16 @@ export function getSiteById(id: string): Site | undefined {
 // Get a single device by id
 export function getDeviceById(id: string): Device | undefined {
   return devices.find(device => device.id === id)
+}
+
+export function getUserById(id: string): User | undefined {
+  return users.find(user => user.id === id)
+}
+
+export function getCurrentUser(): User | undefined {
+  return getUserById(currentUserId)
+}
+
+export function getInterventionById(id: string): Intervention | undefined {
+  return interventions.find(intervention => intervention.id === id)
 }
