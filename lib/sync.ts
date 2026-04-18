@@ -304,7 +304,7 @@ async function uploadPendingWorkOrderPhoto(write: PendingWrite): Promise<boolean
   }
 }
 
-interface DeleteWorkOrderPhotoPayload {
+type DeleteWorkOrderPhotoPayload = {
   photoId: string
   workOrderId: string
   localBlobKey: string
