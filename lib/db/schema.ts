@@ -3,6 +3,7 @@ import {
   bigserial,
   boolean,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -12,10 +13,16 @@ import {
   unique,
 } from 'drizzle-orm/pg-core'
 import type {
+  DbTaskStatus,
+  DbTaskType,
+  DependencyType,
   InterventionSource,
   InterventionStatus,
   InterventionType,
+  ReasonCode,
+  TaskRole,
   User,
+  WorkOrderLinkType,
 } from '@/types'
 
 export const technicians = pgTable('technicians', {
@@ -103,6 +110,7 @@ export const workOrders = pgTable('work_orders', {
   completionParts:   text('completion_parts'),    // JSON string: PdfPart[]
   completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
   completedAt:       timestamp('completed_at', { withTimezone: true }),
+  externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
 })
 
 export const workOrderAssignments = pgTable(
@@ -256,3 +264,129 @@ export const auditLog = pgTable('audit_log', {
   oldData:   jsonb('old_data'),
   newData:   jsonb('new_data'),
 })
+
+// ── Task system ───────────────────────────────────────────────────────────────
+// task_templates is declared first because tasks has a FK → task_templates.id.
+
+export const taskTemplates = pgTable('task_templates', {
+  id:                text('id').primaryKey(),
+  name:              text('name').notNull(),
+  description:       text('description'),
+  defaultRole:       text('default_role').$type<TaskRole>().notNull(),
+  defaultType:       text('default_type').$type<DbTaskType>().notNull(),
+  triggerOnComplete: boolean('trigger_on_complete').notNull().default(false),
+  autoCreate:        boolean('auto_create').notNull().default(false),
+  delayMinutes:      integer('delay_minutes').notNull().default(0),
+  createdAt:         timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  active:            boolean('active').notNull().default(true),
+})
+
+export const tasks = pgTable(
+  'tasks',
+  {
+    id:          text('id').primaryKey(),
+    workOrderId: text('work_order_id').notNull()
+      .references(() => workOrders.id, { onDelete: 'restrict' }),
+    werkbonId:   text('werkbon_id')
+      .references(() => werkbonnen.id, { onDelete: 'set null' }),
+    templateId:  text('template_id')
+      .references(() => taskTemplates.id, { onDelete: 'set null' }),
+    type:        text('type').$type<DbTaskType>().notNull(),
+    role:        text('role').$type<TaskRole>().notNull(),
+    status:      text('status').$type<DbTaskStatus>().notNull().default('pending'),
+    title:       text('title').notNull(),
+    description: text('description'),
+    assigneeId:  text('assignee_id')
+      .references(() => technicians.id, { onDelete: 'set null' }),
+    seq:         integer('seq').notNull().default(0),
+    dueDate:     timestamp('due_date', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    completedBy: text('completed_by')
+      .references(() => technicians.id, { onDelete: 'set null' }),
+    skipReason:  text('skip_reason'),
+    reasonCode:  text('reason_code').$type<ReasonCode>(),
+    payload:     jsonb('payload'),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy:   text('created_by'),
+    updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (tbl) => ({
+    byWorkOrder:      index('tasks_work_order_id_idx').on(tbl.workOrderId),
+    byRoleStatus:     index('tasks_role_status_idx').on(tbl.role, tbl.status),
+    byAssigneeStatus: index('tasks_assignee_status_idx').on(tbl.assigneeId, tbl.status),
+  }),
+)
+
+export const taskDependencies = pgTable(
+  'task_dependencies',
+  {
+    id:            text('id').primaryKey(),
+    predecessorId: text('predecessor_id').notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    successorId:   text('successor_id').notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    depType:       text('dep_type').$type<DependencyType>().notNull().default('finish_to_start'),
+    lagMinutes:    integer('lag_minutes').notNull().default(0),
+  },
+  (tbl) => ({
+    uniquePair: unique('task_dep_pair_unique').on(tbl.predecessorId, tbl.successorId),
+  }),
+)
+
+export const taskTemplateEdges = pgTable(
+  'task_template_edges',
+  {
+    id:             text('id').primaryKey(),
+    fromTemplateId: text('from_template_id').notNull()
+      .references(() => taskTemplates.id, { onDelete: 'cascade' }),
+    toTemplateId:   text('to_template_id').notNull()
+      .references(() => taskTemplates.id, { onDelete: 'cascade' }),
+    depType:        text('dep_type').$type<DependencyType>().notNull().default('finish_to_start'),
+    autoCreate:     boolean('auto_create').notNull().default(false),
+  },
+  (tbl) => ({
+    uniqueEdge: unique('task_template_edge_unique').on(tbl.fromTemplateId, tbl.toTemplateId),
+  }),
+)
+
+export const workOrderLinks = pgTable(
+  'work_order_links',
+  {
+    id:              text('id').primaryKey(),
+    fromWorkOrderId: text('from_work_order_id').notNull()
+      .references(() => workOrders.id, { onDelete: 'restrict' }),
+    toWorkOrderId:   text('to_work_order_id').notNull()
+      .references(() => workOrders.id, { onDelete: 'restrict' }),
+    linkType:        text('link_type').$type<WorkOrderLinkType>().notNull(),
+    reasonCode:      text('reason_code').$type<ReasonCode>(),
+    note:            text('note'),
+    createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy:       text('created_by'),
+  },
+  (tbl) => ({
+    uniqueLink: unique('work_order_link_unique').on(
+      tbl.fromWorkOrderId, tbl.toWorkOrderId, tbl.linkType,
+    ),
+  }),
+)
+
+export const workOrderEvents = pgTable(
+  'work_order_events',
+  {
+    id:          bigserial('id', { mode: 'number' }).primaryKey(),
+    occurredAt:  timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+    recordedAt:  timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    workOrderId: text('work_order_id').notNull()
+      .references(() => workOrders.id, { onDelete: 'cascade' }),
+    taskId:      text('task_id')
+      .references(() => tasks.id, { onDelete: 'set null' }),
+    actorId:     text('actor_id'),
+    eventType:   text('event_type').notNull(),
+    payload:     jsonb('payload').notNull().default({}),
+    clientId:    text('client_id'),
+  },
+  (tbl) => ({
+    byWorkOrderTime: index('woe_work_order_occurred_at_idx').on(tbl.workOrderId, tbl.occurredAt),
+    byTaskId:        index('woe_task_id_idx').on(tbl.taskId),
+  }),
+)

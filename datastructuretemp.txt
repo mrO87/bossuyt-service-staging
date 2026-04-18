@@ -1,0 +1,147 @@
+# STRUCTURAL AUDIT: TASK AND WORK ORDER SYSTEM
+Date: 2026-04-17
+
+## 1. DATABASE SCHEMA (Drizzle ORM)
+Located at: `/mnt/data/bossuyt_service_next_staging/lib/db/schema.ts`
+
+### Table Definitions
+
+#### `work_orders`
+- `id`: text (Primary Key)
+- `customer_id`: text (References `customers.id`, onDelete: 'restrict')
+- `site_id`: text (References `sites.id`, onDelete: 'restrict')
+- `device_id`: text (References `devices.id`, onDelete: 'restrict')
+- `planned_date`: timestamp with timezone
+- `status`: text (Type: `InterventionStatus`)
+- `type`: text (Type: `InterventionType`)
+- `source`: text (Type: `InterventionSource`)
+- `description`: text
+- `estimated_minutes`: integer
+- `is_urgent`: boolean (Default: false)
+- `planning_version`: integer (Default: 1)
+- `status_onderweg_at`: timestamp with timezone
+- `status_arrived_at`: timestamp with timezone
+- `status_onderweg_by`: text
+- `created_by`: text
+- `work_start`: timestamp with timezone (Legacy/Completion)
+- `work_end`: timestamp with timezone (Legacy/Completion)
+- `completion_notes`: text
+- `completion_parts`: text (JSON string)
+- `completion_pdf_path`: text
+- `completed_at`: timestamp with timezone
+
+#### `werkbonnen` (New Completion Model)
+- `id`: text (Primary Key, crypto.randomUUID())
+- `work_order_id`: text (References `work_orders.id`, onDelete: 'cascade')
+- `work_start`: timestamp with timezone
+- `work_end`: timestamp with timezone
+- `notes`: text
+- `parts`: text (JSON string)
+- `follow_up`: text (JSON string)
+- `pdf_path`: text
+- `completed_at`: timestamp with timezone (Default: now())
+- `changed_by`: text
+
+#### `work_order_assignments` (Junction Table)
+- `work_order_id`: text (FK to `work_orders`, onDelete: 'cascade')
+- `technician_id`: text (FK to `technicians`, onDelete: 'cascade')
+- `is_lead`: boolean (Default: false)
+- `accepted`: boolean (Default: false)
+- `planned_order`: integer (Default: 0)
+- PK: `(work_order_id, technician_id)`
+
+#### `audit_log`
+- `id`: bigserial (Primary Key)
+- `table_name`: text
+- `record_id`: text
+- `operation`: text (INSERT | UPDATE | DELETE)
+- `changed_by`: text
+- `changed_at`: timestamp with timezone (Default: now())
+- `old_data`: jsonb
+- `new_data`: jsonb
+
+#### Supporting Tables
+- `technicians`: `id`, `name`, `initials`, `email`, `role`, `active`
+- `customers`: `id`, `name`, `phone`, `address`, `city`, `vat_number`
+- `sites`: `id`, `customer_id`, `name`, `address`, `city`, `phone_primary`, `phone_secondary`, `lat`, `lon`
+- `contacts`: `id`, `site_id`, `name`, `phone`, `email`, `role`
+- `devices`: `id`, `site_id`, `brand`, `model`, `serial_number`, `install_date`, `notes`
+- `device_documents`: `id`, `brand`, `model`, `schematic_path`, `exploded_view_path`, `service_manual_path`, `updated_at`
+- `work_order_photos`: `id`, `work_order_id`, `file_name`, `mime_type`, `size`, `storage_path`, `created_at`, `uploaded_at`, `changed_by`
+
+### Existing Enums/Types (from `types/index.ts`)
+- `InterventionStatus`: 'gepland' | 'onderweg' | 'bezig' | 'wacht_onderdelen' | 'afgewerkt' | 'geannuleerd'
+- `InterventionType`: 'warm' | 'montage' | 'preventief'
+- `InterventionSource`: 'planned' | 'reactive'
+- `TaskPriority`: 'laag' | 'normaal' | 'hoog' | 'dringend'
+- `TaskStatus`: 'open' | 'gepland' | 'bezig' | 'wacht_op_info' | 'klaar'
+- `User Role`: 'technician' | 'office' | 'admin' | 'hr' | 'warehouse'
+
+---
+
+## 2. API LAYER
+
+### Sync & Core Routes
+- `GET /api/sync/today`: Fetches today's work for a technician (max 8 planned + 4 open).
+- `POST /api/sync/write`: Handles reordering of interventions with planning version checks.
+- `GET /api/interventions/[id]`: Retrieve full data for one intervention.
+- `POST /api/interventions/[id]`: Update intervention fields (e.g., status).
+
+### Completion & Documents
+- `POST /api/work-orders/[id]/complete`: Uploads PDF and notes, creates `werkbonnen` record.
+- `POST /api/work-orders/[id]/photos`: Uploads documentation photos.
+- `GET /api/devices/[id]/history`: Fetches historic `werkbonnen` for a device.
+- `GET /api/devices/documents`: Fetches technical documentation (manuals, wiring).
+
+### Background & Services
+- `POST /api/push/subscribe`: VAPID push subscription.
+- `POST /api/push/send`: Test endpoint for push notifications.
+- `POST /api/route/daily`: POSTs stops to return distance and travel times from ORS.
+
+---
+
+## 3. CURRENT TASK MODEL BEHAVIOR
+
+### Persistence
+- Tasks (Activiteiten) are currently **Client-Side Only**.
+- Stored in `localStorage` under key `bossuyt-service:tasks`.
+- Managed via `lib/task-store.tsx` (React Context).
+
+### Relations & Structure
+- Linked via `interventionId` and `werkbonId` (string fields, no DB-level FKs yet).
+- Created manually by technicians in the follow-up section of the `WerkbonForm`.
+- Seeded initially from `lib/mock-data.ts`.
+
+### Assignments & Logic
+- `assigneeType`: 'user' | 'group'.
+- If 'user': uses `assigneeUserId`.
+- If 'group': uses `assigneeRole` (e.g., 'warehouse' to order parts).
+- History: Captured per-field in `audit_log` via DB triggers for server-side tables. No granular history for client-side tasks.
+- Dependencies: No chaining or blocking logic exists.
+
+---
+
+## 4. CURRENT UI ENTRY POINTS
+
+### Primary Pages
+- `app/activiteiten/page.tsx`: Main task list (Redirected from `/taken`). Filters by current user or current user's role.
+- `app/page.tsx` (DayView): Entry point showing today's work orders and an open task counter.
+- `app/interventions/[id]/page.tsx`: Detail view where tasks related to that intervention are displayed.
+
+### Components
+- `components/WerkbonForm/index.tsx`: Contains the "Volgende stappen" section for creating new tasks during work order completion.
+- `components/DayView/DayView.tsx`: Displays the count of open tasks assigned to the technician.
+
+---
+
+## 5. INTEGRATION SURFACE
+
+### Sync Strategy
+- Current offline-first approach relies on `IndexedDB` (via `lib/idb.ts`) and the `/api/sync` endpoints.
+- `planning_version` integer on `work_orders` is used to prevent overwriting office planning with stale mobile data.
+
+### ERP Mapping (Navision/Odoo)
+- `customers.id`: External primary key candidate.
+- `devices.serial_number`: Primary key for asset tracking in ERP.
+- `technicians.email`: Identity link.
+- `werkbonnen.parts`: JSON structure ready to be mapped to ERP stock/picking lines.
