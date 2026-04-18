@@ -1023,12 +1023,12 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-ink">
-                      <span className="text-ink-soft">{dueDateLabel}:</span>{' '}
-                      <span className="font-bold">{task.title}</span>{' '}
-                      <span className="text-ink-soft">toegewezen aan</span>{' '}
-                      <span>{assignmentLabel}</span>
+                      <span className="text-xs text-ink-soft">{dueDateLabel}</span>{' '}
+                      <span className="font-bold">{task.title}</span>
+                      <span className="text-ink-soft"> – </span>
+                      <span className="text-xs text-ink-soft">{assignmentLabel}</span>
                     </p>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <div className="mt-1 flex gap-x-3 text-xs">
                       {canManage && !isEditing && (
                         <>
                           <button
