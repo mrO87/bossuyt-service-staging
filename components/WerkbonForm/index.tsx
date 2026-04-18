@@ -9,6 +9,7 @@ import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
 import {
   createWorkOrderPhotoDraft,
   deleteWorkOrderPhotoDraft,
+  markWorkOrderPhotoDeleting,
   enqueuePendingWrite,
   getWorkOrderPhotoBlob,
   listWorkOrderPhotos,
@@ -234,6 +235,13 @@ function getPhotoStatusMeta(status: WorkOrderPhotoSyncStatus): {
   if (status === 'failed') {
     return {
       label: 'Mislukt',
+      badgeClassName: 'bg-brand-red text-white',
+    }
+  }
+
+  if (status === 'deleting') {
+    return {
+      label: 'Verwijderen...',
       badgeClassName: 'bg-brand-red text-white',
     }
   }
@@ -531,17 +539,28 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
 
   async function handleDeletePhoto(photoId: string) {
     const photo = photos.find(p => p.id === photoId)
-    if (photo?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl)
-    setPhotos(prev => prev.filter(p => p.id !== photoId))
+    if (!photo || photo.syncStatus === 'deleting') return
 
-    if (photo) {
+    if (photo.syncStatus === 'uploaded') {
+      // Mark as deleting in UI and IDB, queue for sync
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, syncStatus: 'deleting' } : p))
+      await markWorkOrderPhotoDeleting(photoId)
+      await enqueuePendingWrite({
+        type: 'delete_work_order_photo',
+        payload: {
+          photoId: photo.id,
+          workOrderId: intervention.id,
+          localBlobKey: photo.localBlobKey,
+          changedBy: intervention.technicians[0]?.technicianId ?? null,
+        },
+        createdAt: new Date().toISOString(),
+      })
+      await syncPhotosIfPossible()
+    } else {
+      // Not on server yet — remove from IDB and UI immediately
+      if (photo.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl)
+      setPhotos(prev => prev.filter(p => p.id !== photoId))
       await deleteWorkOrderPhotoDraft(photo.id, photo.localBlobKey)
-      if (photo.syncStatus === 'uploaded') {
-        const changedBy = intervention.technicians[0]?.technicianId ?? ''
-        await fetch(`/api/work-orders/${intervention.id}/photos/${photo.id}?changedBy=${encodeURIComponent(changedBy)}`, {
-          method: 'DELETE',
-        })
-      }
     }
   }
 
@@ -912,17 +931,19 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
                         Geen voorbeeld
                       </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePhoto(photo.id)}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
-                      title="Verwijderen"
-                    >
-                      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
-                        <path d="M2.5 4.5h11M6 4.5V3h4v1.5M5 4.5v8h6v-8H5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M7 7v3M9 7v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                    </button>
+                    {photo.syncStatus !== 'deleting' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeletePhoto(photo.id)}
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white"
+                        title="Verwijderen"
+                      >
+                        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                          <path d="M2.5 4.5h11M6 4.5V3h4v1.5M5 4.5v8h6v-8H5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M7 7v3M9 7v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
                     <PhotoStatusBadge status={photo.syncStatus} />
                   </div>
                   <div className="flex flex-col gap-0.5 p-1.5">

@@ -74,7 +74,7 @@ export interface WerkbonCache {
 
 export interface PendingWrite {
   id?: number
-  type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence' | 'upload_work_order_photo'
+  type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence' | 'upload_work_order_photo' | 'delete_work_order_photo'
   payload: Record<string, unknown>
   createdAt: string
   attempts: number
@@ -336,6 +336,10 @@ export async function markWorkOrderPhotoFailed(
     syncStatus: 'failed',
     errorMessage,
   }))
+}
+
+export async function markWorkOrderPhotoDeleting(photoId: string): Promise<void> {
+  await updateWorkOrderPhotoDraft(photoId, draft => ({ ...draft, syncStatus: 'deleting' }))
 }
 
 export async function deleteWorkOrderPhotoDraft(photoId: string, localBlobKey: string): Promise<void> {

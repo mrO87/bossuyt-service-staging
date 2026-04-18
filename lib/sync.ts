@@ -16,7 +16,9 @@ import {
   cacheInterventions,
   saveDayMeta,
   getDayMeta,
+  deleteWorkOrderPhotoDraft,
   getWorkOrderPhotoBlob,
+  markWorkOrderPhotoDeleting,
   markWorkOrderPhotoFailed,
   markWorkOrderPhotoPending,
   markWorkOrderPhotoUploaded,
@@ -190,6 +192,18 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         continue
       }
 
+      if (write.type === 'delete_work_order_photo') {
+        const deleted = await deleteServerWorkOrderPhoto(write)
+        if (deleted) {
+          await removePendingWrite(write.id!)
+          synced++
+        } else {
+          failed++
+          break
+        }
+        continue
+      }
+
       const res = await fetch(`/api/sync/write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -286,6 +300,42 @@ async function uploadPendingWorkOrderPhoto(write: PendingWrite): Promise<boolean
     return true
   } catch {
     await markWorkOrderPhotoFailed(payload.photoId, 'Upload mislukt')
+    return false
+  }
+}
+
+interface DeleteWorkOrderPhotoPayload {
+  photoId: string
+  workOrderId: string
+  localBlobKey: string
+  changedBy: string | null
+}
+
+function isDeleteWorkOrderPhotoPayload(payload: Record<string, unknown>): payload is DeleteWorkOrderPhotoPayload {
+  return (
+    typeof payload.photoId === 'string' &&
+    typeof payload.workOrderId === 'string' &&
+    typeof payload.localBlobKey === 'string'
+  )
+}
+
+async function deleteServerWorkOrderPhoto(write: PendingWrite): Promise<boolean> {
+  if (!isDeleteWorkOrderPhotoPayload(write.payload)) return false
+
+  const { photoId, workOrderId, localBlobKey, changedBy } = write.payload
+  await markWorkOrderPhotoDeleting(photoId)
+
+  try {
+    const params = changedBy ? `?changedBy=${encodeURIComponent(changedBy)}` : ''
+    const res = await fetch(`/api/work-orders/${workOrderId}/photos/${photoId}${params}`, {
+      method: 'DELETE',
+    })
+
+    if (!res.ok) return false
+
+    await deleteWorkOrderPhotoDraft(photoId, localBlobKey)
+    return true
+  } catch {
     return false
   }
 }

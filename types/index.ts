@@ -127,7 +127,7 @@ export interface Werkbon {
   syncedAt?: string
 }
 
-export type WorkOrderPhotoSyncStatus = 'pending' | 'uploaded' | 'failed'
+export type WorkOrderPhotoSyncStatus = 'pending' | 'uploaded' | 'failed' | 'deleting'
 
 export interface WorkOrderPhotoDraft {
   id: string
