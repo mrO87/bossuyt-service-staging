@@ -338,6 +338,31 @@ export async function markWorkOrderPhotoFailed(
   }))
 }
 
+export async function renameWorkOrderPhotoDraft(photoId: string, newFileName: string): Promise<void> {
+  await updateWorkOrderPhotoDraft(photoId, draft => ({ ...draft, fileName: newFileName }))
+}
+
+export async function renamePendingWorkOrderPhoto(photoId: string, newFileName: string): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction('pendingWrites', 'readwrite')
+  const keys = await tx.store.getAllKeys()
+  const values = await tx.store.getAll()
+  for (let i = 0; i < values.length; i++) {
+    const write = values[i]
+    if (
+      write.type === 'upload_work_order_photo' &&
+      (write.payload as { photoId?: string }).photoId === photoId
+    ) {
+      await tx.store.put(
+        { ...write, payload: { ...write.payload, fileName: newFileName } },
+        keys[i],
+      )
+      break
+    }
+  }
+  await tx.done
+}
+
 // ---------- Pending writes ----------
 
 /** Queue an action to be sent to the server when online */

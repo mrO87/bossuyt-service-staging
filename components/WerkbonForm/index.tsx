@@ -11,6 +11,8 @@ import {
   enqueuePendingWrite,
   getWorkOrderPhotoBlob,
   listWorkOrderPhotos,
+  renameWorkOrderPhotoDraft,
+  renamePendingWorkOrderPhoto,
 } from '@/lib/idb'
 import { getUserById, users } from '@/lib/mock-data'
 import { syncPendingWrites } from '@/lib/sync'
@@ -281,6 +283,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [photoActionBusy, setPhotoActionBusy] = useState(false)
   const [renamingPhotoId, setRenamingPhotoId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState('')
+  const [renamingExt, setRenamingExt] = useState('')
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const previewUrlsRef = useRef<string[]>([])
@@ -533,9 +536,14 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     })
   }
 
-  function commitRename(photoId: string) {
+  async function commitRename(photoId: string) {
     const trimmed = renamingValue.trim()
-    if (trimmed) setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, fileName: trimmed } : p))
+    if (trimmed) {
+      const newFileName = trimmed + renamingExt
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, fileName: newFileName } : p))
+      await renameWorkOrderPhotoDraft(photoId, newFileName)
+      await renamePendingWorkOrderPhoto(photoId, newFileName)
+    }
     setRenamingPhotoId(null)
   }
 
@@ -924,7 +932,14 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
                     ) : (
                       <button
                         type="button"
-                        onClick={() => { setRenamingPhotoId(photo.id); setRenamingValue(photo.fileName) }}
+                        onClick={() => {
+                          const dotIndex = photo.fileName.lastIndexOf('.')
+                          const base = dotIndex > 0 ? photo.fileName.slice(0, dotIndex) : photo.fileName
+                          const ext = dotIndex > 0 ? photo.fileName.slice(dotIndex) : ''
+                          setRenamingPhotoId(photo.id)
+                          setRenamingValue(base)
+                          setRenamingExt(ext)
+                        }}
                         className="truncate text-left text-xs font-semibold text-ink"
                         title="Klik om naam te wijzigen"
                       >
