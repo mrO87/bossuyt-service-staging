@@ -26,6 +26,8 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       ORS_API_KEY: ${ORS_API_KEY}
       NODE_ENV: production
+    ports:
+      - "3000:3000"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
