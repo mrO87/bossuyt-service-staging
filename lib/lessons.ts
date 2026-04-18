@@ -736,6 +736,56 @@ export const COURSE_MODULES: CourseModule[] = [
       'Zoek uit wat er gebeurt als je `restart: "no"` verandert naar `restart: unless-stopped` in de staging-compose.',
     ],
   },
+  {
+    id: 'staging-operations',
+    part: 2,
+    eyebrow: 'Module 15',
+    title: 'Staging beheren: omgevingen, volumes en de juiste buildvolgorde',
+    duration: '20 min',
+    summary:
+      'Je leert waarom `docker compose restart` env-variabelen NIET herlaadt, wanneer je een volume moet wissen en welke drie commando\'s altijd nodig zijn daarna, en hoe je de veilige buildvolgorde voor staging uitvoert.',
+    whyItMatters:
+      'Fout omgevingsbeheer was verantwoordelijk voor drie opeenvolgende 500-fouten in één sessie: een verkeerde ORS-sleutel, een leeg datavolume en een ontbrekende migratie. Deze module zorgt dat je die fouten herkent en vermijdt.',
+    lessonCount: 3,
+    focusFiles: [
+      '.env.staging.local.example',
+      'docker-compose.staging.yml',
+    ],
+    lessons: [
+      {
+        title: '`restart` herlaadt geen omgevingsvariabelen — gebruik `down` + `up`',
+        summary:
+          '`docker compose restart` herstart het proces binnen de bestaande container. Alle environment-variabelen zijn al ingebakken bij het aanmaken van de container. Nieuwe waarden in `.env.staging.local` worden pas zichtbaar na een volledige `down` + `up`.',
+        outcomes: [
+          'Je weet wanneer `restart` volstaat (enkel code-crash herstellen) en wanneer `down + up` verplicht is (env-wijziging).',
+          'Je kan controleren welke variabelen een draaiende container effectief ziet met `docker exec <naam> env | grep VARIABELE`.',
+        ],
+      },
+      {
+        title: 'Volume wissen (`down -v`) betekent database opnieuw opzetten',
+        summary:
+          'De PostgreSQL-data leeft in een Docker-volume. `docker compose down` bewaart het volume — `docker compose down -v` wist het volledig. Na een `-v` bestaat de database nog maar zijn alle tabellen en data weg. Je moet altijd drie commando\'s uitvoeren: `db:push` (tabellen aanmaken), `db:seed` (testdata laden) en `db:triggers` (audit-triggers instellen).',
+        outcomes: [
+          'Je begrijpt het verschil tussen `down` en `down -v`.',
+          'Je kan de drie herstelopdrachten uitvoeren met het juiste `DATABASE_URL`-prefix voor de staging-poort.',
+        ],
+      },
+      {
+        title: 'De veilige buildvolgorde voor staging',
+        summary:
+          'Elke keer dat je de stagingomgeving opstart of env-variabelen wijzigt, is er één correcte volgorde: eerst `.env.staging.local` inladen met `set -a && source .env.staging.local && set +a`, dan pas `docker compose -f docker-compose.staging.yml up --build -d`. Zonder de source-stap krijgen de containers lege of placeholder-waarden.',
+        outcomes: [
+          'Je kent de exacte reeks commando\'s voor een schone stagingopstart.',
+          'Je begrijpt waarom de `.env.staging.local.example` in de repo staat: zodat je nooit opnieuw hoeft te raden welke variabelen nodig zijn.',
+        ],
+      },
+    ],
+    exercises: [
+      'Voer `docker exec bossuyt-staging env | grep ORS` uit voor en na een `restart` en na een `down + up`. Beschrijf wat je ziet.',
+      'Wis het volume met `down -v`, start opnieuw op en herstel de database met de drie db-commando\'s. Controleer het resultaat met `SELECT count(*) FROM work_orders`.',
+    ],
+  },
+
 ]
 
 // ──────────────────────────────────────────────────────────────
