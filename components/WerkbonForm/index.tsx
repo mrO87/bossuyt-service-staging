@@ -778,21 +778,23 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
                   onChange={event => updatePart(part.id, 'code', event.target.value)}
                   className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
                 />
+                <button type="button" onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
+              </div>
+              <div className="flex gap-2">
                 <input
                   type="number"
                   min={1}
                   value={part.quantity}
                   onChange={event => updatePart(part.id, 'quantity', parseInt(event.target.value) || 1)}
-                  className="w-16 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
+                  className="w-16 shrink-0 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
                 />
-                <button type="button" onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
+                <input
+                  placeholder="Omschrijving onderdeel"
+                  value={part.description}
+                  onChange={event => updatePart(part.id, 'description', event.target.value)}
+                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
+                />
               </div>
-              <input
-                placeholder="Omschrijving onderdeel"
-                value={part.description}
-                onChange={event => updatePart(part.id, 'description', event.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
-              />
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 text-sm text-ink-soft">
                   <input
