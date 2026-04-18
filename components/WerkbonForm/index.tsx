@@ -8,6 +8,7 @@ import { generateWerkbonPDF } from '@/lib/pdf'
 import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
 import {
   createWorkOrderPhotoDraft,
+  deleteWorkOrderPhotoDraft,
   enqueuePendingWrite,
   getWorkOrderPhotoBlob,
   listWorkOrderPhotos,
@@ -528,12 +529,20 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     }
   }, [intervention.id, intervention.technicians, refreshPhotos, syncPhotosIfPossible])
 
-  function handleDeletePhoto(photoId: string) {
-    setPhotos(prev => {
-      const photo = prev.find(p => p.id === photoId)
-      if (photo?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl)
-      return prev.filter(p => p.id !== photoId)
-    })
+  async function handleDeletePhoto(photoId: string) {
+    const photo = photos.find(p => p.id === photoId)
+    if (photo?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(photo.previewUrl)
+    setPhotos(prev => prev.filter(p => p.id !== photoId))
+
+    if (photo) {
+      await deleteWorkOrderPhotoDraft(photo.id, photo.localBlobKey)
+      if (photo.syncStatus === 'uploaded') {
+        const changedBy = intervention.technicians[0]?.technicianId ?? ''
+        await fetch(`/api/work-orders/${intervention.id}/photos/${photo.id}?changedBy=${encodeURIComponent(changedBy)}`, {
+          method: 'DELETE',
+        })
+      }
+    }
   }
 
   async function commitRename(photoId: string) {

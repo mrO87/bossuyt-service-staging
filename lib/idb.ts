@@ -338,6 +338,26 @@ export async function markWorkOrderPhotoFailed(
   }))
 }
 
+export async function deleteWorkOrderPhotoDraft(photoId: string, localBlobKey: string): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction(['workOrderPhotos', 'photoBlobs', 'pendingWrites'], 'readwrite')
+  await tx.objectStore('workOrderPhotos').delete(photoId)
+  await tx.objectStore('photoBlobs').delete(localBlobKey)
+  const pwStore = tx.objectStore('pendingWrites')
+  const keys = await pwStore.getAllKeys()
+  const values = await pwStore.getAll()
+  for (let i = 0; i < values.length; i++) {
+    if (
+      values[i].type === 'upload_work_order_photo' &&
+      (values[i].payload as { photoId?: string }).photoId === photoId
+    ) {
+      await pwStore.delete(keys[i])
+      break
+    }
+  }
+  await tx.done
+}
+
 export async function renameWorkOrderPhotoDraft(photoId: string, newFileName: string): Promise<void> {
   await updateWorkOrderPhotoDraft(photoId, draft => ({ ...draft, fileName: newFileName }))
 }
