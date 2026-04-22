@@ -1,7 +1,7 @@
 # docker-compose.staging.yml — Tijdelijke testomgeving
 #
 # Gebruik:
-#   NEXT_PUBLIC_GIT_SHA=$(git rev-parse --short HEAD) docker compose -f docker-compose.staging.yml up --build -d
+#   NEXT_PUBLIC_GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.staging.local -f docker-compose.staging.yml up --build -d
 #   → beschikbaar op https://staging.bossuyt.fixassistant.com
 #   → versie checken: curl https://staging.bossuyt.fixassistant.com/api/version
 #
