@@ -49,7 +49,7 @@ export async function getQueueForRole(role: TaskRole): Promise<DbTask[]> {
     )
     .orderBy(
       desc(workOrders.isUrgent),
-      asc(sql`${tasks.dueDate} NULLS LAST`),
+      sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
     )
 
@@ -77,7 +77,7 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
     )
     .orderBy(
       desc(workOrders.isUrgent),
-      asc(sql`${tasks.dueDate} NULLS LAST`),
+      sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
     )
 
@@ -95,7 +95,7 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
     )
     .orderBy(
       desc(workOrders.isUrgent),
-      asc(sql`${tasks.dueDate} NULLS LAST`),
+      sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
     )
 
