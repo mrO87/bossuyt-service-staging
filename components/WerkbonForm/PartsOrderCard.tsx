@@ -120,65 +120,85 @@ export default function PartsOrderCard({ orderTasks, intervention, showSupplier 
       {/* Expanded parts table */}
       {expanded && (
         <div className="border-t border-orange-200">
-          {/* Table header */}
-          <div className={`grid text-xs font-semibold text-ink-soft bg-white px-3 py-1.5 ${showSupplier ? 'grid-cols-[2fr_3fr_1fr_2fr_1fr]' : 'grid-cols-[2fr_3fr_1fr_1fr]'}`}>
-            <span>Artikelcode</span>
-            <span>Omschrijving</span>
-            <span>Merk</span>
-            {showSupplier && <span>Leverancier</span>}
-            <span className="text-right">Aantal</span>
-          </div>
+          {(['stock_replenish', 'supplier_order'] as const).map(orderType => {
+            const group = orderTasks.filter(t => {
+              const p = (t.payload ?? {}) as Record<string, unknown>
+              const ot = p.order_type as string | undefined
+              return orderType === 'stock_replenish'
+                ? (ot === 'stock_replenish' || (!ot && !t.title?.startsWith('Bestellen')))
+                : (ot === 'supplier_order' || (!ot && t.title?.startsWith('Bestellen')))
+            })
+            if (group.length === 0) return null
 
-          <div className="divide-y divide-orange-100">
-            {orderTasks.map((task, idx) => {
-              const payload = (task.payload ?? {}) as Record<string, unknown>
-              const code    = String(payload.part_number ?? '')
-              const catalog = lookupPart(code)
-              const qty     = Number(payload.quantity ?? 1)
-              const urgent  = payload.urgency === 'urgent'
-              const s       = STATUS_LABEL[task.status] ?? STATUS_LABEL.pending
+            const label = orderType === 'stock_replenish' ? 'Aanvullen stock' : 'Te bestellen bij leverancier'
+            const cols  = showSupplier ? 'grid-cols-[2fr_3fr_1fr_2fr_1fr]' : 'grid-cols-[2fr_3fr_1fr_1fr]'
 
-              return (
-                <div
-                  key={task.id}
-                  className={`grid items-center px-3 py-2 text-sm gap-x-2 ${idx % 2 === 1 ? 'bg-white' : 'bg-orange-50/30'} ${showSupplier ? 'grid-cols-[2fr_3fr_1fr_2fr_1fr]' : 'grid-cols-[2fr_3fr_1fr_1fr]'}`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    {urgent && <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" />}
-                    <span className="font-mono text-xs text-ink">{code || '—'}</span>
-                  </div>
-
-                  <div>
-                    <p className="text-ink text-xs leading-tight">
-                      {String(payload.description ?? task.title ?? '—')}
-                    </p>
-                    <span className={`mt-0.5 inline-block text-xs px-1.5 py-px rounded-full ${s.color}`}>
-                      {s.label}
-                    </span>
-                  </div>
-
-                  <span className="text-xs text-ink-soft">{catalog?.brand ?? '—'}</span>
-
-                  {showSupplier && (
-                    <div className="text-xs">
-                      {catalog ? (
-                        <div>
-                          <p className="text-ink font-medium">{catalog.suppliers[0]?.name}</p>
-                          <p className="text-ink-faint">{catalog.suppliers[0]?.ref}</p>
-                        </div>
-                      ) : (
-                        <span className="text-ink-faint">—</span>
-                      )}
-                    </div>
-                  )}
-
-                  <span className="text-right text-ink font-medium text-xs">{qty}×</span>
+            return (
+              <div key={orderType} className="border-b border-orange-100 last:border-b-0">
+                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide px-3 py-1.5 bg-white">
+                  {label}
+                </p>
+                {/* Column header */}
+                <div className={`grid text-xs font-semibold text-ink-faint bg-orange-50/40 px-3 py-1 ${cols}`}>
+                  <span>Artikelcode</span>
+                  <span>Omschrijving</span>
+                  <span>Merk</span>
+                  {showSupplier && <span>Leverancier</span>}
+                  <span className="text-right">Aantal</span>
                 </div>
-              )
-            })}
-          </div>
 
-          {/* Multiple supplier options hint for warehouse */}
+                <div className="divide-y divide-orange-100">
+                  {group.map((task, idx) => {
+                    const payload = (task.payload ?? {}) as Record<string, unknown>
+                    const code    = String(payload.part_number ?? '')
+                    const catalog = lookupPart(code)
+                    const qty     = Number(payload.quantity ?? 1)
+                    const urgent  = payload.urgency === 'urgent'
+                    const s       = STATUS_LABEL[task.status] ?? STATUS_LABEL.pending
+
+                    return (
+                      <div
+                        key={task.id}
+                        className={`grid items-center px-3 py-2 text-sm gap-x-2 ${idx % 2 === 1 ? 'bg-white' : 'bg-orange-50/20'} ${cols}`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {urgent && <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" />}
+                          <span className="font-mono text-xs text-ink">{code || '—'}</span>
+                        </div>
+
+                        <div>
+                          <p className="text-ink text-xs leading-tight">
+                            {String(payload.description ?? task.title ?? '—')}
+                          </p>
+                          <span className={`mt-0.5 inline-block text-xs px-1.5 py-px rounded-full ${s.color}`}>
+                            {s.label}
+                          </span>
+                        </div>
+
+                        <span className="text-xs text-ink-soft">{catalog?.brand ?? '—'}</span>
+
+                        {showSupplier && (
+                          <div className="text-xs">
+                            {catalog ? (
+                              <div>
+                                <p className="text-ink font-medium">{catalog.suppliers[0]?.name}</p>
+                                <p className="text-ink-faint">{catalog.suppliers[0]?.ref}</p>
+                              </div>
+                            ) : (
+                              <span className="text-ink-faint">—</span>
+                            )}
+                          </div>
+                        )}
+
+                        <span className="text-right text-ink font-medium text-xs">{qty}×</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
           {showSupplier && (
             <div className="px-3 py-2 bg-white border-t border-orange-200">
               <p className="text-xs text-ink-faint">

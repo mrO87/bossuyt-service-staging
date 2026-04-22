@@ -357,8 +357,8 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     return `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
   }
 
-  function addPart() {
-    const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder: false, urgent: false }
+  function addPart(toOrder: boolean) {
+    const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder, urgent: false }
     setForm(prev => ({ ...prev, parts: [...prev.parts, part] }))
   }
 
@@ -710,24 +710,27 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         setSaveStatus('saved')
         setDeviceRefresh(current => current + 1)
 
-        const partsToOrder = form.parts.filter(p => p.toOrder)
-        for (const part of partsToOrder) {
+        const allTaskParts = form.parts
+        for (const part of allTaskParts) {
           await queueTaskCommand('/api/tasks', 'POST', {
             work_order_id: intervention.id,
             type: 'order_part',
             role: 'warehouse',
-            title: `Bestellen: ${part.description || part.code || 'onderdeel'}`,
+            title: part.toOrder
+              ? `Bestellen: ${part.description || part.code || 'onderdeel'}`
+              : `Stock aanvullen: ${part.description || part.code || 'onderdeel'}`,
             payload: {
-              part_number: part.code,
-              description: part.description,
-              quantity: part.quantity,
-              urgency: part.urgent ? 'urgent' : 'normal',
+              part_number:  part.code,
+              description:  part.description,
+              quantity:     part.quantity,
+              urgency:      part.urgent ? 'urgent' : 'normal',
+              order_type:   part.toOrder ? 'supplier_order' : 'stock_replenish',
             },
             client_id: part.id,
           })
         }
-        if (partsToOrder.length > 0) {
-          setQueuedPartIds(new Set(partsToOrder.map(p => p.id)))
+        if (allTaskParts.length > 0) {
+          setQueuedPartIds(new Set(allTaskParts.map(p => p.id)))
         }
       } else {
         console.error('Complete route error:', res.status, await res.text())
@@ -833,75 +836,104 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         />
       </Section>
 
-      <Section title="GEBRUIKTE ONDERDELEN">
-        <div className="flex flex-col gap-3">
-          {form.parts.length === 0 && (
-            <p className="text-sm text-center py-2 text-ink-faint">Nog geen onderdelen toegevoegd</p>
-          )}
+      <Section title="ONDERDELEN">
+        <div className="flex flex-col gap-4">
 
-          {form.parts.map(part => (
-            <div key={part.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
-              <div className="flex gap-2">
+          {/* ── Gebruikte onderdelen ─────────────────────────────────────── */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Gebruikt op site</p>
+            {form.parts.filter(p => !p.toOrder).length === 0 && (
+              <p className="text-sm text-center py-1.5 text-ink-faint">Geen gebruikte onderdelen</p>
+            )}
+            {form.parts.filter(p => !p.toOrder).map(part => (
+              <div key={part.id} className="flex items-center gap-2">
                 <input
-                  placeholder="Artikelcode"
+                  placeholder="Code"
                   value={part.code}
                   onChange={event => updatePart(part.id, 'code', event.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
+                  className="w-24 shrink-0 rounded-lg px-2 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
                 />
-                <button type="button" onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
-              </div>
-              <div className="flex gap-2">
+                <input
+                  placeholder="Omschrijving"
+                  value={part.description}
+                  onChange={event => updatePart(part.id, 'description', event.target.value)}
+                  className="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+                />
                 <input
                   type="number"
                   min={1}
                   value={part.quantity}
                   onChange={event => updatePart(part.id, 'quantity', parseInt(event.target.value) || 1)}
-                  className="w-16 shrink-0 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
+                  className="w-12 shrink-0 rounded-lg px-2 py-2 text-sm text-center outline-none bg-surface border border-stroke text-ink"
+                />
+                {queuedPartIds.has(part.id) && (
+                  <span className="shrink-0 text-xs text-green-600">✓</span>
+                )}
+                <button type="button" onClick={() => removePart(part.id)} className="shrink-0 text-brand-red text-lg leading-none px-1">×</button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addPart(false)}
+              className="w-full py-2 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
+            >
+              + Gebruikt onderdeel
+            </button>
+          </div>
+
+          {/* ── Te bestellen ─────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Te bestellen</p>
+            {form.parts.filter(p => p.toOrder).length === 0 && (
+              <p className="text-sm text-center py-1.5 text-ink-faint">Geen onderdelen te bestellen</p>
+            )}
+            {form.parts.filter(p => p.toOrder).map(part => (
+              <div key={part.id} className="flex items-center gap-2">
+                <input
+                  placeholder="Code"
+                  value={part.code}
+                  onChange={event => updatePart(part.id, 'code', event.target.value)}
+                  className="w-24 shrink-0 rounded-lg px-2 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
                 />
                 <input
-                  placeholder="Omschrijving onderdeel"
+                  placeholder="Omschrijving"
                   value={part.description}
                   onChange={event => updatePart(part.id, 'description', event.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
+                  className="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
                 />
-              </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm text-ink-soft">
-                  <input
-                    type="checkbox"
-                    checked={part.toOrder}
-                    onChange={event => updatePart(part.id, 'toOrder', event.target.checked)}
-                    className="w-4 h-4 rounded"
-                  />
-                  Te bestellen
-                </label>
-                {part.toOrder && (
-                  <label className="flex items-center gap-2 text-sm font-medium text-brand-red">
-                    <input
-                      type="checkbox"
-                      checked={part.urgent}
-                      onChange={event => updatePart(part.id, 'urgent', event.target.checked)}
-                      className="w-4 h-4 rounded"
-                    />
-                    Dringend
-                  </label>
-                )}
+                <input
+                  type="number"
+                  min={1}
+                  value={part.quantity}
+                  onChange={event => updatePart(part.id, 'quantity', parseInt(event.target.value) || 1)}
+                  className="w-12 shrink-0 rounded-lg px-2 py-2 text-sm text-center outline-none bg-surface border border-stroke text-ink"
+                />
+                <button
+                  type="button"
+                  onClick={() => updatePart(part.id, 'urgent', !part.urgent)}
+                  className={`shrink-0 text-xs px-2 py-2 rounded-lg border font-medium ${
+                    part.urgent
+                      ? 'border-brand-red text-brand-red bg-red-50'
+                      : 'border-stroke text-ink-faint'
+                  }`}
+                >
+                  {part.urgent ? '🔴' : '!'}
+                </button>
                 {queuedPartIds.has(part.id) && (
-                  <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                    In bestelling gezet
-                  </span>
+                  <span className="shrink-0 text-xs text-green-600">✓</span>
                 )}
+                <button type="button" onClick={() => removePart(part.id)} className="shrink-0 text-brand-red text-lg leading-none px-1">×</button>
               </div>
-            </div>
-          ))}
+            ))}
+            <button
+              type="button"
+              onClick={() => addPart(true)}
+              className="w-full py-2 rounded-xl text-sm font-medium border-2 border-dashed border-orange-200 text-brand-orange"
+            >
+              + Te bestellen onderdeel
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={addPart}
-            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
-          >
-            + Onderdeel toevoegen
-          </button>
         </div>
       </Section>
 
