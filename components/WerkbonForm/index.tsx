@@ -19,9 +19,11 @@ import {
 import { getUserById, users } from '@/lib/mock-data'
 import { syncPendingWrites } from '@/lib/sync'
 import { queueTaskCommand } from '@/lib/tasks/sync'
+import PartsOrderCard from '@/components/WerkbonForm/PartsOrderCard'
 import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
 import { useTasks } from '@/lib/task-store'
 import type {
+  DbTask,
   Intervention,
   Task,
   TaskStatus,
@@ -295,6 +297,16 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [renamingValue, setRenamingValue] = useState('')
   const [renamingExt, setRenamingExt] = useState('')
   const [queuedPartIds, setQueuedPartIds] = useState<Set<string>>(new Set())
+  const [orderTasks, setOrderTasks] = useState<DbTask[]>([])
+
+  useEffect(() => {
+    fetch(`/api/tasks?work_order_id=${intervention.id}`)
+      .then(r => r.ok ? r.json() : { tasks: [] })
+      .then((data: { tasks: DbTask[] }) => {
+        setOrderTasks((data.tasks ?? []).filter(t => t.type === 'order_part'))
+      })
+      .catch(() => {})
+  }, [intervention.id, queuedPartIds])
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const previewUrlsRef = useRef<string[]>([])
@@ -1024,7 +1036,13 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         onActionClick={openNewTaskEditor}
       >
         <div className="flex flex-col gap-3">
-          {linkedTasks.length === 0 && (
+          <PartsOrderCard
+            orderTasks={orderTasks}
+            intervention={intervention}
+            showSupplier={currentUser?.role === 'warehouse' || currentUser?.role === 'admin'}
+          />
+
+          {linkedTasks.length === 0 && orderTasks.length === 0 && (
             <p className="text-sm text-center py-2 text-ink-faint">Nog geen activiteiten op deze werkbon</p>
           )}
 
