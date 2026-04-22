@@ -18,6 +18,7 @@ import {
 } from '@/lib/idb'
 import { getUserById, users } from '@/lib/mock-data'
 import { syncPendingWrites } from '@/lib/sync'
+import { queueTaskCommand } from '@/lib/tasks/sync'
 import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
 import { useTasks } from '@/lib/task-store'
 import type {
@@ -293,6 +294,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [renamingPhotoId, setRenamingPhotoId] = useState<string | null>(null)
   const [renamingValue, setRenamingValue] = useState('')
   const [renamingExt, setRenamingExt] = useState('')
+  const [queuedPartIds, setQueuedPartIds] = useState<Set<string>>(new Set())
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const previewUrlsRef = useRef<string[]>([])
@@ -695,6 +697,26 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       if (res.ok) {
         setSaveStatus('saved')
         setDeviceRefresh(current => current + 1)
+
+        const partsToOrder = form.parts.filter(p => p.toOrder)
+        for (const part of partsToOrder) {
+          await queueTaskCommand('/api/tasks', 'POST', {
+            work_order_id: intervention.id,
+            type: 'order_part',
+            role: 'warehouse',
+            title: `Bestellen: ${part.description || part.code || 'onderdeel'}`,
+            payload: {
+              part_number: part.code,
+              description: part.description,
+              quantity: part.quantity,
+              urgency: part.urgent ? 'urgent' : 'normal',
+            },
+            client_id: part.id,
+          })
+        }
+        if (partsToOrder.length > 0) {
+          setQueuedPartIds(new Set(partsToOrder.map(p => p.id)))
+        }
       } else {
         console.error('Complete route error:', res.status, await res.text())
         setSaveStatus('error')
@@ -851,6 +873,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
                     />
                     Dringend
                   </label>
+                )}
+                {queuedPartIds.has(part.id) && (
+                  <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                    In bestelling gezet
+                  </span>
                 )}
               </div>
             </div>

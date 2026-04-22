@@ -1,8 +1,9 @@
 # docker-compose.staging.yml — Tijdelijke testomgeving
 #
 # Gebruik:
-#   docker compose -f docker-compose.staging.yml up --build -d
+#   NEXT_PUBLIC_GIT_SHA=$(git rev-parse --short HEAD) docker compose -f docker-compose.staging.yml up --build -d
 #   → beschikbaar op https://staging.bossuyt.fixassistant.com
+#   → versie checken: curl https://staging.bossuyt.fixassistant.com/api/version
 #
 # Stoppen na testen:
 #   docker compose -f docker-compose.staging.yml down
@@ -16,6 +17,7 @@ services:
       args:
         NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
         NEXT_PUBLIC_STAGING: "1"
+        NEXT_PUBLIC_GIT_SHA: ${NEXT_PUBLIC_GIT_SHA:-unknown}
     container_name: bossuyt-staging
     restart: "no"           # niet auto-herstarten — staging is tijdelijk
     environment:
