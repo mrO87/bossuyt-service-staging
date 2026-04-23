@@ -41,6 +41,16 @@ npm run test:watch          # watch mode
 
 `db:push`, `db:seed`, and `db:triggers` require `DATABASE_URL` (or `DATABASE_URL_HOST`) pointing at `localhost:<port>`. The app container itself uses the internal Docker hostname `db`. See `PLANNING.md` → "New Server Setup Checklist".
 
+## Tooling Preferences
+Pick the cheapest layer that answers the question:
+
+- **leanCTX — default context layer.** Use it for looking, not changing: shell-output compression, file reads, directory/tree overview, grep/find/ls, light diffs, session context and checkpoints. Reach for it before raw `Bash`/`Read` whenever the answer is "show me" rather than "edit this".
+- **jCodeMunch — surgical code intelligence.** Use it for questions *about* the code graph: symbol search, find references, importers, call hierarchy, rename blast radius, refactor planning, hotspots, dead code, architecture questions. Don't hand-roll `grep` for these — jCodeMunch is what knows the graph.
+- **superpowers — design-doc workflow.** New initiatives get a dated plan under `docs/superpowers/plans/` and (when needed) a matching design under `docs/superpowers/specs/`. Follow the existing naming (`YYYY-MM-DD-<slug>.md`) instead of dropping ad-hoc markdown elsewhere.
+- **OMC — local tool state only.** `.omc/` is gitignored; never commit it, never rely on its contents being present for another session.
+
+Rule of thumb: leanCTX for *reading*, jCodeMunch for *reasoning about structure*, superpowers for *writing down a plan*, built-in tools (`Edit`/`Write`/`Bash`) for *actually changing* the repo.
+
 ## Project Rules
 - **UI language**: Dutch (Belgium) — `nl-BE`. Status values, roles, and user-facing strings stay Dutch (`gepland`, `onderweg`, `bezig`, `afgewerkt`, `geannuleerd`, `warm`, `montage`, `preventief`).
 - **Code, comments, filenames, variable names**: English.
