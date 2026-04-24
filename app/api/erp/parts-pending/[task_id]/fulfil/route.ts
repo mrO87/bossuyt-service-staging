@@ -55,7 +55,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       if (fulfilStatus === 'received') {
         updates.status      = 'done'
         updates.completedAt = now
-        updates.completedBy = 'erp'
       }
 
       await tx.update(tasks).set(updates).where(eq(tasks.id, taskId))

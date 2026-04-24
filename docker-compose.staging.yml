@@ -1,12 +1,13 @@
 # docker-compose.staging.yml — Tijdelijke testomgeving
 #
 # Gebruik:
-#   NEXT_PUBLIC_GIT_SHA=$(git rev-parse --short HEAD) docker compose --env-file .env.staging.local -f docker-compose.staging.yml up --build -d
+#   make staging-up          → bouwen & starten (vereist .env.staging.local)
+#   make staging-down        → stoppen
+#   make staging-logs        → logs volgen
+#   make staging-restart     → app herstarten zonder rebuild
+#
 #   → beschikbaar op https://staging.bossuyt.fixassistant.com
 #   → versie checken: curl https://staging.bossuyt.fixassistant.com/api/version
-#
-# Stoppen na testen:
-#   docker compose -f docker-compose.staging.yml down
 #
 # De productie container (docker-compose.yml) wordt NIET geraakt.
 

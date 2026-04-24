@@ -15,6 +15,58 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.22',
+    date: '23 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Magazijnierspagina voor het opvolgen van onderdelenbestellingen',
+        body:
+          'De nieuwe pagina `/magazijn` toont alle openstaande `order_part`-taken gegroepeerd per werkorder. ' +
+          'De magazijnier ziet klant, site, toestel en elk afzonderlijk onderdeel met artikelcode en aantal. ' +
+          'Twee acties: "Besteld ✓" zet een onderdeel van "Te bestellen" naar "Besteld", ' +
+          '"Ontvangen ✓" sluit het af als ontvangen. Ontvangen onderdelen verdwijnen niet maar ' +
+          'verschuiven naar een inklapbare "Vandaag ontvangen"-sectie onderaan.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Nieuwe opvolgbon aanmaken vanuit de werkbon',
+        body:
+          'Zodra alle onderdelen van een bestelling ontvangen zijn (status "Alle ontvangen"), ' +
+          'activeert de knop "Nieuwe Opvolgbon" in de bestellingskaart. ' +
+          'Eén klik maakt automatisch een nieuwe werkbon aan voor dezelfde klant, site en toestel — ' +
+          'met de bestelde onderdelen al ingevuld als verbruikte onderdelen. ' +
+          'Beide werkbonnen krijgen een tijdlijn-event: de originele toont "opvolgbon aangemaakt", ' +
+          'de nieuwe toont "aangemaakt als opvolging van…".',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Bestellingskaart op de werkbon met PDF-afdruk en actiebalk',
+        body:
+          'De inklapbare bestellingskaart op de werkbon toont alle `order_part`-taken gegroepeerd per type ' +
+          '(stock aanvullen vs. bestellen bij leverancier). In de uitgevouwen actiebalk staan twee knoppen: ' +
+          '"Print PDF" genereert meteen een bestelblad met artikelcodes, beschrijvingen, merk en leverancier. ' +
+          '"Nieuwe Opvolgbon" wordt actief zodra alle onderdelen ontvangen zijn.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Makefile voorkomt staging-heropbouw zonder omgevingsvariabelen',
+        body:
+          'Een Makefile bundelt de veelgebruikte stagingcommando\'s. `make staging-up` zorgt altijd dat ' +
+          '`--env-file .env.staging.local` meegegeven wordt. Zo is het niet meer mogelijk om de app te bouwen ' +
+          'met lege databasewachtwoorden of ontbrekende API-sleutels.',
+      },
+      {
+        label: 'Fix',
+        title: 'Magazijnovergangen werkten niet door foreign key-fout',
+        body:
+          'De "Ontvangen ✓"-knop gaf een databasefout omdat het veld `completedBy` een foreign key is naar ' +
+          'de `technicians`-tabel. Strings zoals `\'warehouse\'` of `\'erp\'` zijn geen geldige technicien-IDs. ' +
+          'Opgelost door `completedBy` op `null` te zetten wanneer er geen echte technicien-ID beschikbaar is.',
+      },
+    ],
+  },
+  {
     version: 'v1.21',
     date: '16 april 2026',
     changes: [

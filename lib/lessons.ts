@@ -786,6 +786,82 @@ export const COURSE_MODULES: CourseModule[] = [
     ],
   },
 
+  {
+    id: 'task-system-and-warehouse',
+    part: 2,
+    eyebrow: 'Module 16',
+    title: 'Taaksysteem, warehouse-flow en opvolgbonnen',
+    duration: '34 min',
+    summary:
+      'Je leert hoe het taaksysteem werkt (types, rollen, statussen, transities), hoe de magazijnierspagina die taken verwerkt, en hoe een opvolgbon automatisch aangemaakt wordt vanuit een bestellingskaart.',
+    whyItMatters:
+      'Dit is het eerste echt multi-actor proces in de app: kantoor maakt taken aan, de magazijnier verwerkt ze, en de technicus plant een opvolgbezoek. Elk stuk communiceert via databasestatussen en tijdlijn-events — begrijpen hoe dat past is essentieel voor elk volgend feature.',
+    lessonCount: 4,
+    focusFiles: [
+      'lib/db/schema.ts',
+      'app/api/tasks/[id]/transition/route.ts',
+      'app/api/warehouse/queue/route.ts',
+      'app/magazijn/page.tsx',
+      'app/api/work-orders/[id]/follow-up/route.ts',
+      'components/WerkbonForm/PartsOrderCard.tsx',
+    ],
+    lessons: [
+      {
+        title: 'DbTaskType, TaskRole en DbTaskStatus',
+        summary:
+          'Een taak heeft drie orthogonale assen: type (wat doet de taak — bv. `order_part`), ' +
+          'rol (wie voert uit — bv. `warehouse`) en status (waar staat het — bv. `ready`). ' +
+          'Een `order_part`-taak met rol `warehouse` en status `ready` betekent: het magazijn moet dit onderdeel bestellen.',
+        outcomes: [
+          'Je kan een nieuwe taak correct aanmaken met het juiste type, rol en beginstatus.',
+          'Je begrijpt waarom type en rol samen bepalen wie de taak te zien krijgt.',
+        ],
+      },
+      {
+        title: 'Statusmachine: pending → ready → in_progress → done',
+        summary:
+          'Taakstatussen zijn geen vrije tekst maar een bewuste toestandsmachine. ' +
+          '`POST /api/tasks/[id]/transition` valideert of de gevraagde overgang geldig is, ' +
+          'schrijft `completedAt` bij `done` en zet `completedBy` op `null` als er geen echte technicien-ID meegegeven wordt — ' +
+          'want dat veld is een foreign key naar `technicians`, geen gewone string.',
+        outcomes: [
+          'Je kan uitleggen waarom je `completedBy` niet zomaar op `\'warehouse\'` kan zetten.',
+          'Je weet wat een foreign key constraint is en hoe je die fout herkent in een database-error.',
+        ],
+      },
+      {
+        title: 'De magazijnierspagina als aparte actor',
+        summary:
+          '`/magazijn` is een aparte appscherm buiten de technicus-flow. Het haalt `order_part`-taken ' +
+          'op via `GET /api/warehouse/queue`, groepeert ze per werkorder en toont klant/site/toestel context. ' +
+          'De state-update na een actie is optimistisch: de UI past zich meteen aan zonder te wachten op een herlaad.',
+        outcomes: [
+          'Je begrijpt waarom de magazijnierspagina zijn eigen API-route heeft in plaats van de algemene takenlijst te hergebruiken.',
+          'Je kan uitleggen wat optimistische UI-updates zijn en waarom ze de app sneller laten aanvoelen.',
+        ],
+      },
+      {
+        title: 'Opvolgbon als gelinkte werkbon met prefill',
+        summary:
+          '`POST /api/work-orders/[id]/follow-up` doet vier dingen in één transactie: ' +
+          '(1) nieuwe werkbon aanmaken met dezelfde klant/site/toestel, ' +
+          '(2) `prefillParts` vullen met de ontvangen onderdelen als JSON, ' +
+          '(3) een `work_order_links`-record aanmaken van type `follow_up`, ' +
+          '(4) tijdlijn-events op beide werkbonnen plaatsen. ' +
+          'Alles of niets — `withAudit()` wikkelt de hele operatie in één database-transactie.',
+        outcomes: [
+          'Je begrijpt waarom vier afzonderlijke database-writes in één transactie moeten zitten.',
+          'Je weet hoe `work_order_links` de relatie tussen origineel en opvolgbon bijhoudt voor KPI-rapportage.',
+        ],
+      },
+    ],
+    exercises: [
+      'Lees `app/api/tasks/[id]/transition/route.ts` en teken de toegestane statusovergangen op papier.',
+      'Open de database met `psql` en controleer welke `work_order_links` er staan na het aanmaken van een opvolgbon.',
+      'Voeg een `console.log` toe in de follow-up route die toont hoeveel `prefillParts` er meegegeven worden.',
+    ],
+  },
+
 ]
 
 // ──────────────────────────────────────────────────────────────

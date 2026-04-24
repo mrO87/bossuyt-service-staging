@@ -126,22 +126,19 @@ export function generatePartsOrderPDF(data: PartsOrderData): Blob {
     y += 12
   }
 
-  // Column widths — adjust when supplier columns are shown
-  const colCode  = 32
-  const colQty   = 12
-  let   colDesc  = cW - colCode - colQty
-  let   colSuppl = 0
-  let   colRef   = 0
-
-  if (data.includeSupplier) {
-    colSuppl = 35
-    colRef   = 28
-    colDesc  = cW - colCode - colQty - colSuppl - colRef
-  }
+  // Column widths — two fixed layouts depending on whether supplier info is shown
+  // All values in mm; columns must sum to cW (180mm on A4 with 15mm margins each side)
+  const colCode  = 30
+  const colBrand = 22
+  const colQty   = 14
+  const colSuppl = data.includeSupplier ? 32 : 0
+  const colRef   = data.includeSupplier ? 24 : 0
+  const colDesc  = cW - colCode - colBrand - colQty - colSuppl - colRef
 
   const rowH = 7
   checkPage(rowH + 4)
 
+  // ── Column header row ───────────────────────────────────────────────────────
   fill(doc, C.dark)
   doc.rect(mL, y, cW, rowH + 1, 'F')
   doc.setFontSize(7.5)
@@ -151,19 +148,12 @@ export function generatePartsOrderPDF(data: PartsOrderData): Blob {
   let x = mL + 3
   doc.text('ARTIKELCODE',  x, y + 5); x += colCode
   doc.text('OMSCHRIJVING', x, y + 5); x += colDesc
-  doc.text('MERK',         x, y + 5); x += colQty + (data.includeSupplier ? 8 : 0)
+  doc.text('MERK',         x, y + 5); x += colBrand
   if (data.includeSupplier) {
     doc.text('LEVERANCIER', x, y + 5); x += colSuppl
-    doc.text('REF',          x, y + 5)
-  } else {
-    doc.text('AANTAL', x, y + 5)
+    doc.text('REF',         x, y + 5); x += colRef
   }
-
-  // Re-draw qty column header in correct position when no supplier shown
-  if (!data.includeSupplier) {
-    x = mL + 3 + colCode + colDesc
-    doc.text('AANTAL', x, y + 5)
-  }
+  doc.text('AANTAL', x, y + 5)
 
   y += rowH + 1
 
@@ -173,13 +163,11 @@ export function generatePartsOrderPDF(data: PartsOrderData): Blob {
   data.parts.forEach((part, idx) => {
     checkPage(rowH + 2)
 
-    // Alternating rows
     if (idx % 2 === 1) {
       fill(doc, C.rowAlt)
       doc.rect(mL, y, cW, rowH, 'F')
     }
 
-    // Urgency indicator
     if (part.urgency === 'urgent') {
       fill(doc, C.red)
       doc.rect(mL, y, 2, rowH, 'F')
@@ -189,17 +177,14 @@ export function generatePartsOrderPDF(data: PartsOrderData): Blob {
     textColor(doc, C.textDark)
 
     x = mL + 3
-    doc.text(part.code || '—',           x, y + 5, { maxWidth: colCode - 2 });  x += colCode
-    doc.text(part.description || '—',    x, y + 5, { maxWidth: colDesc - 2 });  x += colDesc
-
+    doc.text(part.code || '—',         x, y + 5, { maxWidth: colCode - 2 });  x += colCode
+    doc.text(part.description || '—',  x, y + 5, { maxWidth: colDesc - 2 });  x += colDesc
+    doc.text(part.brand || '—',        x, y + 5, { maxWidth: colBrand - 2 }); x += colBrand
     if (data.includeSupplier) {
-      doc.text(part.brand || '—',         x, y + 5, { maxWidth: colQty + 6 });   x += colQty + 8
-      doc.text(part.supplier || '—',      x, y + 5, { maxWidth: colSuppl - 2 }); x += colSuppl
-      doc.text(part.supplierRef || '—',   x, y + 5, { maxWidth: colRef - 2 })
-    } else {
-      doc.text(part.brand || '—',         x, y + 5, { maxWidth: colQty + 10 });  x += colQty + 10
-      doc.text(String(part.quantity),     x, y + 5)
+      doc.text(part.supplier || '—',     x, y + 5, { maxWidth: colSuppl - 2 }); x += colSuppl
+      doc.text(part.supplierRef || '—',  x, y + 5, { maxWidth: colRef - 2 });   x += colRef
     }
+    doc.text(String(part.quantity),    x, y + 5)
 
     y += rowH
   })

@@ -111,6 +111,7 @@ export const workOrders = pgTable('work_orders', {
   completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
   completedAt:       timestamp('completed_at', { withTimezone: true }),
   externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
+  prefillParts:      text('prefill_parts'),   // JSON: PdfPart[] pre-filled for follow-up werkbonnen
 })
 
 export const workOrderAssignments = pgTable(

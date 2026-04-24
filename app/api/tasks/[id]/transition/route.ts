@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
     if (nextStatus === 'done') {
       updates.completedAt = now
-      updates.completedBy = completedBy ?? changedBy
+      updates.completedBy = completedBy ?? null
     }
 
     if (action === 'skip') {
