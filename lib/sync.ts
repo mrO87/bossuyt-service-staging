@@ -43,18 +43,23 @@ export interface SyncResult {
   error?: string
 }
 
+const SYNC_TTL_MS = 5 * 60 * 1000 // re-sync after 5 minutes so new work orders appear
+
 /**
  * shouldSync — check if we need a fresh sync
  *
- * We only sync once per day. If the cache is from today, skip.
- * This prevents hammering the server every time the app opens.
+ * Returns true when: new day, different technician, or cache is older than SYNC_TTL_MS.
+ * The TTL ensures newly created follow-up work orders appear in the open pool promptly.
  */
 export async function shouldSync(technicianId: string): Promise<boolean> {
   const meta = await getDayMeta()
-  if (!meta) return true  // never synced
+  if (!meta) return true
 
-  const today = new Date().toISOString().slice(0, 10)  // 'YYYY-MM-DD'
-  return meta.date !== today || meta.technicianId !== technicianId
+  const today = new Date().toISOString().slice(0, 10)
+  if (meta.date !== today || meta.technicianId !== technicianId) return true
+
+  const ageMs = Date.now() - new Date(meta.cachedAt).getTime()
+  return ageMs > SYNC_TTL_MS
 }
 
 /**

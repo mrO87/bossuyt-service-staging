@@ -1,3 +1,17 @@
+## v1.25 — Deploy 2026-04-24 19:30  (sha: dc9f0ed)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - lib/releases.ts
+    - lib/server/interventions.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.24 — Deploy 2026-04-24 19:23  (sha: 5ef37f2)
 
 ### Changenotes invullen — lib/releases.ts
