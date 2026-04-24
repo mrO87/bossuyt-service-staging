@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { tasks, workOrderEvents, workOrderLinks, workOrders } from '@/lib/db/schema'
+import { tasks, workOrderAssignments, workOrderEvents, workOrderLinks, workOrders } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import type { PdfPart } from '@/lib/pdf'
 import type { DbTaskType, TaskRole } from '@/types'
@@ -49,6 +49,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         urgent:      p.urgency === 'urgent',
       }
     })
+
+    // Find lead technician of the original work order — becomes default assignee
+    const [leadAssignment] = await db
+      .select({ technicianId: workOrderAssignments.technicianId })
+      .from(workOrderAssignments)
+      .where(and(
+        eq(workOrderAssignments.workOrderId, fromId),
+        eq(workOrderAssignments.isLead, true),
+      ))
+      .limit(1)
+    const leadTechnicianId = leadAssignment?.technicianId ?? null
 
     const newId  = crypto.randomUUID()
     const linkId = crypto.randomUUID()
@@ -107,7 +118,9 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       const now = new Date()
 
-      // Task for technician: load the parts into the van (non-blocking)
+      // Task for technician: confirm parts loaded into van (non-blocking)
+      // Initially assigned to lead technician of original work order.
+      // If planning assigns a different technician via POST /assign, that route updates this.
       const loadTaskId = crypto.randomUUID()
       await tx.insert(tasks).values({
         id:          loadTaskId,
@@ -118,6 +131,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         title:       'Onderdelen laden in bus',
         description: 'Bevestig dat de onderdelen in de bestelwagen zijn geladen.',
         seq:         1,
+        assigneeId:  leadTechnicianId,
         createdBy:   changedBy ?? 'system',
         updatedAt:   now,
       })

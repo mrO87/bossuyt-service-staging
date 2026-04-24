@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { Intervention, InterventionTechnician } from '@/types'
 import { db } from '@/lib/db'
 import {
@@ -213,16 +213,16 @@ export async function getTodayInterventions(
       asc(workOrders.plannedDate),
     )
 
-  // Unassigned reactive work orders (aangemaakt) — available for anyone to pick up
+  // Reactive work orders not yet scheduled (aangemaakt) — visible in open pool
+  // regardless of whether a technician has been pre-assigned. They stay here
+  // until planning gives them a date, at which point status becomes 'gepland'.
   const unassignedRows = await db
     .select({ workOrderId: workOrders.id })
     .from(workOrders)
-    .leftJoin(workOrderAssignments, eq(workOrderAssignments.workOrderId, workOrders.id))
     .where(
       and(
         eq(workOrders.source, 'reactive'),
         eq(workOrders.status, 'aangemaakt'),
-        isNull(workOrderAssignments.workOrderId),
       ),
     )
 
