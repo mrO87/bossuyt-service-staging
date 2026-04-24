@@ -1,3 +1,19 @@
+## v1.23 — Deploy 2026-04-24 18:52  (sha: e34d83d)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/version/route.ts
+    - lib/releases.ts
+    - scripts/bump-version.js
+    - scripts/pre-staging.sh
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 # Staging Deploy TODO
 
 ## Deploy 2026-04-24 18:43  (sha: 21b90de)
