@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
 import type { Intervention, InterventionTechnician } from '@/types'
 import { db } from '@/lib/db'
 import {
@@ -195,10 +195,9 @@ export async function getTodayInterventions(
 ): Promise<{ planned: Intervention[]; open: Intervention[] }> {
   const { start, end } = getDayBounds(date)
 
+  // Assigned work orders for this technician today
   const workOrderIds = await db
-    .select({
-      workOrderId: workOrderAssignments.workOrderId,
-    })
+    .select({ workOrderId: workOrderAssignments.workOrderId })
     .from(workOrderAssignments)
     .innerJoin(workOrders, eq(workOrderAssignments.workOrderId, workOrders.id))
     .where(
@@ -214,15 +213,31 @@ export async function getTodayInterventions(
       asc(workOrders.plannedDate),
     )
 
-  const ids = [...new Set(workOrderIds.map(row => row.workOrderId))]
-  const interventions = await fetchInterventionRows(ids)
+  // Unassigned reactive work orders (aangemaakt) — available for anyone to pick up
+  const unassignedRows = await db
+    .select({ workOrderId: workOrders.id })
+    .from(workOrders)
+    .leftJoin(workOrderAssignments, eq(workOrderAssignments.workOrderId, workOrders.id))
+    .where(
+      and(
+        eq(workOrders.source, 'reactive'),
+        eq(workOrders.status, 'aangemaakt'),
+        isNull(workOrderAssignments.workOrderId),
+      ),
+    )
+
+  const assignedIds   = [...new Set(workOrderIds.map(row => row.workOrderId))]
+  const unassignedIds = unassignedRows.map(row => row.workOrderId)
+  const allIds        = [...new Set([...assignedIds, ...unassignedIds])]
+
+  const interventions = await fetchInterventionRows(allIds)
 
   const planned = sortPlanned(
-    interventions.filter(intervention => intervention.source === 'planned'),
+    interventions.filter(i => assignedIds.includes(i.id) && i.source === 'planned'),
   ).slice(0, MAX_PLANNED_ITEMS)
 
   const open = interventions
-    .filter(intervention => intervention.source === 'reactive')
+    .filter(i => i.source === 'reactive')
     .sort((a, b) => Number(b.isUrgent) - Number(a.isUrgent))
     .slice(0, MAX_OPEN_ITEMS)
 

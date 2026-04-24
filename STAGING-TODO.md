@@ -1,3 +1,17 @@
+## v1.24 — Deploy 2026-04-24 19:23  (sha: 5ef37f2)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - lib/releases.ts
+    - scripts/bump-version.js
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.24 — Deploy 2026-04-24 19:14  (sha: 11e1f9a)
 
 ### Changenotes invullen — lib/releases.ts
