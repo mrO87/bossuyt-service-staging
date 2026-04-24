@@ -15,6 +15,18 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.23',
+    date: '24 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'TODO — invullen na deploy',
+        body: 'TODO — beschrijving invullen.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.22',
     date: '23 april 2026',
     changes: [
