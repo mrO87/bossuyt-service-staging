@@ -71,6 +71,7 @@ function statusClass(status: InterventionStatus): string {
 }
 function statusLabel(status: InterventionStatus): string {
   switch (status) {
+    case 'aangemaakt':       return 'Aangemaakt'
     case 'gepland':          return 'Gepland'
     case 'onderweg':         return 'Onderweg'
     case 'bezig':            return 'Bezig'

@@ -1,4 +1,5 @@
 export type InterventionStatus =
+  | 'aangemaakt'
   | 'gepland'
   | 'onderweg'
   | 'bezig'
@@ -228,6 +229,7 @@ export type DbTaskStatus =
 export type DbTaskType =
   | 'order_part'
   | 'plan_revisit'
+  | 'load_parts'
   | 'contact_customer'
   | 'internal_note'
   | 'quality_check'

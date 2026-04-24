@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { tasks, workOrderEvents, workOrderLinks, workOrders } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import type { PdfPart } from '@/lib/pdf'
+import type { DbTaskType, TaskRole } from '@/types'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -53,14 +54,14 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const linkId = crypto.randomUUID()
 
     await withAudit(changedBy, async (tx) => {
-      // Create the follow-up work order (office will set the real plannedDate)
+      // Create the follow-up work order — not yet scheduled by planning
       await tx.insert(workOrders).values({
         id:          newId,
         customerId:  original.customerId,
         siteId:      original.siteId,
         deviceId:    original.deviceId,
         plannedDate: new Date(), // placeholder — office reschedules via planning
-        status:      'gepland',
+        status:      'aangemaakt',
         type:        original.type,
         source:      'reactive',
         description: `Opvolgbon — ${original.description ?? ''}`.trim(),
@@ -102,6 +103,38 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
           fromDescription: original.description,
           partCount:       prefillParts.length,
         },
+      })
+
+      const now = new Date()
+
+      // Task for technician: load the parts into the van (non-blocking)
+      const loadTaskId = crypto.randomUUID()
+      await tx.insert(tasks).values({
+        id:          loadTaskId,
+        workOrderId: newId,
+        type:        'load_parts' as DbTaskType,
+        role:        'technician' as TaskRole,
+        status:      'ready',
+        title:       'Onderdelen laden in bus',
+        description: 'Bevestig dat de onderdelen in de bestelwagen zijn geladen.',
+        seq:         1,
+        createdBy:   changedBy ?? 'system',
+        updatedAt:   now,
+      })
+
+      // Task for office: schedule the follow-up work order
+      const planTaskId = crypto.randomUUID()
+      await tx.insert(tasks).values({
+        id:          planTaskId,
+        workOrderId: newId,
+        type:        'plan_revisit' as DbTaskType,
+        role:        'office' as TaskRole,
+        status:      'ready',
+        title:       'Opvolgbon inplannen',
+        description: 'Plan deze opvolgbon in bij de juiste technieker.',
+        seq:         2,
+        createdBy:   changedBy ?? 'system',
+        updatedAt:   now,
       })
     })
 
