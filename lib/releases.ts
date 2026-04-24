@@ -20,8 +20,24 @@ export const RELEASES: ReleaseEntry[] = [
     changes: [
       {
         label: 'Nieuw',
-        title: 'TODO — invullen na deploy',
-        body: 'TODO — beschrijving invullen.',
+        title: 'Taak "onderdelen laden in bus" bij opvolgbon',
+        body:
+          'Wanneer een opvolgbon aangemaakt wordt, krijgt de werkbon automatisch twee taken: ' +
+          '"Onderdelen laden in bus" voor de technieker (bevestigt dat de onderdelen in de bestelwagen zitten) ' +
+          'en "Opvolgbon inplannen" voor de planning. ' +
+          'De laak-taak wordt direct gekoppeld aan de lead-technieker van de originele werkbon. ' +
+          'Als de planning een andere technieker toewijst via het nieuwe toewijsscherm, ' +
+          'schuift de taak automatisch mee naar die persoon.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Werkbon toewijzen zonder datum — blijft zichtbaar in open pool',
+        body:
+          'De planning kan een technieker koppelen aan een opvolgbon nog vóór er een datum vastligt. ' +
+          'Zolang er geen geplande datum is, blijft de werkbon zichtbaar in de open pool: ' +
+          'elke technieker (ook de toegewezen persoon) kan ze oppikken zodra hij/zij tijd heeft. ' +
+          'Pas wanneer de planning een concrete datum koppelt, verdwijnt de bon uit de open pool ' +
+          'en verschijnt ze in de dagplanning van de betrokken technieker.',
       },
     ],
   },
@@ -31,9 +47,13 @@ export const RELEASES: ReleaseEntry[] = [
     date: '24 april 2026',
     changes: [
       {
-        label: 'Nieuw',
-        title: 'TODO — invullen na deploy',
-        body: 'TODO — beschrijving invullen.',
+        label: 'Fix',
+        title: 'Open pool toont nieuwe opvolgbonnen direct na aanmaken',
+        body:
+          'De app synchroniseerde vroeger slechts één keer per dag, waardoor nieuw aangemaakte opvolgbonnen ' +
+          'pas de volgende ochtend verschenen in de open pool. ' +
+          'De cache vervalt nu elke 5 minuten, zodat een technieker een nieuwe bon ziet ' +
+          'zonder de app opnieuw op te starten.',
       },
     ],
   },
@@ -43,9 +63,13 @@ export const RELEASES: ReleaseEntry[] = [
     date: '24 april 2026',
     changes: [
       {
-        label: 'Nieuw',
-        title: 'TODO — invullen na deploy',
-        body: 'TODO — beschrijving invullen.',
+        label: 'Fix',
+        title: 'Opvolgbonnen verschijnen nu correct in de open pool',
+        body:
+          'Opvolgbonnen met status "aangemaakt" werden niet getoond in de open pool omdat de query ' +
+          'alleen werkbonnen zonder toewijzing ophaalde. ' +
+          'De open pool toont nu alle werkbonnen met status "aangemaakt" (ongeacht toewijzing) — ' +
+          'de status is de enige bepalende factor.',
       },
     ],
   },
@@ -55,9 +79,13 @@ export const RELEASES: ReleaseEntry[] = [
     date: '24 april 2026',
     changes: [
       {
-        label: 'Nieuw',
-        title: 'TODO — invullen na deploy',
-        body: 'TODO — beschrijving invullen.',
+        label: 'Fix',
+        title: 'Versienummer badge werd niet correct opgehoogd',
+        body:
+          'Het script dat het versienummer ophoogde las per ongeluk het eerste `version:`-veld in het bestand ' +
+          'in plaats van de `CURRENT_RELEASE_VERSION`-constante. ' +
+          'Hierdoor bleef het badge na meerdere deploys hetzelfde getal tonen. ' +
+          'Het script leest nu de correcte constante en increment altijd het actieve versienummer.',
       },
     ],
   },
@@ -68,8 +96,13 @@ export const RELEASES: ReleaseEntry[] = [
     changes: [
       {
         label: 'Nieuw',
-        title: 'TODO — invullen na deploy',
-        body: 'TODO — beschrijving invullen.',
+        title: 'Automatische versienummering bij elke staging-deploy',
+        body:
+          '`make staging-up` verhoogt nu automatisch het versienummer, ' +
+          'commit alle gewijzigde bestanden en plaatst een TO-DO-blok in `STAGING-TODO.md` ' +
+          'met de gewijzigde bestanden, een herinnering om de changenotes in te vullen en een reminder ' +
+          'om nieuwe lessen toe te voegen. ' +
+          'Zo is er altijd een traceerbare link tussen een deploy en de bijhorende wijzigingen.',
       },
     ],
   },

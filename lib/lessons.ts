@@ -862,6 +862,90 @@ export const COURSE_MODULES: CourseModule[] = [
     ],
   },
 
+  {
+    id: 'open-pool-sync-and-assign',
+    part: 2,
+    eyebrow: 'Module 17',
+    title: 'Open pool, sync-strategie en techniekertoewijzing',
+    duration: '20 min',
+    summary:
+      'Je leert hoe de open pool bepaalt welke werkbonnen zichtbaar zijn voor techniekers, ' +
+      'waarom cache-invalidatie kritisch is voor real-time zichtbaarheid, ' +
+      'en hoe een assign-route meerdere database-tabellen synchroon houdt via een upsert-patroon.',
+    whyItMatters:
+      'Een werkbon die onzichtbaar blijft in de open pool lost zichzelf nooit op. ' +
+      'Dit module legt uit hoe status, cache-TTL en taaktoewijzing samenwerken ' +
+      'zodat de juiste technieker op het juiste moment de juiste bon ziet.',
+    lessonCount: 4,
+    focusFiles: [
+      'lib/server/interventions.ts',
+      'lib/sync.ts',
+      'app/api/work-orders/[id]/assign/route.ts',
+      'app/api/work-orders/[id]/follow-up/route.ts',
+    ],
+    lessons: [
+      {
+        title: 'Status als enige bron van waarheid voor de open pool',
+        summary:
+          'De open pool toont alle werkbonnen met status `aangemaakt` en source `reactive` — ' +
+          'ongeacht of er al een technieker aan gekoppeld is. ' +
+          'Vroeger werd ook gefilterd op "geen toewijzing", maar dat zorgde ervoor dat ' +
+          'werkbonnen met een pre-toegewezen technieker onzichtbaar werden. ' +
+          'De les: gebruik één veld (status) als de bron van waarheid voor de zichtbaarheid, ' +
+          'niet een combinatie van velden die elkaar kunnen tegenspreken.',
+        outcomes: [
+          'Je begrijpt waarom status "aangemaakt" vs "gepland" de open pool stuurt.',
+          'Je weet wat er misgaat als je meerdere onafhankelijke velden combineert als zichtbaarheidsfilter.',
+        ],
+      },
+      {
+        title: 'Cache-TTL: wanneer is "gecached vandaag" goed genoeg?',
+        summary:
+          '`shouldSync()` controleerde vroeger alleen of de datum en technieker klopten. ' +
+          'Eenmaal gecached voor vandaag, werden nieuwe werkbonnen pas de volgende dag zichtbaar. ' +
+          'Door een TTL van 5 minuten toe te voegen (`SYNC_TTL_MS`) verschijnen nieuwe opvolgbonnen ' +
+          'snel zonder dat de technieker de app hoeft te herstarten. ' +
+          'De tradeoff: meer server-requests, maar betere real-time zichtbaarheid.',
+        outcomes: [
+          'Je kan uitleggen wat een TTL (time-to-live) is en wanneer je er een gebruikt.',
+          'Je begrijpt het verschil tussen "elke dag opnieuw" en "elke N minuten opnieuw".',
+        ],
+      },
+      {
+        title: 'Upsert: insert of update in één query',
+        summary:
+          '`workOrderAssignments` heeft een samengestelde primaire sleutel `(workOrderId, technicianId)`. ' +
+          'Als je een technieker opnieuw toewijst, wil je de bestaande rij bijwerken — niet een nieuwe aanmaken. ' +
+          'Drizzle biedt `.onConflictDoUpdate({ target: [...], set: {...} })` voor precies dit geval. ' +
+          'De query probeert een insert; bij conflict (de rij bestaat al) update hij in plaats van te falen.',
+        outcomes: [
+          'Je kan een upsert schrijven in Drizzle ORM met `onConflictDoUpdate`.',
+          'Je weet wat een samengestelde primaire sleutel is en waarom die hier zinvol is.',
+        ],
+      },
+      {
+        title: 'Taken synchroon houden met een toewijzingswijziging',
+        summary:
+          'Wanneer de planning een andere lead-technieker kiest, moet de `load_parts`-taak ' +
+          '(`assigneeId`) meteen meebewegen — anders ziet de verkeerde persoon de laak-herinnering. ' +
+          'De assign-route doet dit in één transactie: (1) oude lead-vlag wegnemen, ' +
+          '(2) nieuwe toewijzing upserten, (3) werkbonstatus updaten indien datum gegeven, ' +
+          '(4) alle `load_parts`-taken voor deze werkbon bijwerken. ' +
+          'Alles of niets — `withAudit()` zorgt voor de transactie-grens.',
+        outcomes: [
+          'Je begrijpt waarom taakoverdracht en toewijzing in dezelfde transactie moeten zitten.',
+          'Je weet hoe je met Drizzle meerdere tabellen in één `withAudit`-callback bijwerkt.',
+        ],
+      },
+    ],
+    exercises: [
+      'Verander `SYNC_TTL_MS` tijdelijk naar 10 seconden, maak een nieuwe opvolgbon aan en kijk hoe snel die verschijnt in de open pool.',
+      'Roep `POST /api/work-orders/[id]/assign` aan zonder `plannedDate` en controleer in de database dat de status `aangemaakt` blijft.',
+      'Roep diezelfde route opnieuw aan met een `plannedDate` en controleer dat de status naar `gepland` springt.',
+      'Bekijk de `work_order_events`-tabel na een toewijzing: welk event-type staat er en wat zit er in de `payload`?',
+    ],
+  },
+
 ]
 
 // ──────────────────────────────────────────────────────────────
