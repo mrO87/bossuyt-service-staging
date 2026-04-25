@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
           return ao - bo
         })
 
-      return NextResponse.json({ planned, open: [] })
+      return NextResponse.json({ planned, open: data.open })
     }
 
     return NextResponse.json(data)

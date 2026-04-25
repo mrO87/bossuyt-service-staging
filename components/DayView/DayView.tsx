@@ -116,6 +116,7 @@ export default function DayView() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showOpenPool, setShowOpenPool] = useState(true)
 
   function navigate(delta: number) {
     setSelectedDate(d => {
@@ -263,13 +264,38 @@ export default function DayView() {
           <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
             Open pool
           </h2>
-          <span className="text-[11px] text-ink-soft">{openPool.length} extra beschikbaar</span>
+          <button
+            onClick={() => setShowOpenPool(v => !v)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stroke text-ink-soft text-[11px] font-semibold active:opacity-70 transition-opacity"
+          >
+            {showOpenPool ? (
+              <>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+                Verbergen
+              </>
+            ) : (
+              <>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                {openPool.length} tonen
+              </>
+            )}
+          </button>
         </div>
+
+        {showOpenPool && (
         <p className="text-xs text-ink-soft mb-3">
           Flexibele jobs — pak er eentje op als je tijd over hebt. Ze
           worden niet in de route meegerekend tot je ze toewijst.
         </p>
+        )}
 
+        {showOpenPool && (
         <div className="flex flex-col gap-3">
           {openPool.map(intervention => (
             <div
@@ -305,8 +331,9 @@ export default function DayView() {
             </div>
           ))}
         </div>
+        )}
 
-        {openPool.length === 0 && (
+        {showOpenPool && openPool.length === 0 && (
           <p className="text-center mt-6 text-ink-soft text-sm">
             Geen jobs in de pool
           </p>
