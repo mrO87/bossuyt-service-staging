@@ -159,58 +159,47 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   )
 }
 
-function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
-  const parts = (task.payload?.parts ?? []) as PdfPart[]
-  const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
-  const [checked, setChecked] = useState<Set<string>>(new Set())
-
-  function toggle(id: string) {
-    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  }
+// Read-only view of the warehouse picking task — technician sees status only.
+// The warehouse worker completes this task from /magazijn, not from the werkbon.
+function PickPartsCard({ task }: { task: DbTask }) {
+  const parts  = (task.payload?.parts ?? []) as PdfPart[]
+  const isDone = task.status === 'done' || task.status === 'skipped'
+  const isActive = task.status === 'ready' || task.status === 'in_progress'
+  const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className="rounded-xl border border-stroke bg-surface p-3">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-xs font-bold text-white">MG</div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-ink">Onderdelen klaarzetten</p>
-          <p className="mt-0.5 text-xs text-ink-soft">
-            Magazijn{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}{isDone && ' • ✓ Klaar'}
-          </p>
-
-          {parts.length > 0 && (
-            <div className="mt-2 rounded-lg border border-stroke bg-white overflow-hidden">
-              {parts.map(part => (
-                <label key={part.id}
-                  className="flex items-center gap-3 px-3 py-2.5 border-b border-stroke/40 last:border-b-0 cursor-pointer">
-                  <input type="checkbox"
-                    checked={checked.has(part.id) || isDone}
-                    onChange={() => !isDone && toggle(part.id)}
-                    disabled={isDone}
-                    className="h-5 w-5 rounded accent-brand-orange" />
-                  <div className="flex-1 min-w-0">
-                    <span className={`text-sm ${checked.has(part.id) || isDone ? 'line-through text-ink-soft' : 'text-ink'}`}>
-                      {part.description}
-                    </span>
-                    {part.code && <span className="ml-2 text-xs text-ink-faint">#{part.code}</span>}
-                  </div>
-                  <span className="text-xs text-ink-soft shrink-0">×{part.quantity}</span>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {!isDone && (
-            <div className="mt-2 flex gap-3 text-xs font-medium">
-              <button type="button"
-                onClick={() => { setChecked(new Set(parts.map(p => p.id))); onComplete(task) }}
-                className="text-brand-green">
-                ✅ {parts.length > 0 ? 'Alles klaargelegd' : 'Gereed'}
-              </button>
-            </div>
-          )}
+    <div className="rounded-xl border border-stroke overflow-hidden">
+      <button type="button" onClick={() => parts.length > 0 && setExpanded(v => !v)}
+        className="w-full flex items-center gap-3 p-3 text-left bg-surface">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isDone ? 'bg-brand-green' : isActive ? 'bg-brand-blue' : 'bg-ink-faint'}`}>
+          MG
         </div>
-      </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-ink">Onderdelen klaarzetten</p>
+          <p className="text-xs text-ink-soft">
+            Magazijn{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}
+            {isDone && ' • ✓ Klaar'}
+            {isActive && ' • Bezig'}
+          </p>
+        </div>
+        {parts.length > 0 && (
+          <span className="text-ink-faint text-sm shrink-0">{expanded ? '▲' : '▼'}</span>
+        )}
+      </button>
+
+      {expanded && parts.length > 0 && (
+        <div className="bg-white border-t border-stroke">
+          {parts.map(part => (
+            <div key={part.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-stroke/40 last:border-b-0">
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-ink">{part.description}</span>
+                {part.code && <span className="ml-2 text-xs text-ink-faint">#{part.code}</span>}
+              </div>
+              <span className="text-xs text-ink-soft shrink-0">×{part.quantity}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -394,7 +383,7 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
 
         {workflowTasks.map(task => {
           if (task.type === 'pick_parts') {
-            return <PickPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
+            return <PickPartsCard key={task.id} task={task} />
           }
           if (task.type === 'load_parts') {
             return <LoadPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
