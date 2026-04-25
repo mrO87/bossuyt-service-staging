@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { PdfPart } from '@/lib/pdf'
 
 interface Props {
   deviceId: string
@@ -31,7 +32,7 @@ interface HistoryEntry {
   workStart:   string | null
   workEnd:     string | null
   notes:       string | null   // technician work description
-  parts:       Array<{ code: string; description: string; quantity: number }> | null
+  parts:       PdfPart[] | null
   pdfPath:     string | null
   completedAt: string | null
   changedBy:   string | null

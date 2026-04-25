@@ -15,13 +15,82 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
-    version: 'v1.28',
+    version: 'v1.29',
     date: '25 april 2026',
     changes: [
       {
         label: 'Nieuw',
         title: 'TODO — invullen na deploy',
         body: 'TODO — beschrijving invullen.',
+      },
+    ],
+  },
+
+  {
+    version: 'v1.28',
+    date: '25 april 2026',
+    changes: [
+      {
+        label: 'Verbeterd',
+        title: 'WerkbonForm opgesplitst in kleinere componenten',
+        body:
+          'Het centrale werkbonformulier was uitgegroeid tot bijna 1.500 regels code — te groot om nog overzichtelijk te onderhouden. ' +
+          'Het is nu opgesplitst in vier afzonderlijke bestanden: Section (gedeelde wrapper), PartsSection (onderdelen), ' +
+          'PhotoUploadSection (foto\'s) en TaskManager (activiteiten). ' +
+          'De hoofdcomponent beheert enkel nog de globale formulierstatus. Werking verandert niet.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Planningsvolgorde opslaan in een database-transactie',
+        body:
+          'Wanneer een technieker zijn dagroute herschikt, werden meerdere database-updates los na elkaar uitgevoerd. ' +
+          'Als er eentje mislukte, bleef de database in een inconsistente staat. ' +
+          'Alle updates (volgorde per werkbon + planningsversie ophogen) zitten nu in één transactie: ' +
+          'slaagt één update niet, dan worden ze allemaal teruggedraaid.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Onderdelen en opvolgacties opgeslagen als JSONB',
+        body:
+          'De velden voor onderdelen en opvolgacties werden als tekststring in de database bewaard, ' +
+          'ook al zijn het eigenlijk JSON-objecten. Ze zijn nu omgezet naar het echte JSONB-type in PostgreSQL. ' +
+          'Voordeel: PostgreSQL begrijpt de structuur, en de app hoeft niet meer handmatig te parsen via JSON.parse.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Sync stopt niet meer bij een mislukte foto',
+        body:
+          'Als het uploaden of verwijderen van een foto mislukte tijdens de achtergrond-sync, ' +
+          'stopte de volledige sync voor die werkbon. ' +
+          'De sync gaat nu gewoon verder met de volgende foto. ' +
+          'Andere kritische operaties (zoals volgorde-updates) stoppen nog wel bij een fout, ' +
+          'omdat de volgorde daar wél belangrijk is.',
+      },
+      {
+        label: 'Fix',
+        title: 'Werkbon API crasht niet meer bij ongeldige JSON',
+        body:
+          'De API die een werkbon afslaat parste de onderdelen en opvolgacties direct via JSON.parse, ' +
+          'zonder foutafhandeling. Als de offline-sync een beschadigde waarde doorstuurde, crashte het endpoint met een 500-fout ' +
+          'en kon de technieker zijn werkbon niet opslaan. ' +
+          'JSON.parse zit nu in een try-catch: bij ongeldige JSON wordt null opgeslagen in plaats van te crashen.',
+      },
+      {
+        label: 'Fix',
+        title: 'TypeScript herkent nu de structuur van JSONB-velden',
+        body:
+          'Na de JSONB-migratie behandelde TypeScript de vier nieuwe kolommen als het type unknown, ' +
+          'waardoor je properties niet meer rechtstreeks kon benaderen zonder extra casting. ' +
+          'Alle JSONB-kolommen zijn nu voorzien van een .$type<>()-override in het Drizzle-schema, ' +
+          'zodat TypeScript weet dat het PdfPart[]- of PdfFollowUp[]-objecten zijn.',
+      },
+      {
+        label: 'Fix',
+        title: 'Planningsvolgorde update werkt correct bij lege dagroute',
+        body:
+          'Als een technieker een lege dagplanning had en toch een volgorde-update stuurde, ' +
+          'genereerde de query inArray(workOrders.id, []) — een lege IN-lijst die ongeldige SQL oplevert in sommige versies van Drizzle. ' +
+          'De update wordt nu overgeslagen als de lijst leeg is.',
       },
     ],
   },
@@ -606,7 +675,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.28'
+const CURRENT_RELEASE_VERSION = 'v1.29'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

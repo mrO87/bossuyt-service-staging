@@ -244,6 +244,33 @@ export async function getTodayInterventions(
   return { planned, open }
 }
 
+export async function getMonthInterventionDays(
+  technicianId: string,
+  year: number,
+  month: number,
+): Promise<string[]> {
+  const start = new Date(year, month - 1, 1)
+  const end = new Date(year, month, 1)
+
+  const rows = await db
+    .select({ plannedDate: workOrders.plannedDate })
+    .from(workOrderAssignments)
+    .innerJoin(workOrders, eq(workOrderAssignments.workOrderId, workOrders.id))
+    .where(
+      and(
+        eq(workOrderAssignments.technicianId, technicianId),
+        gte(workOrders.plannedDate, start),
+        lt(workOrders.plannedDate, end),
+      ),
+    )
+
+  const days = new Set(rows.map(row => {
+    const d = row.plannedDate
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }))
+  return [...days].sort()
+}
+
 export async function getInterventionById(id: string): Promise<Intervention | null> {
   const [intervention] = await fetchInterventionRows([id])
   return intervention ?? null
@@ -325,10 +352,12 @@ export async function saveTechnicianPlanningOrder(input: {
       ),
     )
 
-    await tx
-      .update(workOrders)
-      .set({ planningVersion: nextPlanningVersion })
-      .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+    if (input.orderedWorkOrderIds.length > 0) {
+      await tx
+        .update(workOrders)
+        .set({ planningVersion: nextPlanningVersion })
+        .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+    }
   })
 
   const updated = await getTodayInterventions(input.technicianId, input.date)

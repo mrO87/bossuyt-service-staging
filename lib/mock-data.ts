@@ -513,6 +513,13 @@ export const devices: Device[] = [
 // INTERVENTIONS (pre-assigned by admin — demo data)
 // ============================================================
 
+function thisMonth(day: number): string {
+  const d = new Date()
+  d.setDate(day)
+  d.setHours(8, 0, 0, 0)
+  return d.toISOString()
+}
+
 export const interventions: Intervention[] = [
   {
     id: 'i1',
@@ -600,7 +607,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd2',
     deviceBrand: 'Rational',
     deviceModel: 'SelfCooking Center 61',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(22),
     status: 'gepland',
     type: 'warm',
     description: 'Ontkalking stoomgenerator',
@@ -624,7 +631,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd8',
     deviceBrand: 'Henny Penny',
     deviceModel: 'OFG-322',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(23),
     status: 'gepland',
     type: 'warm',
     description: 'Friteuse schakelt uit na 10 min — thermokoppel defect?',
@@ -648,7 +655,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd9',
     deviceBrand: 'Rational',
     deviceModel: 'iCombi Classic 6-1/1',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(23),
     status: 'gepland',
     type: 'preventief',
     description: 'Halfjaarlijks onderhoud combisteamer',
@@ -697,7 +704,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd4',
     deviceBrand: 'Meiko',
     deviceModel: 'FV 130.2',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(22),
     status: 'gepland',
     type: 'warm',
     description: 'Pomp maakt geluid — check dringend',
@@ -1011,7 +1018,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd10',
     deviceBrand: 'Winterhalter',
     deviceModel: 'PT-L',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(24),
     status: 'gepland',
     type: 'warm',
     description: 'Pomp lekt — water op vloer na spoelcyclus (herhaald probleem)',
@@ -1087,7 +1094,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd16',
     deviceBrand: 'Electrolux',
     deviceModel: 'SkyLine Pro 20GN',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(28),
     status: 'gepland',
     type: 'warm',
     description: 'Deur sluit niet correct — stoom ontsnapt tijdens cyclus',
@@ -1111,7 +1118,7 @@ export const interventions: Intervention[] = [
     deviceId: 'd25',
     deviceBrand: 'Rational',
     deviceModel: 'iCombi Pro 6-1/1',
-    plannedDate: new Date().toISOString(),
+    plannedDate: thisMonth(29),
     status: 'gepland',
     type: 'warm',
     description: 'Stoomgenerator uitgevallen — volledig gas, geen stoom meer',

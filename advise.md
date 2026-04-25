@@ -38,3 +38,57 @@ De huidige sync-logica stopt bij de eerste fout (`break` in de loop).
 
 ## 4. Conclusie
 De basis van dit project is zeer solide. De offline-capaciteiten en de moderne stack maken het een toekomstbestendige applicatie. Door de bovenstaande optimalisaties door te voeren, zal de code gemakkelijker te onderhouden zijn naarmate het project verder groeit.
+
+## 5. Kritische Review (Post-Migratie JSONB)
+
+Na de implementatie van de JSONB-migratie en de component-refactoring op zaterdag 25 april, zijn de volgende risico's en verificatiepunten geïdentificeerd:
+
+### 🚩 Risico Lijst
+
+1. **[CRITIEK] Ongecontroleerde `JSON.parse` Uitzonderingen:**
+   - **Locatie:** `app/api/work-orders/[id]/complete/route.ts`
+   - **Risico:** `JSON.parse` wordt direct uitgevoerd op FormData waarden zonder `try-catch`. Als de client ongeldige JSON stuurt (bijv. een lege string), crasht het volledige API-endpoint met een 500 error.
+   - **Impact:** Techniekers kunnen mogelijk geen werkbonnen opslaan als de offline-sync wachtrij corrupt is geraakt.
+
+2. **[HOOG] Verminderde Type Safety in Drizzle Schema:**
+   - **Locatie:** `lib/db/schema.ts`
+   - **Risico:** De nieuwe `jsonb` kolommen missen `$type<...>()` overrides. Drizzle behandelt deze nu als `unknown` of `any`.
+   - **Impact:** Verhoogd risico op runtime errors bij het benaderen van geneste properties zonder expliciete casting.
+
+3. **[MEDIUM] `inArray` Lege Array Risico:**
+   - **Locatie:** `lib/server/interventions.ts`
+   - **Risico:** Als `orderedWorkOrderIds` een lege array is, kan `inArray` afhankelijk van de Drizzle-versie ongeldige SQL genereren.
+
+4. **[MEDIUM] Incomplete Component Types:**
+   - **Locatie:** `components/DevicePanel/index.tsx`
+   - **Risico:** De `HistoryEntry` interface in dit bestand is handmatig bijgewerkt maar mist nog velden zoals `id`, `toOrder` en `urgent` die wel in `PdfPart` zitten.
+
+### 🛠️ Verificatie Commando's & Testen
+
+Voer de volgende stappen uit om de stabiliteit te garanderen:
+
+**1. Type Integrity Check**
+Controleer of de schema-wijzigingen geen verborgen type-fouten in de server-logica hebben veroorzaakt:
+```bash
+npx tsc --noEmit
+```
+
+**2. Database Migration Preview**
+Genereer een preview van de SQL die Drizzle naar Postgres wil sturen. Controleer specifiek op de `USING column::jsonb` casts:
+```bash
+npx drizzle-kit generate
+```
+
+**3. Automated Schema & API Validation**
+Voer de bestaande testen uit:
+```bash
+npx vitest tests/schema.test.ts tests/api.tasks.test.ts
+```
+
+**4. Handmatige "Crash Test" voor JSON Parsing**
+Gebruik `curl` om te verifiëren of de API veilig omgaat met malformed data:
+```bash
+curl -X POST http://localhost:3000/api/work-orders/test-id/complete \
+  -F "changedBy=test" \
+  -F "completionParts=GEEN_JSON"
+```

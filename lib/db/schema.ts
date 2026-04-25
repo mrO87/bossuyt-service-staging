@@ -24,6 +24,7 @@ import type {
   User,
   WorkOrderLinkType,
 } from '@/types'
+import type { PdfFollowUp, PdfPart } from '@/lib/pdf'
 
 export const technicians = pgTable('technicians', {
   id: text('id').primaryKey(),
@@ -107,11 +108,11 @@ export const workOrders = pgTable('work_orders', {
   workStart:         timestamp('work_start', { withTimezone: true }),
   workEnd:           timestamp('work_end',   { withTimezone: true }),
   completionNotes:   text('completion_notes'),
-  completionParts:   jsonb('completion_parts'),   // PdfPart[]
+  completionParts:   jsonb('completion_parts').$type<PdfPart[]>(),
   completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
   completedAt:       timestamp('completed_at', { withTimezone: true }),
   externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
-  prefillParts:      jsonb('prefill_parts'),  // PdfPart[] pre-filled for follow-up werkbonnen
+  prefillParts:      jsonb('prefill_parts').$type<PdfPart[]>(),
 })
 
 export const workOrderAssignments = pgTable(
@@ -215,8 +216,8 @@ export const werkbonnen = pgTable('werkbonnen', {
   workStart:   timestamp('work_start',  { withTimezone: true }),
   workEnd:     timestamp('work_end',    { withTimezone: true }),
   notes:       text('notes'),                              // omschrijving werkzaamheden
-  parts:       jsonb('parts'),                             // PdfPart[]
-  followUp:    jsonb('follow_up'),                         // PdfFollowUp[]
+  parts:       jsonb('parts').$type<PdfPart[]>(),
+  followUp:    jsonb('follow_up').$type<PdfFollowUp[]>(),
   pdfPath:     text('pdf_path'),                           // /api/uploads/werkbonnen/{id}.pdf
   completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
   changedBy:   text('changed_by'),

@@ -12,6 +12,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
+import CalendarSheet from '@/components/CalendarSheet'
 import { useSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
 import type { InterventionStatus, InterventionType } from '@/types'
@@ -102,10 +103,31 @@ function Badge({ className, label }: { className: string; label: string }) {
 
 // ---------- main view ----------
 
+function toLocalDateStr(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export default function DayView() {
   const router = useRouter()
   const today = new Date()
+  const [selectedDate, setSelectedDate] = useState(today)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  function navigate(delta: number) {
+    setSelectedDate(d => {
+      const next = new Date(d)
+      next.setDate(next.getDate() + delta)
+      return next
+    })
+  }
+
+  function isSelectedToday(): boolean {
+    return toLocalDateStr(selectedDate) === toLocalDateStr(today)
+  }
   const { subscribed, loading, error, subscribe, sendTestNotification } = usePushNotifications()
   const { currentUser, getOpenTaskCountForUser } = useTasks()
   const { settings } = useSettings()
@@ -116,7 +138,7 @@ export default function DayView() {
     total,
     error: dayDataError,
     notice,
-  } = useDayData(currentUser.id)
+  } = useDayData(currentUser.id, selectedDate)
   const openTaskCount = getOpenTaskCountForUser(currentUser.id)
 
   return (
@@ -132,7 +154,9 @@ export default function DayView() {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-xs text-ink-soft">Vandaag</p>
+            <p className="text-xs text-ink-soft">
+              {isSelectedToday() ? 'Vandaag' : new Intl.DateTimeFormat('nl-BE', { day: '2-digit', month: 'short' }).format(selectedDate)}
+            </p>
             <p className="text-sm font-medium text-white">{done}/{total} afgewerkt</p>
           </div>
           <button
@@ -151,9 +175,38 @@ export default function DayView() {
         </div>
       </header>
 
-      {/* Date bar */}
-      <div className="bg-brand-dark border-b border-brand-mid px-4 pb-3">
-        <p className="text-sm capitalize text-ink-soft">{formatDate(today)}</p>
+      {/* Date bar with navigation */}
+      <div className="bg-brand-dark border-b border-brand-mid px-2 pb-2">
+        <div className="flex items-center">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 flex items-center justify-center rounded-full active:bg-brand-mid/40 transition-colors text-ink-soft"
+            aria-label="Vorige dag"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setCalendarOpen(true)}
+            className="flex-1 flex flex-col items-center py-1 active:opacity-70 transition-opacity"
+            aria-label="Kalender openen"
+          >
+            <p className="text-sm capitalize text-ink-soft">{formatDate(selectedDate)}</p>
+            {isSelectedToday() && (
+              <span className="text-[10px] font-semibold text-brand-orange leading-none mt-0.5">Vandaag</span>
+            )}
+          </button>
+          <button
+            onClick={() => navigate(1)}
+            className="w-10 h-10 flex items-center justify-center rounded-full active:bg-brand-mid/40 transition-colors text-ink-soft"
+            aria-label="Volgende dag"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Push notification bar */}
@@ -261,6 +314,13 @@ export default function DayView() {
       </main>
 
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <CalendarSheet
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        selected={selectedDate}
+        onSelect={(date) => { setSelectedDate(date); setCalendarOpen(false) }}
+        technicianId={currentUser.id}
+      />
     </div>
   )
 }

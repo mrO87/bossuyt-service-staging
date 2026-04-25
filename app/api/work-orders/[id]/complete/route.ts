@@ -4,6 +4,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { workOrders, werkbonnen } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
+import type { PdfFollowUp, PdfPart } from '@/lib/pdf'
 
 export async function POST(
   req: NextRequest,
@@ -16,8 +17,10 @@ export async function POST(
   const notes         = (formData.get('completionNotes') as string) || null
   const partsRaw      = (formData.get('completionParts') as string) || null
   const followUpRaw   = (formData.get('followUp')     as string) || null
-  const parts         = partsRaw   ? JSON.parse(partsRaw)   : null
-  const followUp      = followUpRaw ? JSON.parse(followUpRaw) : null
+  let parts: PdfPart[] | null = null
+  let followUp: PdfFollowUp[] | null = null
+  try { if (partsRaw)    parts    = JSON.parse(partsRaw)    } catch { /* malformed — store null */ }
+  try { if (followUpRaw) followUp = JSON.parse(followUpRaw) } catch { /* malformed — store null */ }
   const workStartRaw  = (formData.get('workStart')    as string) || null
   const workEndRaw    = (formData.get('workEnd')      as string) || null
   const pdfFile       = formData.get('pdf') as File | null

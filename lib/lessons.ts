@@ -946,6 +946,92 @@ export const COURSE_MODULES: CourseModule[] = [
     ],
   },
 
+  {
+    id: 'defensive-coding-and-type-safety',
+    part: 2,
+    eyebrow: 'Module 18',
+    title: 'Defensive coding: JSONB, type safety en foutafhandeling',
+    duration: '22 min',
+    summary:
+      'Je leert waarom JSON opslaan als tekst een tijdbom is, hoe JSONB in PostgreSQL dat oplost, ' +
+      'hoe Drizzle met .$type<>() weet wat er in een kolom zit, ' +
+      'en hoe je API-endpoints beschermt tegen ongeldige invoer met try-catch.',
+    whyItMatters:
+      'Een API die crasht bij één ongeldige JSON-string kan een technieker in het veld volledig blokkeren. ' +
+      'Dit soort fouten komen pas boven na een migratie of een beschadigde offline-sync — niet tijdens ontwikkeling. ' +
+      'Defensive coding is het verschil tussen een app die graceful degradeert en één die volledig platgaat.',
+    lessonCount: 4,
+    focusFiles: [
+      'lib/db/schema.ts',
+      'lib/pdf.ts',
+      'app/api/work-orders/[id]/complete/route.ts',
+      'lib/server/interventions.ts',
+      'components/DevicePanel/index.tsx',
+    ],
+    lessons: [
+      {
+        title: 'JSONB vs text: waarom het type van je kolom er écht toe doet',
+        summary:
+          'Als je een JSON-object opslaat als text, weet PostgreSQL niet dat het een object is. ' +
+          'Het JSONB-type vertelt de database dat het een gestructureerde waarde is: ' +
+          'je kan erin zoeken, indexeren en het wordt automatisch gevalideerd bij schrijven. ' +
+          'Drizzle stelt het beschikbaar via de jsonb()-functie in je schema.',
+        outcomes: [
+          'Je begrijpt het verschil tussen text en jsonb in PostgreSQL.',
+          'Je weet waarom jsonb veiliger is dan handmatig JSON.stringify/parse.',
+          'Je kan een bestaand text-veld omzetten naar jsonb in een Drizzle-schema.',
+        ],
+      },
+      {
+        title: '.$type<>() in Drizzle: TypeScript weet wat er in de database zit',
+        summary:
+          'Een jsonb-kolom zonder .$type<>() is voor TypeScript van het type unknown. ' +
+          'Dat betekent dat je elke property die je eruit leest eerst moet casten — anders geeft de compiler een fout. ' +
+          'Met .$type<PdfPart[]>() vertel je Drizzle welk TypeScript-type de kolom bevat. ' +
+          'Vanaf dat moment weet de compiler exact wat je mag verwachten bij een SELECT.',
+        outcomes: [
+          'Je begrijpt waarom unknown gevaarlijker is dan het lijkt.',
+          'Je weet hoe je .$type<>() gebruikt op een jsonb-kolom in Drizzle.',
+          'Je kan een interface uit een ander bestand importeren en gebruiken als type-override.',
+        ],
+      },
+      {
+        title: "try-catch rond JSON.parse: API's die niet crashen bij slechte invoer",
+        summary:
+          'JSON.parse gooit een fout als de string geen geldige JSON is. ' +
+          'In een API-route die FormData verwerkt, kan dat komen van een beschadigde offline-sync, ' +
+          'een bug in de client, of gewoon een leeg veld dat niet null was. ' +
+          'Een try-catch vangt die fout op en slaat null op in plaats van de API te laten crashen. ' +
+          'De technieker merkt het niet eens — zijn werkbon wordt gewoon opgeslagen.',
+        outcomes: [
+          'Je weet wanneer JSON.parse kan crashen en waarom.',
+          'Je kan een veilige parse schrijven met try-catch.',
+          'Je begrijpt het verschil tussen "defensief null teruggeven" en "de fout negeren".',
+        ],
+      },
+      {
+        title: 'Edge cases in database queries: wat doet inArray([]) eigenlijk?',
+        summary:
+          "Drizzle's inArray(kolom, []) met een lege array genereert SQL als WHERE id IN () — " +
+          'wat in PostgreSQL en sommige versies van Drizzle een fout geeft. ' +
+          'Dit soort edge case treedt op wanneer een gebruiker een actie uitvoert op een lege dataset: ' +
+          'geen jobs vandaag, geen onderdelen geselecteerd. ' +
+          'De fix is simpel: controleer altijd of de array leeg is vóór je inArray aanroept.',
+        outcomes: [
+          'Je weet dat inArray niet veilig is met een lege array.',
+          'Je begrijpt waarom edge cases vaker voorkomen na een migratie of refactoring.',
+          'Je kan een length-check toevoegen als guard vóór een database-query.',
+        ],
+      },
+    ],
+    exercises: [
+      'Open lib/db/schema.ts en zoek een jsonb-kolom zonder .$type<>(). Voeg het juiste type toe en controleer of tsc --noEmit slaagt.',
+      'Stuur via curl een POST naar /api/work-orders/test/complete met completionParts=GEEN_JSON. Wat antwoordt de API? Wat staat er in de database?',
+      'Zoek in de codebase naar andere plekken waar JSON.parse gebruikt wordt. Zitten die in een try-catch?',
+      'Verander in interventions.ts de length-check tijdelijk weg en roep saveTechnicianPlanningOrder aan met een lege orderedWorkOrderIds. Wat gebeurt er?',
+    ],
+  },
+
 ]
 
 // ──────────────────────────────────────────────────────────────
