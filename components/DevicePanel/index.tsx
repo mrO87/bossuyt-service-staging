@@ -31,7 +31,7 @@ interface HistoryEntry {
   workStart:   string | null
   workEnd:     string | null
   notes:       string | null   // technician work description
-  parts:       string | null   // JSON: PdfPart[]
+  parts:       Array<{ code: string; description: string; quantity: number }> | null
   pdfPath:     string | null
   completedAt: string | null
   changedBy:   string | null
@@ -181,7 +181,7 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
       {entries.map(e => {
         const isOpen = expanded.has(e.id)
         const parts: Array<{ code: string; description: string; quantity: number }> =
-          e.parts ? (() => { try { return JSON.parse(e.parts!) } catch { return [] } })() : []
+          Array.isArray(e.parts) ? e.parts : []
 
         return (
           <div key={e.id} className="rounded-xl border border-stroke bg-surface px-3 py-3 space-y-2">

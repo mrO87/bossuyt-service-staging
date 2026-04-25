@@ -14,8 +14,10 @@ export async function POST(
 
   const changedBy     = (formData.get('changedBy')    as string) || null
   const notes         = (formData.get('completionNotes') as string) || null
-  const parts         = (formData.get('completionParts') as string) || null
-  const followUp      = (formData.get('followUp')     as string) || null
+  const partsRaw      = (formData.get('completionParts') as string) || null
+  const followUpRaw   = (formData.get('followUp')     as string) || null
+  const parts         = partsRaw   ? JSON.parse(partsRaw)   : null
+  const followUp      = followUpRaw ? JSON.parse(followUpRaw) : null
   const workStartRaw  = (formData.get('workStart')    as string) || null
   const workEndRaw    = (formData.get('workEnd')      as string) || null
   const pdfFile       = formData.get('pdf') as File | null

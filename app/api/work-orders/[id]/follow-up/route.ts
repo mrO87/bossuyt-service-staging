@@ -76,7 +76,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         type:        original.type,
         source:      'reactive',
         description: `Opvolgbon — ${original.description ?? ''}`.trim(),
-        prefillParts: prefillParts.length > 0 ? JSON.stringify(prefillParts) : null,
+        prefillParts: prefillParts.length > 0 ? prefillParts : null,
         isUrgent:    false,
         planningVersion: 1,
         createdBy:   changedBy,

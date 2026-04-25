@@ -192,7 +192,7 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
           synced++
         } else {
           failed++
-          break
+          // Photo uploads are independent — continue with the rest of the queue
         }
         continue
       }
@@ -204,7 +204,7 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
           synced++
         } else {
           failed++
-          break
+          // Photo deletes are independent — continue with the rest of the queue
         }
         continue
       }

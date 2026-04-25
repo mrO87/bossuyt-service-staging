@@ -107,11 +107,11 @@ export const workOrders = pgTable('work_orders', {
   workStart:         timestamp('work_start', { withTimezone: true }),
   workEnd:           timestamp('work_end',   { withTimezone: true }),
   completionNotes:   text('completion_notes'),
-  completionParts:   text('completion_parts'),    // JSON string: PdfPart[]
+  completionParts:   jsonb('completion_parts'),   // PdfPart[]
   completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
   completedAt:       timestamp('completed_at', { withTimezone: true }),
   externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
-  prefillParts:      text('prefill_parts'),   // JSON: PdfPart[] pre-filled for follow-up werkbonnen
+  prefillParts:      jsonb('prefill_parts'),  // PdfPart[] pre-filled for follow-up werkbonnen
 })
 
 export const workOrderAssignments = pgTable(
@@ -215,8 +215,8 @@ export const werkbonnen = pgTable('werkbonnen', {
   workStart:   timestamp('work_start',  { withTimezone: true }),
   workEnd:     timestamp('work_end',    { withTimezone: true }),
   notes:       text('notes'),                              // omschrijving werkzaamheden
-  parts:       text('parts'),                              // JSON: PdfPart[]
-  followUp:    text('follow_up'),                          // JSON: PdfFollowUp[]
+  parts:       jsonb('parts'),                             // PdfPart[]
+  followUp:    jsonb('follow_up'),                         // PdfFollowUp[]
   pdfPath:     text('pdf_path'),                           // /api/uploads/werkbonnen/{id}.pdf
   completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
   changedBy:   text('changed_by'),

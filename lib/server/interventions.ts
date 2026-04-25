@@ -310,24 +310,26 @@ export async function saveTechnicianPlanningOrder(input: {
 
   const nextPlanningVersion = currentPlanningVersion + 1
 
-  await Promise.all(
-    input.orderedWorkOrderIds.map((workOrderId, index) =>
-      db
-        .update(workOrderAssignments)
-        .set({ plannedOrder: index + 1 })
-        .where(
-          and(
-            eq(workOrderAssignments.workOrderId, workOrderId),
-            eq(workOrderAssignments.technicianId, input.technicianId),
+  await db.transaction(async (tx) => {
+    await Promise.all(
+      input.orderedWorkOrderIds.map((workOrderId, index) =>
+        tx
+          .update(workOrderAssignments)
+          .set({ plannedOrder: index + 1 })
+          .where(
+            and(
+              eq(workOrderAssignments.workOrderId, workOrderId),
+              eq(workOrderAssignments.technicianId, input.technicianId),
+            ),
           ),
-        ),
-    ),
-  )
+      ),
+    )
 
-  await db
-    .update(workOrders)
-    .set({ planningVersion: nextPlanningVersion })
-    .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+    await tx
+      .update(workOrders)
+      .set({ planningVersion: nextPlanningVersion })
+      .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+  })
 
   const updated = await getTodayInterventions(input.technicianId, input.date)
 
