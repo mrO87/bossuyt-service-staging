@@ -50,9 +50,11 @@ function DbTaskRow({ task }: { task: DbTask }) {
           Werkbon
         </span>
       </div>
-      {task.description && (
-        <p className="mt-2 text-xs text-ink-soft">{task.description}</p>
-      )}
+      <div className="mt-2 flex flex-col gap-0.5 text-xs text-ink-soft">
+        {task.customerName && <p className="font-medium text-ink">{task.customerName}</p>}
+        {task.workOrderDescription && <p>{task.workOrderDescription}</p>}
+        {task.description && <p>{task.description}</p>}
+      </div>
     </div>
   )
 }

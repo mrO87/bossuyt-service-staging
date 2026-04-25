@@ -8,31 +8,33 @@
  */
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { tasks, workOrders } from '@/lib/db/schema'
+import { customers, tasks, workOrders } from '@/lib/db/schema'
 import type { DbTask, TaskRole } from '@/types'
 
 // All task columns we need — defined once so both queries stay in sync.
 const TASK_COLS = {
-  id:          tasks.id,
-  workOrderId: tasks.workOrderId,
-  werkbonId:   tasks.werkbonId,
-  templateId:  tasks.templateId,
-  type:        tasks.type,
-  role:        tasks.role,
-  status:      tasks.status,
-  title:       tasks.title,
-  description: tasks.description,
-  assigneeId:  tasks.assigneeId,
-  seq:         tasks.seq,
-  dueDate:     tasks.dueDate,
-  completedAt: tasks.completedAt,
-  completedBy: tasks.completedBy,
-  skipReason:  tasks.skipReason,
-  reasonCode:  tasks.reasonCode,
-  payload:     tasks.payload,
-  createdAt:   tasks.createdAt,
-  createdBy:   tasks.createdBy,
-  updatedAt:   tasks.updatedAt,
+  id:                   tasks.id,
+  workOrderId:          tasks.workOrderId,
+  werkbonId:            tasks.werkbonId,
+  templateId:           tasks.templateId,
+  type:                 tasks.type,
+  role:                 tasks.role,
+  status:               tasks.status,
+  title:                tasks.title,
+  description:          tasks.description,
+  assigneeId:           tasks.assigneeId,
+  seq:                  tasks.seq,
+  dueDate:              tasks.dueDate,
+  completedAt:          tasks.completedAt,
+  completedBy:          tasks.completedBy,
+  skipReason:           tasks.skipReason,
+  reasonCode:           tasks.reasonCode,
+  payload:              tasks.payload,
+  createdAt:            tasks.createdAt,
+  createdBy:            tasks.createdBy,
+  updatedAt:            tasks.updatedAt,
+  customerName:         customers.name,
+  workOrderDescription: workOrders.description,
 } as const
 
 /** Returns all 'ready' or 'in_progress' tasks for the given role. */
@@ -41,6 +43,7 @@ export async function getQueueForRole(role: TaskRole): Promise<DbTask[]> {
     .select(TASK_COLS)
     .from(tasks)
     .innerJoin(workOrders, eq(tasks.workOrderId, workOrders.id))
+    .innerJoin(customers, eq(workOrders.customerId, customers.id))
     .where(
       and(
         eq(tasks.role, role),
@@ -69,6 +72,7 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
     .select(TASK_COLS)
     .from(tasks)
     .innerJoin(workOrders, eq(tasks.workOrderId, workOrders.id))
+    .innerJoin(customers, eq(workOrders.customerId, customers.id))
     .where(
       and(
         eq(tasks.assigneeId, technicianId),
@@ -86,6 +90,7 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
     .select(TASK_COLS)
     .from(tasks)
     .innerJoin(workOrders, eq(tasks.workOrderId, workOrders.id))
+    .innerJoin(customers, eq(workOrders.customerId, customers.id))
     .where(
       and(
         eq(tasks.role, 'technician'),
@@ -115,26 +120,28 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toDbTask(row: any): DbTask {
   return {
-    id:          row.id,
-    workOrderId: row.workOrderId,
-    werkbonId:   row.werkbonId ?? null,
-    templateId:  row.templateId ?? null,
-    type:        row.type,
-    role:        row.role,
-    status:      row.status,
-    title:       row.title,
-    description: row.description ?? null,
-    assigneeId:  row.assigneeId ?? null,
-    seq:         row.seq ?? 0,
-    dueDate:     toIso(row.dueDate),
-    completedAt: toIso(row.completedAt),
-    completedBy: row.completedBy ?? null,
-    skipReason:  row.skipReason ?? null,
-    reasonCode:  row.reasonCode ?? null,
-    payload:     row.payload ?? null,
-    createdAt:   toIso(row.createdAt) ?? new Date().toISOString(),
-    createdBy:   row.createdBy ?? null,
-    updatedAt:   toIso(row.updatedAt) ?? new Date().toISOString(),
+    id:                   row.id,
+    workOrderId:          row.workOrderId,
+    werkbonId:            row.werkbonId ?? null,
+    templateId:           row.templateId ?? null,
+    type:                 row.type,
+    role:                 row.role,
+    status:               row.status,
+    title:                row.title,
+    description:          row.description ?? null,
+    assigneeId:           row.assigneeId ?? null,
+    seq:                  row.seq ?? 0,
+    dueDate:              toIso(row.dueDate),
+    completedAt:          toIso(row.completedAt),
+    completedBy:          row.completedBy ?? null,
+    skipReason:           row.skipReason ?? null,
+    reasonCode:           row.reasonCode ?? null,
+    payload:              row.payload ?? null,
+    createdAt:            toIso(row.createdAt) ?? new Date().toISOString(),
+    createdBy:            row.createdBy ?? null,
+    updatedAt:            toIso(row.updatedAt) ?? new Date().toISOString(),
+    customerName:         row.customerName ?? undefined,
+    workOrderDescription: row.workOrderDescription ?? null,
   }
 }
 

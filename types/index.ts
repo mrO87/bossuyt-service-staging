@@ -282,6 +282,9 @@ export interface DbTask {
   // Populated by the query layer when requested:
   predecessorIds?: string[]
   successorIds?: string[]
+  // Denormalized context fields — populated by queue queries:
+  customerName?: string
+  workOrderDescription?: string | null
 }
 
 export interface TaskTemplate {
