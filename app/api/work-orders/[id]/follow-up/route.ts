@@ -134,6 +134,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         assigneeId:  leadTechnicianId,
         createdBy:   changedBy ?? 'system',
         updatedAt:   now,
+        payload:     prefillParts.length > 0 ? { parts: prefillParts } : null,
       })
 
       // Task for office: schedule the follow-up work order

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { getUserById, users } from '@/lib/mock-data'
+import type { PdfPart } from '@/lib/pdf'
 import { TASK_TYPE_OPTIONS, canManageTask, getTaskStatusLabel, isTaskOpen } from '@/lib/task-meta'
 import { useTasks } from '@/lib/task-store'
 import type { DbTask, Intervention, Task, TaskStatus, TaskType, User } from '@/types'
@@ -77,26 +78,97 @@ function formatActivityDueDate(value?: string): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const DB_TASK_TYPE_LABELS: Partial<Record<DbTask['type'], string>> = {
-  load_parts:   'Onderdelen laden in bus',
-  plan_revisit: 'Opvolgbon inplannen',
+// ── Workflow task cards ────────────────────────────────────────────────────────
+
+function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+  const parts = (task.payload?.parts ?? []) as PdfPart[]
+  const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState(true)
+
+  function toggle(id: string) {
+    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  function receiveAll() {
+    setChecked(new Set(parts.map(p => p.id)))
+    onComplete(task)
+  }
+
+  return (
+    <div className="rounded-xl border border-stroke bg-surface overflow-hidden">
+      <button type="button" onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-3 p-3 text-left">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">TK</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-ink">Onderdelen laden in bus</p>
+          <p className="text-xs text-ink-soft">
+            Technieker{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}{isDone && ' • ✓ Klaar'}
+          </p>
+        </div>
+        <span className="text-ink-faint text-sm shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-stroke">
+          {parts.length > 0 ? (
+            <>
+              {parts.map(part => (
+                <label key={part.id}
+                  className="flex items-center gap-3 px-3 py-2.5 border-b border-stroke/50 last:border-b-0 cursor-pointer">
+                  <input type="checkbox"
+                    checked={checked.has(part.id) || isDone}
+                    onChange={() => !isDone && toggle(part.id)}
+                    disabled={isDone}
+                    className="h-5 w-5 rounded accent-brand-orange" />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm ${checked.has(part.id) || isDone ? 'line-through text-ink-soft' : 'text-ink'}`}>
+                      {part.description}
+                    </span>
+                    {part.code && <span className="ml-2 text-xs text-ink-faint">#{part.code}</span>}
+                  </div>
+                  <span className="text-xs text-ink-soft shrink-0">×{part.quantity}</span>
+                </label>
+              ))}
+              {!isDone && (
+                <div className="flex justify-end p-3">
+                  <button type="button" onClick={receiveAll}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green">
+                    ✅ Alles ontvangen
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-end p-3">
+              {!isDone
+                ? <button type="button" onClick={() => onComplete(task)} className="text-xs text-brand-green">✅ Gereed</button>
+                : <span className="text-xs text-ink-soft">✓ Klaar</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
-const DB_TASK_ROLE_LABELS: Record<string, string> = {
-  technician: 'Technieker',
-  office:     'Office / Planning',
-  warehouse:  'Magazijn',
-  admin:      'Admin',
-}
-
-const DB_TASK_STATUS_LABELS: Record<string, string> = {
-  pending:     'Wachtend',
-  ready:       'Klaar voor actie',
-  in_progress: 'Bezig',
-  done:        'Gedaan',
-  skipped:     'Overgeslagen',
-  cancelled:   'Geannuleerd',
-  blocked:     'Geblokkeerd',
+function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+  const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
+  return (
+    <div className="rounded-xl border border-stroke bg-surface p-3 flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">OF</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-ink">Opvolgbon inplannen</p>
+        <p className="mt-0.5 text-xs text-ink-soft">Office / Planning{isDone ? ' • ✓ Klaar' : ''}</p>
+        {!isDone && (
+          <div className="mt-1.5 flex gap-3 text-xs font-medium">
+            <button type="button" onClick={() => onComplete(task)} className="text-brand-green">✅ Gereed</button>
+            <span className="text-ink-faint cursor-not-allowed" title="Binnenkort beschikbaar">→ Naar planning</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 interface Props {
@@ -258,29 +330,13 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
         />
 
         {workflowTasks.map(task => {
-          const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
-          return (
-            <div key={task.id} className={`rounded-xl border p-3 flex items-start gap-3 ${isDone ? 'border-stroke bg-surface opacity-60' : 'border-stroke bg-surface'}`}>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">
-                {task.role === 'technician' ? 'TK' : task.role === 'office' ? 'OF' : task.role.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-ink">
-                  <span className="font-bold">{DB_TASK_TYPE_LABELS[task.type] ?? task.title}</span>
-                  <span className="text-ink-soft"> – </span>
-                  <span className="text-xs text-ink-soft">{DB_TASK_ROLE_LABELS[task.role] ?? task.role}</span>
-                </p>
-                {task.description && <p className="mt-0.5 text-xs text-ink-soft">{task.description}</p>}
-                <div className="mt-1 flex gap-x-3 text-xs">
-                  {!isDone ? (
-                    <button type="button" onClick={() => handleCompleteDbTask(task)} className="text-brand-green">✅ Gereed</button>
-                  ) : (
-                    <span className="text-ink-soft">{DB_TASK_STATUS_LABELS[task.status] ?? task.status}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
+          if (task.type === 'load_parts') {
+            return <LoadPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
+          }
+          if (task.type === 'plan_revisit') {
+            return <PlanRevisitCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
+          }
+          return null
         })}
 
         {linkedTasks.length === 0 && orderTasks.length === 0 && workflowTasks.length === 0 && (
