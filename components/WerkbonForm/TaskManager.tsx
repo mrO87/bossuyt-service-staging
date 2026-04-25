@@ -96,9 +96,9 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   }
 
   return (
-    <div className="rounded-xl border border-stroke bg-surface overflow-hidden">
+    <div className="rounded-xl border border-stroke overflow-hidden">
       <button type="button" onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-3 p-3 text-left">
+        className="w-full flex items-center gap-3 p-3 text-left bg-surface">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">TK</div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-ink">Onderdelen laden in bus</p>
@@ -110,12 +110,12 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
       </button>
 
       {expanded && (
-        <div className="border-t border-stroke">
+        <div className="bg-white">
           {parts.length > 0 ? (
             <>
               {parts.map(part => (
                 <label key={part.id}
-                  className="flex items-center gap-3 px-3 py-2.5 border-b border-stroke/50 last:border-b-0 cursor-pointer">
+                  className="flex items-center gap-3 px-3 py-2.5 border-t border-stroke/40 cursor-pointer">
                   <input type="checkbox"
                     checked={checked.has(part.id) || isDone}
                     onChange={() => !isDone && toggle(part.id)}
@@ -131,7 +131,7 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
                 </label>
               ))}
               {!isDone && (
-                <div className="flex justify-end p-3">
+                <div className="flex justify-end gap-2 px-3 py-2.5 border-t border-stroke/40">
                   <button type="button" onClick={receiveAll}
                     className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green">
                     ✅ Alles ontvangen
@@ -140,7 +140,7 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
               )}
             </>
           ) : (
-            <div className="flex justify-end p-3">
+            <div className="flex justify-end px-3 py-2.5 border-t border-stroke/40">
               {!isDone
                 ? <button type="button" onClick={() => onComplete(task)} className="text-xs text-brand-green">✅ Gereed</button>
                 : <span className="text-xs text-ink-soft">✓ Klaar</span>}
