@@ -77,15 +77,50 @@ function formatActivityDueDate(value?: string): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const DB_TASK_TYPE_LABELS: Partial<Record<DbTask['type'], string>> = {
+  load_parts:   'Onderdelen laden in bus',
+  plan_revisit: 'Opvolgbon inplannen',
+}
+
+const DB_TASK_ROLE_LABELS: Record<string, string> = {
+  technician: 'Technieker',
+  office:     'Office / Planning',
+  warehouse:  'Magazijn',
+  admin:      'Admin',
+}
+
+const DB_TASK_STATUS_LABELS: Record<string, string> = {
+  pending:     'Wachtend',
+  ready:       'Klaar voor actie',
+  in_progress: 'Bezig',
+  done:        'Gedaan',
+  skipped:     'Overgeslagen',
+  cancelled:   'Geannuleerd',
+  blocked:     'Geblokkeerd',
+}
+
 interface Props {
   intervention: Intervention
   werkbonId: string
   orderTasks: DbTask[]
+  workflowTasks?: DbTask[]
+  onWorkflowTaskComplete?: () => void
   initialActivityId?: string
 }
 
-export default function TaskManager({ intervention, werkbonId, orderTasks, initialActivityId }: Props) {
+export default function TaskManager({ intervention, werkbonId, orderTasks, workflowTasks = [], onWorkflowTaskComplete, initialActivityId }: Props) {
   const { currentUser, tasks, createTask, updateTask } = useTasks()
+
+  async function handleCompleteDbTask(task: DbTask) {
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete', completed_by: currentUser.id, changed_by: currentUser.id }),
+      })
+      if (res.ok) onWorkflowTaskComplete?.()
+    } catch { /* ignore */ }
+  }
 
   const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(() => initialActivityId ?? null)
   const [taskError, setTaskError] = useState('')
@@ -216,13 +251,47 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, initi
       onActionClick={openNewTaskEditor}
     >
       <div className="flex flex-col gap-3">
+        {workflowTasks.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Werkbontaken</p>
+            {workflowTasks.map(task => {
+              const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
+              return (
+                <div key={task.id} className={`rounded-xl border p-3 flex items-start justify-between gap-3 ${isDone ? 'border-stroke bg-surface opacity-60' : 'border-brand-orange/30 bg-orange-50/30'}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-ink">{DB_TASK_TYPE_LABELS[task.type] ?? task.title}</p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {DB_TASK_ROLE_LABELS[task.role] ?? task.role} • {DB_TASK_STATUS_LABELS[task.status] ?? task.status}
+                    </p>
+                    {task.description && <p className="mt-1 text-xs text-ink-soft">{task.description}</p>}
+                  </div>
+                  {!isDone && (
+                    <button
+                      type="button"
+                      onClick={() => handleCompleteDbTask(task)}
+                      className="shrink-0 rounded-lg bg-brand-green/10 px-3 py-1.5 text-xs font-medium text-brand-green"
+                    >
+                      ✓ Gedaan
+                    </button>
+                  )}
+                  {isDone && (
+                    <span className="shrink-0 rounded-lg bg-surface px-3 py-1.5 text-xs font-medium text-ink-soft">
+                      ✓ Klaar
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         <PartsOrderCard
           orderTasks={orderTasks}
           intervention={intervention}
           showSupplier={currentUser?.role === 'warehouse' || currentUser?.role === 'admin'}
         />
 
-        {linkedTasks.length === 0 && orderTasks.length === 0 && (
+        {linkedTasks.length === 0 && orderTasks.length === 0 && workflowTasks.length === 0 && (
           <p className="text-sm text-center py-2 text-ink-faint">Nog geen activiteiten op deze werkbon</p>
         )}
 

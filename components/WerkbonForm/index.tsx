@@ -72,15 +72,19 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [deviceRefresh, setDeviceRefresh] = useState(0)
   const [queuedPartIds, setQueuedPartIds] = useState<Set<string>>(new Set())
   const [orderTasks, setOrderTasks] = useState<DbTask[]>([])
+  const [workflowTasks, setWorkflowTasks] = useState<DbTask[]>([])
+  const [workflowRefresh, setWorkflowRefresh] = useState(0)
 
   useEffect(() => {
     fetch(`/api/tasks?work_order_id=${intervention.id}`)
       .then(r => r.ok ? r.json() : { tasks: [] })
       .then((data: { tasks: DbTask[] }) => {
-        setOrderTasks((data.tasks ?? []).filter(t => t.type === 'order_part'))
+        const all = data.tasks ?? []
+        setOrderTasks(all.filter(t => t.type === 'order_part'))
+        setWorkflowTasks(all.filter(t => t.type === 'load_parts' || t.type === 'plan_revisit'))
       })
       .catch(() => {})
-  }, [intervention.id, queuedPartIds])
+  }, [intervention.id, queuedPartIds, workflowRefresh])
 
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -299,6 +303,8 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         intervention={intervention}
         werkbonId={werkbonId}
         orderTasks={orderTasks}
+        workflowTasks={workflowTasks}
+        onWorkflowTaskComplete={() => setWorkflowRefresh(r => r + 1)}
         initialActivityId={initialActivityId}
       />
 
