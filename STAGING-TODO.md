@@ -1,3 +1,17 @@
+## v1.34 — Deploy 2026-04-25 07:05  (sha: 335ae5b)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/activiteiten/page.tsx
+    - lib/releases.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.33 — Deploy 2026-04-25 06:06  (sha: 159d4bf)
 
 ### Changenotes invullen — lib/releases.ts
