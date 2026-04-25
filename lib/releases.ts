@@ -15,6 +15,18 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.42',
+    date: '25 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Magazijn-stap bij opvolgbon',
+        body: 'Bij een opvolgbon krijgt het magazijn nu eerst een taak "Onderdelen klaarzetten". Pas als het magazijn die afvinkt, wordt de taak "Onderdelen laden in bus" actief voor de technieker. Zo is het duidelijk wie wat doet en kan de technieker niet per ongeluk bevestigen dat hij onderdelen heeft voor het magazijn ze heeft klaargelegd.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.41',
     date: '25 april 2026',
     changes: [

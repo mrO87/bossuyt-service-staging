@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { tasks, workOrderAssignments, workOrderEvents, workOrderLinks, workOrders } from '@/lib/db/schema'
+import { taskDependencies, tasks, workOrderAssignments, workOrderEvents, workOrderLinks, workOrders } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import type { PdfPart } from '@/lib/pdf'
 import type { DbTaskType, TaskRole } from '@/types'
@@ -118,7 +118,24 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       const now = new Date()
 
-      // Task for technician: confirm parts loaded into van (non-blocking)
+      // Task 1 — Warehouse: pick and pack the parts (immediately actionable)
+      const pickTaskId = crypto.randomUUID()
+      await tx.insert(tasks).values({
+        id:          pickTaskId,
+        workOrderId: newId,
+        type:        'pick_parts' as DbTaskType,
+        role:        'warehouse' as TaskRole,
+        status:      'ready',
+        title:       'Onderdelen klaarzetten',
+        description: 'Zet de onderdelen klaar voor de technieker.',
+        seq:         1,
+        createdBy:   changedBy ?? 'system',
+        updatedAt:   now,
+        payload:     prefillParts.length > 0 ? { parts: prefillParts } : null,
+      })
+
+      // Task 2 — Technician: confirm parts are loaded into the van.
+      // Starts as 'pending' — becomes 'ready' automatically once warehouse marks pick_parts done.
       // Initially assigned to lead technician of original work order.
       // If planning assigns a different technician via POST /assign, that route updates this.
       const loadTaskId = crypto.randomUUID()
@@ -127,27 +144,35 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         workOrderId: newId,
         type:        'load_parts' as DbTaskType,
         role:        'technician' as TaskRole,
-        status:      'ready',
+        status:      'pending',
         title:       'Onderdelen laden in bus',
         description: 'Bevestig dat de onderdelen in de bestelwagen zijn geladen.',
-        seq:         1,
+        seq:         2,
         assigneeId:  leadTechnicianId,
         createdBy:   changedBy ?? 'system',
         updatedAt:   now,
         payload:     prefillParts.length > 0 ? { parts: prefillParts } : null,
       })
 
-      // Task for office: schedule the follow-up work order
-      const planTaskId = crypto.randomUUID()
+      // Dependency: load_parts only becomes ready after pick_parts is done
+      await tx.insert(taskDependencies).values({
+        id:            crypto.randomUUID(),
+        predecessorId: pickTaskId,
+        successorId:   loadTaskId,
+        depType:       'finish_to_start',
+        lagMinutes:    0,
+      })
+
+      // Task 3 — Office: schedule the follow-up work order
       await tx.insert(tasks).values({
-        id:          planTaskId,
+        id:          crypto.randomUUID(),
         workOrderId: newId,
         type:        'plan_revisit' as DbTaskType,
         role:        'office' as TaskRole,
         status:      'ready',
         title:       'Opvolgbon inplannen',
         description: 'Plan deze opvolgbon in bij de juiste technieker.',
-        seq:         2,
+        seq:         3,
         createdBy:   changedBy ?? 'system',
         updatedAt:   now,
       })

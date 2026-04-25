@@ -81,7 +81,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       .then((data: { tasks: DbTask[] }) => {
         const all = data.tasks ?? []
         setOrderTasks(all.filter(t => t.type === 'order_part'))
-        setWorkflowTasks(all.filter(t => t.type === 'load_parts' || t.type === 'plan_revisit'))
+        setWorkflowTasks(all.filter(t => t.type === 'pick_parts' || t.type === 'load_parts' || t.type === 'plan_revisit'))
       })
       .catch(() => {})
   }, [intervention.id, queuedPartIds, workflowRefresh])

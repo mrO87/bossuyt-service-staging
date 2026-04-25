@@ -11,6 +11,7 @@ import type { DbTask, DbTaskStatus, DbTaskType, Task } from '@/types'
 
 function getDbTaskTypeLabel(type: DbTaskType): string {
   const labels: Record<DbTaskType, string> = {
+    pick_parts:      'Onderdelen klaarzetten',
     load_parts:      'Onderdelen laden',
     plan_revisit:    'Opvolgbon inplannen',
     order_part:      'Onderdeel bestellen',

@@ -82,6 +82,7 @@ function formatActivityDueDate(value?: string): string {
 
 function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
   const parts = (task.payload?.parts ?? []) as PdfPart[]
+  const isPending = task.status === 'pending'
   const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState(true)
@@ -99,11 +100,13 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
     <div className="rounded-xl border border-stroke overflow-hidden">
       <button type="button" onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-3 p-3 text-left bg-surface">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">TK</div>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isPending ? 'bg-ink-faint' : 'bg-brand-orange'}`}>TK</div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-ink">Onderdelen laden in bus</p>
           <p className="text-xs text-ink-soft">
-            Technieker{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}{isDone && ' • ✓ Klaar'}
+            Technieker{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}
+            {isPending && ' • ⏳ Wacht op magazijn'}
+            {isDone && ' • ✓ Klaar'}
           </p>
         </div>
         <span className="text-ink-faint text-sm shrink-0">{expanded ? '▲' : '▼'}</span>
@@ -111,7 +114,11 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
 
       {expanded && (
         <div className="bg-white">
-          {parts.length > 0 ? (
+          {isPending ? (
+            <p className="px-3 py-3 border-t border-stroke/40 text-xs text-ink-soft">
+              Het magazijn zet de onderdelen eerst klaar. Deze taak wordt automatisch actief zodra dat klaar is.
+            </p>
+          ) : parts.length > 0 ? (
             <>
               {parts.map(part => (
                 <label key={part.id}
@@ -143,6 +150,78 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
             <div className="flex justify-end px-3 py-2.5 border-t border-stroke/40">
               {!isDone
                 ? <button type="button" onClick={() => onComplete(task)} className="text-xs text-brand-green">✅ Gereed</button>
+                : <span className="text-xs text-ink-soft">✓ Klaar</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+  const parts = (task.payload?.parts ?? []) as PdfPart[]
+  const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState(true)
+
+  function toggle(id: string) {
+    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  function pickAll() {
+    setChecked(new Set(parts.map(p => p.id)))
+    onComplete(task)
+  }
+
+  return (
+    <div className="rounded-xl border border-stroke overflow-hidden">
+      <button type="button" onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-3 p-3 text-left bg-surface">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">MG</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-ink">Onderdelen klaarzetten</p>
+          <p className="text-xs text-ink-soft">
+            Magazijn{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}{isDone && ' • ✓ Klaar'}
+          </p>
+        </div>
+        <span className="text-ink-faint text-sm shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="bg-white">
+          {parts.length > 0 ? (
+            <>
+              {parts.map(part => (
+                <label key={part.id}
+                  className="flex items-center gap-3 px-3 py-2.5 border-t border-stroke/40 cursor-pointer">
+                  <input type="checkbox"
+                    checked={checked.has(part.id) || isDone}
+                    onChange={() => !isDone && toggle(part.id)}
+                    disabled={isDone}
+                    className="h-5 w-5 rounded accent-blue-600" />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm ${checked.has(part.id) || isDone ? 'line-through text-ink-soft' : 'text-ink'}`}>
+                      {part.description}
+                    </span>
+                    {part.code && <span className="ml-2 text-xs text-ink-faint">#{part.code}</span>}
+                  </div>
+                  <span className="text-xs text-ink-soft shrink-0">×{part.quantity}</span>
+                </label>
+              ))}
+              {!isDone && (
+                <div className="flex justify-end gap-2 px-3 py-2.5 border-t border-stroke/40">
+                  <button type="button" onClick={pickAll}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600">
+                    ✅ Alles klaargelegd
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-end px-3 py-2.5 border-t border-stroke/40">
+              {!isDone
+                ? <button type="button" onClick={() => onComplete(task)} className="text-xs text-blue-600">✅ Gereed</button>
                 : <span className="text-xs text-ink-soft">✓ Klaar</span>}
             </div>
           )}
@@ -330,6 +409,9 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
         />
 
         {workflowTasks.map(task => {
+          if (task.type === 'pick_parts') {
+            return <PickPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
+          }
           if (task.type === 'load_parts') {
             return <LoadPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
           }

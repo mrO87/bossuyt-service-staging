@@ -230,6 +230,7 @@ export type DbTaskStatus =
 export type DbTaskType =
   | 'order_part'
   | 'plan_revisit'
+  | 'pick_parts'
   | 'load_parts'
   | 'contact_customer'
   | 'internal_note'
