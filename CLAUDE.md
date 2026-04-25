@@ -27,23 +27,21 @@ Before working on this project, read:
 - Offline-first — every write goes to IndexedDB before API
 
 ## Branch Strategy — CRITICAL
-- `main` — active development. All new features go here. Never deployed to production without explicit user approval.
-- `production` — what Bossuyt sees at `bossuyt-service.fixassistant.com`. Only updated when the user explicitly says "deploy to production" or "push to production".
-- **Never** suggest running `docker compose up --build` on the production server from `main`. Always ask which branch first.
-- To promote a version to production: `git checkout production && git merge <commit> && git push origin production`, then rebuild on the server.
+- `main` — de ENIGE actieve branch. Alle nieuwe features gaan hier naartoe.
+- **NOOIT** de `production` branch aanraken. **NOOIT** iets deployen naar `bossuyt-service.fixassistant.com` of `service.bossuyt.fixassistant.com` — dat zijn oude demo's, afblijven.
+- De enige deployment target is `staging.bossuyt.fixassistant.com`.
 
 ## Release Workflow
-- For visible changes on `staging.bossuyt.fixassistant.com`, first ask whether the work is a new version or a refinement of the current version.
-- `/architecture`-only edits and hidden-route edits do not require a version question by themselves.
-- Do not bump versions on your own; version changes must be user-directed.
-- If the user confirms the work is a new version, update version metadata only as part of that version.
-- When that version is finished, ask whether to commit and push it to GitHub.
+- Voor zichtbare wijzigingen op `staging.bossuyt.fixassistant.com`, eerst vragen of het een nieuwe versie of een verfijning van de huidige versie is.
+- `/architecture`-only edits en hidden-route edits vereisen geen versiervraag.
+- Versies nooit zelf verhogen; versiewijzigingen zijn door de gebruiker gestuurd.
+- Als de gebruiker bevestigt dat het een nieuwe versie is, update dan alleen de versiemetadata als onderdeel van die versie.
+- Als die versie klaar is, vragen of het gecommit en gepusht moet worden naar GitHub.
 
 ## Deployment
-- Docker + nginx on Hetzner
-- Production (`bossuyt-service.fixassistant.com`): deploys from `production` branch only
-- Staging (`staging.bossuyt.fixassistant.com`): deploys from `main`
-- `docker compose up --build` to run locally on port 3080
+- Docker + nginx op Hetzner
+- Enige actieve site: `staging.bossuyt.fixassistant.com` — deployt vanuit `main`
+- `docker compose up --build` om lokaal te draaien op poort 3000
 
 ## Teaching Mode — ALWAYS ACTIVE
 This project is a learning exercise. The user is learning to code.
