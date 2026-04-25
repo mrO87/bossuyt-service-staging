@@ -16,9 +16,9 @@ export async function GET(req: NextRequest) {
   try {
     const data = await getTodayInterventions(technicianId, date)
 
-    // When the DB has no data for this date, fall back to mock data so
-    // navigating to demo days actually shows work orders.
-    if (data.planned.length === 0 && data.open.length === 0) {
+    // When the DB has no planned items for this date, fall back to mock data.
+    // We only check planned — open pool is date-independent and always has DB items.
+    if (data.planned.length === 0) {
       const start = new Date(`${date}T00:00:00.000Z`)
       const end = new Date(`${date}T23:59:59.999Z`)
 

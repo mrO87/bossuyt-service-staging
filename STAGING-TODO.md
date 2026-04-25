@@ -1,3 +1,17 @@
+## v1.30 — Deploy 2026-04-25 05:06  (sha: 1b8773c)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/sync/today/route.ts
+    - lib/releases.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.29 — Deploy 2026-04-25 04:57  (sha: 9c1a566)
 
 ### Changenotes invullen — lib/releases.ts
