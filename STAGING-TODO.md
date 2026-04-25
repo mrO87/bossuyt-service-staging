@@ -1,3 +1,21 @@
+## v1.33 — Deploy 2026-04-25 06:06  (sha: 159d4bf)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/work-orders/[id]/pool-visibility/route.ts
+    - components/DayView/DayView.tsx
+    - lib/db/schema.ts
+    - lib/releases.ts
+    - lib/server/interventions.ts
+    - types/index.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.32 — Deploy 2026-04-25 05:26  (sha: 2d37a0b)
 
 ### Changenotes invullen — lib/releases.ts
