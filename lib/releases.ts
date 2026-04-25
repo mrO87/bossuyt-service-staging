@@ -20,6 +20,18 @@ export const RELEASES: ReleaseEntry[] = [
     changes: [
       {
         label: 'Nieuw',
+        title: 'TODO — invullen na deploy',
+        body: 'TODO — beschrijving invullen.',
+      },
+    ],
+  },
+
+  {
+    version: 'v1.42',
+    date: '25 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
         title: 'Magazijn-stap bij opvolgbon',
         body: 'Bij een opvolgbon krijgt het magazijn nu eerst een taak "Onderdelen klaarzetten". Pas als het magazijn die afvinkt, wordt de taak "Onderdelen laden in bus" actief voor de technieker. Zo is het duidelijk wie wat doet en kan de technieker niet per ongeluk bevestigen dat hij onderdelen heeft voor het magazijn ze heeft klaargelegd.',
       },
@@ -831,7 +843,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.41'
+const CURRENT_RELEASE_VERSION = 'v1.42'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
