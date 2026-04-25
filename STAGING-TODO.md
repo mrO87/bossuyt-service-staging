@@ -1,3 +1,28 @@
+## v1.29 — Deploy 2026-04-25 04:57  (sha: 9c1a566)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - advise.md
+    - app/api/sync/month/route.ts
+    - app/api/work-orders/[id]/complete/route.ts
+    - claude-run.log
+    - components/CalendarSheet/index.tsx
+    - components/DayView/DayView.tsx
+    - components/DevicePanel/index.tsx
+    - lib/db/schema.ts
+    - lib/lessons.ts
+    - lib/mock-data.ts
+    - lib/releases.ts
+    - lib/server/interventions.ts
+    - lib/useDayData.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.28 — Deploy 2026-04-25 03:57  (sha: b08a849)
 
 ### Changenotes invullen — lib/releases.ts
