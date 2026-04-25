@@ -7,6 +7,8 @@ import CustomerSelect from '@/components/CustomerSelect'
 import SiteSelect from '@/components/SiteSelect'
 import DeviceSelect from '@/components/DeviceSelect'
 
+// Intent: future workflow scaffolding for a new werkbon flow; it stays
+// intentionally unlinked from the active staging UI for now.
 type Screen = 'customer' | 'site' | 'device' | 'werkbon'
 
 const STEPS: Record<Screen, number> = {

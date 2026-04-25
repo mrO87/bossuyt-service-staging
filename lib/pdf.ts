@@ -15,8 +15,17 @@ export interface PdfPart {
 export interface PdfFollowUp {
   id: string
   description: string
+  priority: 'laag' | 'gemiddeld' | 'hoog'
+  dueDate: string
+}
+
+export interface PdfTaskItem {
+  id: string
+  title: string
+  assigneeName: string
   priority: 'laag' | 'normaal' | 'hoog' | 'dringend'
   dueDate: string
+  statusLabel: string
 }
 
 export interface PdfData {
@@ -28,12 +37,12 @@ export interface PdfData {
   deviceModel: string
   deviceSerial?: string
   status: string
-  arrivalTime: string
   workStart: string
   workEnd: string
   description: string
   parts: PdfPart[]
   followUp: PdfFollowUp[]
+  tasks?: PdfTaskItem[]
   signature: string | null
 }
 
@@ -71,10 +80,11 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const PRIORITY_COLORS: Record<string, readonly [number, number, number]> = {
-  laag:    C.green,
-  normaal: C.blue,
-  hoog:    C.orange,
-  dringend:C.red,
+  laag:      C.green,
+  gemiddeld: C.blue,
+  normaal:   C.blue,
+  hoog:      C.orange,
+  dringend:  C.red,
 }
 
 // jsPDF types don't accept spread of readonly tuples — use this helper instead
@@ -88,7 +98,7 @@ function textColor(doc: jsPDF, c: readonly [number, number, number]) {
   doc.setTextColor(c[0], c[1], c[2])
 }
 
-export function generateWerkbonPDF(data: PdfData): void {
+export function generateWerkbonPDF(data: PdfData): Blob {
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -168,7 +178,7 @@ export function generateWerkbonPDF(data: PdfData): void {
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   textColor(doc, C.textGray)
-  doc.text(fmtDate(data.arrivalTime || new Date().toISOString()), pageW - mR, 19, { align: 'right' })
+  doc.text(fmtDate(data.workStart || new Date().toISOString()), pageW - mR, 19, { align: 'right' })
 
   y = 38
 
@@ -200,9 +210,8 @@ export function generateWerkbonPDF(data: PdfData): void {
   sectionTitle('TIJDREGISTRATIE')
   checkPage(16)
 
-  const timeBoxW = cW / 3
+  const timeBoxW = cW / 2
   const times = [
-    { label: 'Aankomst',   value: fmtTime(data.arrivalTime) },
     { label: 'Werk start', value: fmtTime(data.workStart) },
     { label: 'Werk einde', value: fmtTime(data.workEnd) },
   ]
@@ -288,6 +297,36 @@ export function generateWerkbonPDF(data: PdfData): void {
     y += 4
   }
 
+  // ── Tasks ──────────────────────────────────────────────────────────────────
+  if (data.tasks && data.tasks.length > 0) {
+    sectionTitle('ACTIVITEITEN')
+    data.tasks.forEach((task, i) => {
+      checkPage(12)
+      if (i % 2 === 0) {
+        fill(doc, C.rowAlt)
+        doc.rect(mL, y - 1, cW, 9.5, 'F')
+      }
+      const priorityColor = PRIORITY_COLORS[task.priority] || C.blue
+      fill(doc, priorityColor)
+      doc.circle(mL + 4, y + 3, 1.8, 'F')
+
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      textColor(doc, C.textDark)
+      doc.text(task.title, mL + 8, y + 4)
+
+      doc.setFont('helvetica', 'normal')
+      textColor(doc, C.textGray)
+      doc.text(`${task.assigneeName} • ${task.statusLabel}`, mL + 8, y + 7.5)
+
+      if (task.dueDate) {
+        doc.text(fmtDate(task.dueDate), mL + cW - 3, y + 4, { align: 'right' })
+      }
+      y += 9.5
+    })
+    y += 4
+  }
+
   // ── Follow-up ──────────────────────────────────────────────────────────────
   if (data.followUp.length > 0) {
     sectionTitle('OPVOLGACTIES')
@@ -361,5 +400,8 @@ export function generateWerkbonPDF(data: PdfData): void {
   // Filename: Werkbon_KlantNaam_YYYYMMDD.pdf
   const name = data.customerName.replace(/[^a-zA-Z0-9]/g, '_')
   const date = new Date().toISOString().split('T')[0]?.replace(/-/g, '')
+  const arrayBuffer = doc.output('arraybuffer')
+  const blob = new Blob([arrayBuffer], { type: 'application/pdf' })
   doc.save(`Werkbon_${name}_${date}.pdf`)
+  return blob
 }

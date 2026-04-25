@@ -1,375 +1,322 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
+import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
-import type { PdfPart, PdfFollowUp } from '@/lib/pdf'
-import type { Intervention } from '@/types'
+import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
+import { useTasks } from '@/lib/task-store'
+import { queueTaskCommand } from '@/lib/tasks/sync'
+import { getTaskStatusLabel } from '@/lib/task-meta'
+import { getUserById } from '@/lib/mock-data'
+import type { Intervention, DbTask, Task, User } from '@/types'
 
-// Local state shape for the form
+function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
+  if (task.assigneeType === 'group' && task.assigneeRole) {
+    const labels: Record<User['role'], string> = {
+      technician: 'Techniekers', admin: 'Admin', office: 'Office', warehouse: 'Magazijn', hr: 'HR',
+    }
+    return labels[task.assigneeRole] ?? task.assigneeRole
+  }
+  return getUserById(task.assigneeUserId ?? '')?.name ?? 'Onbekende gebruiker'
+}
+import PartsSection from './PartsSection'
+import PhotoUploadSection from './PhotoUploadSection'
+import TaskManager from './TaskManager'
+import Section from './Section'
+
 interface FormState {
   status: string
-  arrivalTime: string
   workStart: string
   workEnd: string
   description: string
   parts: PdfPart[]
-  followUp: PdfFollowUp[]
   signature: string | null
 }
 
 const STATUS_OPTIONS = [
-  { value: 'gepland',          label: 'Gepland',             activeClass: 'bg-stroke text-ink-soft border-stroke',                inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'onderweg',         label: 'Onderweg',            activeClass: 'bg-brand-orange text-white border-brand-orange',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'bezig',            label: 'Bezig',               activeClass: 'bg-brand-blue text-white border-brand-blue',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen', activeClass: 'bg-brand-red text-white border-brand-red',             inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'afgewerkt',        label: 'Afgewerkt',           activeClass: 'bg-brand-green text-white border-brand-green',         inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'gepland',          label: 'Gepland',               activeClass: 'bg-stroke text-ink-soft border-stroke',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'onderweg',         label: 'Onderweg',              activeClass: 'bg-brand-orange text-white border-brand-orange',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'bezig',            label: 'Bezig',                 activeClass: 'bg-brand-blue text-white border-brand-blue',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'wacht_onderdelen', label: 'Wacht op onderdelen',   activeClass: 'bg-brand-red text-white border-brand-red',         inactiveClass: 'bg-surface text-ink-soft border-stroke' },
+  { value: 'afgewerkt',        label: 'Afgewerkt',             activeClass: 'bg-brand-green text-white border-brand-green',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
 ]
 
-const PRIORITY_OPTIONS = [
-  { value: 'laag',     label: 'Laag',     activeClass: 'bg-brand-green text-white border-brand-green',   inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'normaal',  label: 'Normaal',  activeClass: 'bg-brand-blue text-white border-brand-blue',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'hoog',     label: 'Hoog',     activeClass: 'bg-brand-orange text-white border-brand-orange', inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-  { value: 'dringend', label: 'Dringend', activeClass: 'bg-brand-red text-white border-brand-red',       inactiveClass: 'bg-surface text-ink-soft border-stroke' },
-]
+function now() { return new Date().toISOString() }
 
-function now() {
-  return new Date().toISOString()
-}
-
-function fmtTime(iso: string) {
-  if (!iso) return '--:--'
-  return new Date(iso).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })
-}
-
-// Reusable section wrapper
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl overflow-hidden bg-white border border-stroke shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
-        <div className="w-1 h-4 rounded-full bg-brand-orange" />
-        <p className="font-bold text-sm tracking-wide text-white">{title}</p>
-      </div>
-      <div className="p-4">
-        {children}
-      </div>
-    </div>
-  )
+function isoToHHMM(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 interface Props {
   intervention: Intervention
+  initialActivityId?: string
 }
 
-export default function WerkbonForm({ intervention }: Props) {
+export default function WerkbonForm({ intervention, initialActivityId }: Props) {
+  const { tasks } = useTasks()
+  const werkbonId = `wb-${intervention.id}`
+
   const [form, setForm] = useState<FormState>({
-    status:      intervention.status,
-    arrivalTime: '',
-    workStart:   '',
-    workEnd:     '',
+    status: intervention.status,
+    workStart: '',
+    workEnd: '',
     description: '',
-    parts:       [],
-    followUp:    [],
-    signature:   null,
+    parts: [],
+    signature: null,
   })
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [deviceRefresh, setDeviceRefresh] = useState(0)
+  const [queuedPartIds, setQueuedPartIds] = useState<Set<string>>(new Set())
+  const [orderTasks, setOrderTasks] = useState<DbTask[]>([])
 
-  // Generic updater for simple fields
+  useEffect(() => {
+    fetch(`/api/tasks?work_order_id=${intervention.id}`)
+      .then(r => r.ok ? r.json() : { tasks: [] })
+      .then((data: { tasks: DbTask[] }) => {
+        setOrderTasks((data.tasks ?? []).filter(t => t.type === 'order_part'))
+      })
+      .catch(() => {})
+  }, [intervention.id, queuedPartIds])
+
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
-  // Time buttons
-  function markAankomst() {
-    setForm(prev => ({ ...prev, arrivalTime: now(), status: 'bezig' }))
-  }
   function markStartWork() {
-    setForm(prev => ({ ...prev, workStart: now() }))
+    setForm(prev => ({ ...prev, workStart: now(), status: 'bezig' }))
   }
+
   function markEndWork() {
     setForm(prev => ({ ...prev, workEnd: now(), status: 'afgewerkt' }))
   }
 
-  // Parts
-  function addPart() {
-    const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder: false, urgent: false }
+  function setTimeField(field: 'workStart' | 'workEnd', hhmm: string) {
+    if (!hhmm) { setForm(prev => ({ ...prev, [field]: '' })); return }
+    const [h, m] = hhmm.split(':').map(Number)
+    setForm(prev => {
+      const base = prev[field] ? new Date(prev[field]) : new Date()
+      base.setHours(h, m, 0, 0)
+      return { ...prev, [field]: base.toISOString() }
+    })
+  }
+
+  function addPart(toOrder: boolean) {
+    const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder, urgent: false }
     setForm(prev => ({ ...prev, parts: [...prev.parts, part] }))
   }
+
   function updatePart(id: string, field: keyof PdfPart, value: string | number | boolean) {
     setForm(prev => ({
       ...prev,
-      parts: prev.parts.map(p => p.id === id ? { ...p, [field]: value } : p)
+      parts: prev.parts.map(p => p.id === id ? { ...p, [field]: value } : p),
     }))
   }
+
   function removePart(id: string) {
     setForm(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }))
   }
 
-  // Follow-up
-  function addFollowUp() {
-    const f: PdfFollowUp = { id: `f-${Date.now()}`, description: '', priority: 'normaal', dueDate: '' }
-    setForm(prev => ({ ...prev, followUp: [...prev.followUp, f] }))
-  }
-  function updateFollowUp(id: string, field: keyof PdfFollowUp, value: string) {
-    setForm(prev => ({
-      ...prev,
-      followUp: prev.followUp.map(f => f.id === id ? { ...f, [field]: value } : f)
-    }))
-  }
-  function removeFollowUp(id: string) {
-    setForm(prev => ({ ...prev, followUp: prev.followUp.filter(f => f.id !== id) }))
-  }
-
-  // Signature
   const handleSignature = useCallback((dataUrl: string | null) => {
     setForm(prev => ({ ...prev, signature: dataUrl }))
   }, [])
 
-  // PDF
   async function handlePDF() {
     setPdfLoading(true)
-    await new Promise(r => setTimeout(r, 200))
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    const linkedTasks = tasks.filter(task => task.werkbonId === werkbonId)
+    const pdfTasks: PdfTaskItem[] = linkedTasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      assigneeName: getAssignmentLabel(task),
+      priority: task.priority,
+      dueDate: task.dueDate ?? '',
+      statusLabel: getTaskStatusLabel(task.status),
+    }))
+
     try {
-      generateWerkbonPDF({
+      const pdfBlob = generateWerkbonPDF({
         customerName: intervention.customerName,
-        siteName:     intervention.siteName,
-        siteAddress:  intervention.siteAddress,
-        siteCity:     intervention.siteCity,
-        deviceBrand:  intervention.deviceBrand  || '',
-        deviceModel:  intervention.deviceModel  || '',
-        status:       form.status,
-        arrivalTime:  form.arrivalTime,
-        workStart:    form.workStart,
-        workEnd:      form.workEnd,
-        description:  form.description,
-        parts:        form.parts,
-        followUp:     form.followUp,
-        signature:    form.signature,
+        siteName: intervention.siteName,
+        siteAddress: intervention.siteAddress,
+        siteCity: intervention.siteCity,
+        deviceBrand: intervention.deviceBrand || '',
+        deviceModel: intervention.deviceModel || '',
+        status: form.status,
+        workStart: form.workStart,
+        workEnd: form.workEnd,
+        description: form.description,
+        parts: form.parts,
+        followUp: [],
+        tasks: pdfTasks,
+        signature: form.signature,
       })
+
+      const fd = new FormData()
+      fd.append('changedBy', intervention.technicians[0]?.technicianId ?? '')
+      fd.append('completionNotes', form.description)
+      fd.append('completionParts', JSON.stringify(form.parts))
+      fd.append('followUp', JSON.stringify(linkedTasks))
+      if (form.workStart) fd.append('workStart', form.workStart)
+      if (form.workEnd) fd.append('workEnd', form.workEnd)
+      fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)
+
+      const res = await fetch(`/api/work-orders/${intervention.id}/complete`, {
+        method: 'POST',
+        body: fd,
+      })
+
+      if (res.ok) {
+        setSaveStatus('saved')
+        setDeviceRefresh(current => current + 1)
+
+        for (const part of form.parts) {
+          await queueTaskCommand('/api/tasks', 'POST', {
+            work_order_id: intervention.id,
+            type: 'order_part',
+            role: 'warehouse',
+            title: part.toOrder
+              ? `Bestellen: ${part.description || part.code || 'onderdeel'}`
+              : `Stock aanvullen: ${part.description || part.code || 'onderdeel'}`,
+            payload: {
+              part_number: part.code,
+              description: part.description,
+              quantity:    part.quantity,
+              urgency:     part.urgent ? 'urgent' : 'normal',
+              order_type:  part.toOrder ? 'supplier_order' : 'stock_replenish',
+            },
+            client_id: part.id,
+          })
+        }
+
+        if (form.parts.length > 0) {
+          setQueuedPartIds(new Set(form.parts.map(p => p.id)))
+        }
+      } else {
+        console.error('Complete route error:', res.status, await res.text())
+        setSaveStatus('error')
+      }
     } catch (err) {
       console.error('PDF error:', err)
+      setSaveStatus('error')
     }
+
     setPdfLoading(false)
   }
 
   return (
     <div className="flex flex-col gap-4 pb-10">
-
-      {/* ── Info card ── */}
       <Section title="KLANT & TOESTEL">
         <div className="flex flex-col gap-1">
           <p className="font-bold text-base text-ink">{intervention.customerName}</p>
           <p className="text-sm text-ink-soft">{intervention.siteName}</p>
           <p className="text-sm text-ink-soft">{intervention.siteAddress}, {intervention.siteCity}</p>
-          <div className="mt-2 pt-2 border-t border-stroke">
-            <p className="font-bold text-sm text-ink">
-              {intervention.deviceBrand} {intervention.deviceModel}
+          {intervention.description && (
+            <p className="text-sm mt-2 pt-2 border-t border-stroke italic text-brand-orange">
+              Melding: {intervention.description}
             </p>
-            {intervention.description && (
-              <p className="text-sm mt-1 italic text-brand-orange">
-                Melding: {intervention.description}
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </Section>
 
-      {/* ── Status ── */}
+      <DevicePanel
+        deviceId={intervention.deviceId}
+        brand={intervention.deviceBrand}
+        model={intervention.deviceModel}
+        currentWorkOrderId={intervention.id}
+        refreshKey={deviceRefresh}
+      />
+
       <Section title="STATUS">
         <div className="flex flex-wrap gap-2">
           {STATUS_OPTIONS.map(s => (
-            <button
-              key={s.value}
-              onClick={() => update('status', s.value)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === s.value ? s.activeClass : s.inactiveClass}`}
-            >
+            <button key={s.value} type="button" onClick={() => update('status', s.value)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === s.value ? s.activeClass : s.inactiveClass}`}>
               {s.label}
             </button>
           ))}
         </div>
       </Section>
 
-      {/* ── Time registration ── */}
       <Section title="TIJDREGISTRATIE">
-        {/* Time display boxes */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           {[
-            { label: 'Aankomst',   value: form.arrivalTime },
-            { label: 'Werk start', value: form.workStart },
-            { label: 'Werk einde', value: form.workEnd },
-          ].map(t => (
-            <div key={t.label} className="rounded-xl p-3 text-center bg-surface">
-              <p className="text-xs mb-1 text-ink-soft">{t.label}</p>
-              <p className="text-xl font-bold text-ink">{fmtTime(t.value)}</p>
-            </div>
+            { label: 'Werk start', value: form.workStart, field: 'workStart' as const },
+            { label: 'Werk einde', value: form.workEnd,   field: 'workEnd'   as const },
+          ].map(item => (
+            <label key={item.label} className="rounded-xl p-3 text-center bg-surface block">
+              <p className="text-xs mb-1 text-ink-soft">{item.label}</p>
+              {item.value ? (
+                <input type="time" value={isoToHHMM(item.value)}
+                  onChange={e => setTimeField(item.field, e.target.value)}
+                  className="w-full text-xl font-bold text-ink bg-transparent text-center outline-none" />
+              ) : (
+                <p className="text-xl font-bold text-ink">--:--</p>
+              )}
+            </label>
           ))}
         </div>
-
-        {/* Action buttons — show progressively */}
         <div className="flex flex-col gap-2">
-          {!form.arrivalTime && (
-            <button
-              onClick={markAankomst}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-orange"
-            >
-              Aankomst registreren
-            </button>
-          )}
-          {form.arrivalTime && !form.workStart && (
-            <button
-              onClick={markStartWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue"
-            >
+          {!form.workStart && (
+            <button type="button" onClick={markStartWork}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue">
               Start werk
             </button>
           )}
           {form.workStart && !form.workEnd && (
-            <button
-              onClick={markEndWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-green"
-            >
+            <button type="button" onClick={markEndWork}
+              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-green">
               Werk beëindigen
             </button>
           )}
         </div>
       </Section>
 
-      {/* ── Work description ── */}
       <Section title="OMSCHRIJVING WERKZAAMHEDEN">
-        <textarea
-          rows={5}
-          placeholder="Beschrijf de uitgevoerde werkzaamheden..."
-          value={form.description}
-          onChange={e => update('description', e.target.value)}
-          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink"
-        />
+        <textarea rows={5} placeholder="Beschrijf de uitgevoerde werkzaamheden..."
+          value={form.description} onChange={e => update('description', e.target.value)}
+          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink" />
       </Section>
 
-      {/* ── Parts ── */}
-      <Section title="GEBRUIKTE ONDERDELEN">
-        <div className="flex flex-col gap-3">
-          {form.parts.length === 0 && (
-            <p className="text-sm text-center py-2 text-ink-faint">Nog geen onderdelen toegevoegd</p>
-          )}
-          {form.parts.map(part => (
-            <div key={part.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
-              <div className="flex gap-2">
-                <input
-                  placeholder="Artikelcode"
-                  value={part.code}
-                  onChange={e => updatePart(part.id, 'code', e.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  value={part.quantity}
-                  onChange={e => updatePart(part.id, 'quantity', parseInt(e.target.value) || 1)}
-                  className="w-16 rounded-lg px-3 py-2 text-sm text-center outline-none bg-white border border-stroke text-ink"
-                />
-                <button onClick={() => removePart(part.id)} className="px-2 text-lg text-brand-red">×</button>
-              </div>
-              <input
-                placeholder="Omschrijving onderdeel"
-                value={part.description}
-                onChange={e => updatePart(part.id, 'description', e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
-              />
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm text-ink-soft">
-                  <input
-                    type="checkbox"
-                    checked={part.toOrder}
-                    onChange={e => updatePart(part.id, 'toOrder', e.target.checked)}
-                    className="w-4 h-4 rounded"
-                  />
-                  Te bestellen
-                </label>
-                {part.toOrder && (
-                  <label className="flex items-center gap-2 text-sm font-medium text-brand-red">
-                    <input
-                      type="checkbox"
-                      checked={part.urgent}
-                      onChange={e => updatePart(part.id, 'urgent', e.target.checked)}
-                      className="w-4 h-4 rounded"
-                    />
-                    Dringend
-                  </label>
-                )}
-              </div>
-            </div>
-          ))}
-          <button
-            onClick={addPart}
-            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
-          >
-            + Onderdeel toevoegen
-          </button>
-        </div>
-      </Section>
+      <PartsSection
+        parts={form.parts}
+        onAddPart={addPart}
+        onUpdatePart={updatePart}
+        onRemovePart={removePart}
+        queuedPartIds={queuedPartIds}
+      />
 
-      {/* ── Follow-up ── */}
-      <Section title="OPVOLGACTIES">
-        <div className="flex flex-col gap-3">
-          {form.followUp.length === 0 && (
-            <p className="text-sm text-center py-2 text-ink-faint">Geen opvolgacties</p>
-          )}
-          {form.followUp.map(f => (
-            <div key={f.id} className="rounded-xl p-3 flex flex-col gap-2 bg-surface border border-stroke">
-              <div className="flex gap-2">
-                <input
-                  placeholder="Beschrijving actie..."
-                  value={f.description}
-                  onChange={e => updateFollowUp(f.id, 'description', e.target.value)}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none bg-white border border-stroke text-ink"
-                />
-                <button onClick={() => removeFollowUp(f.id)} className="px-2 text-lg text-brand-red">×</button>
-              </div>
-              <div className="flex gap-2">
-                {/* Priority selector */}
-                <div className="flex gap-1 flex-wrap flex-1">
-                  {PRIORITY_OPTIONS.map(p => (
-                    <button
-                      key={p.value}
-                      onClick={() => updateFollowUp(f.id, 'priority', p.value)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border ${f.priority === p.value ? p.activeClass : p.inactiveClass}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="date"
-                  value={f.dueDate}
-                  onChange={e => updateFollowUp(f.id, 'dueDate', e.target.value)}
-                  className="rounded-lg px-2 py-1 text-sm outline-none bg-white border border-stroke text-ink"
-                />
-              </div>
-            </div>
-          ))}
-          <button
-            onClick={addFollowUp}
-            className="w-full py-2.5 rounded-xl text-sm font-medium border-2 border-dashed border-stroke text-ink-soft"
-          >
-            + Opvolgactie toevoegen
-          </button>
-        </div>
-      </Section>
+      <PhotoUploadSection
+        workOrderId={intervention.id}
+        technicianId={intervention.technicians[0]?.technicianId ?? null}
+      />
 
-      {/* ── Signature ── */}
+      <TaskManager
+        intervention={intervention}
+        werkbonId={werkbonId}
+        orderTasks={orderTasks}
+        initialActivityId={initialActivityId}
+      />
+
       <Section title="HANDTEKENING KLANT">
         <SignaturePad signature={form.signature} onSignatureChange={handleSignature} />
       </Section>
 
-      {/* ── PDF button ── */}
-      <button
-        onClick={handlePDF}
-        disabled={pdfLoading}
-        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange"
-      >
+      <button type="button" onClick={handlePDF} disabled={pdfLoading}
+        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange">
         {pdfLoading ? 'PDF aanmaken...' : 'PDF Genereren & Opslaan'}
       </button>
 
+      {saveStatus === 'saved' && (
+        <p className="text-center text-sm font-semibold text-brand-green">✓ Werkbon opgeslagen</p>
+      )}
+      {saveStatus === 'error' && (
+        <p className="text-center text-sm font-semibold text-brand-red">✗ Opslaan mislukt — zie console</p>
+      )}
     </div>
   )
 }

@@ -19,14 +19,6 @@ Before working on this project, read:
 - `npm run build` — production build
 - `npm run lint` — eslint
 
-## CLI Workflow
-- Start by reading `ARCHITECTURE.md` and `PLANNING.md`
-- Confirm whether the task targets local dev, staging, or production
-- Use a `main` checkout or worktree when rebuilding staging
-- Use the `production` checkout only for the live stack
-- Never assume `docker compose up --build` is safe for staging
-- After code changes, run `npm run lint` and `npm run build`
-
 ## Project Rules
 - UI language: Dutch (Belgium) — nl-BE
 - Code, comments, variable names: English
@@ -34,19 +26,24 @@ Before working on this project, read:
 - High contrast, large touch targets (used with dirty hands/gloves)
 - Offline-first — every write goes to IndexedDB before API
 
+## Branch Strategy — CRITICAL
+- `main` — active development. All new features go here. Never deployed to production without explicit user approval.
+- `production` — what Bossuyt sees at `bossuyt-service.fixassistant.com`. Only updated when the user explicitly says "deploy to production" or "push to production".
+- **Never** suggest running `docker compose up --build` on the production server from `main`. Always ask which branch first.
+- To promote a version to production: `git checkout production && git merge <commit> && git push origin production`, then rebuild on the server.
+
+## Release Workflow
+- For visible changes on `staging.bossuyt.fixassistant.com`, first ask whether the work is a new version or a refinement of the current version.
+- `/architecture`-only edits and hidden-route edits do not require a version question by themselves.
+- Do not bump versions on your own; version changes must be user-directed.
+- If the user confirms the work is a new version, update version metadata only as part of that version.
+- When that version is finished, ask whether to commit and push it to GitHub.
+
 ## Deployment
 - Docker + nginx on Hetzner
-- Production hostname: `bossuyt-service.fixassistant.com`
-- Staging hostname: `staging.bossuyt.fixassistant.com`
-- Production branch source: `production`
-- Staging branch source: `main`
-- Production stack file: `docker-compose.yml`
-- Staging stack file: `docker-compose.staging.yml`
-- Production deploy: `docker compose up --build -d`
-- Staging deploy: `docker compose -f docker-compose.staging.yml up --build -d`
-- For staging, rebuild from a `main` checkout or worktree instead of the live checkout
-- Always match the compose file to the hostname before rebuilding containers
-- `docker compose up --build` can affect the production-shaped stack, so do not use it for staging by accident
+- Production (`bossuyt-service.fixassistant.com`): deploys from `production` branch only
+- Staging (`staging.bossuyt.fixassistant.com`): deploys from `main`
+- `docker compose up --build` to run locally on port 3080
 
 ## Teaching Mode — ALWAYS ACTIVE
 This project is a learning exercise. The user is learning to code.

@@ -16,6 +16,10 @@ COPY . .
 # so they must be passed in as build arguments — they can't be injected at runtime.
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ARG NEXT_PUBLIC_STAGING
+ENV NEXT_PUBLIC_STAGING=$NEXT_PUBLIC_STAGING
+ARG NEXT_PUBLIC_GIT_SHA=unknown
+ENV NEXT_PUBLIC_GIT_SHA=$NEXT_PUBLIC_GIT_SHA
 RUN npm run build
 
 # Production image
@@ -29,6 +33,9 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+RUN mkdir -p /app/public/uploads/werkbonnen /app/public/uploads/device-docs && \
+    chown -R nextjs:nodejs /app/public/uploads
 
 USER nextjs
 
