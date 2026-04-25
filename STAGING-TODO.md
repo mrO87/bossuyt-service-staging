@@ -1,3 +1,18 @@
+## v1.32 — Deploy 2026-04-25 05:26  (sha: 2d37a0b)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/sync/today/route.ts
+    - components/DayView/DayView.tsx
+    - lib/releases.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.31 — Deploy 2026-04-25 05:15  (sha: 76f2657)
 
 ### Changenotes invullen — lib/releases.ts

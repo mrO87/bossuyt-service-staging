@@ -113,6 +113,7 @@ export const workOrders = pgTable('work_orders', {
   completedAt:       timestamp('completed_at', { withTimezone: true }),
   externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
   prefillParts:      jsonb('prefill_parts').$type<PdfPart[]>(),
+  visibleInPool:     boolean('visible_in_pool').notNull().default(true),
 })
 
 export const workOrderAssignments = pgTable(

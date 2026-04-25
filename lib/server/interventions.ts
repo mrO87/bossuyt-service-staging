@@ -38,6 +38,7 @@ type InterventionCoreRow = {
   statusArrivedAt: Date | null
   statusOnderwegBy: string | null
   createdBy: string | null
+  visibleInPool: boolean
 }
 
 type AssignmentRow = {
@@ -95,6 +96,7 @@ function toIntervention(
     statusArrivedAt: row.statusArrivedAt?.toISOString(),
     statusOnderwegBy: row.statusOnderwegBy ?? undefined,
     createdBy: row.createdBy ?? undefined,
+    visibleInPool: row.visibleInPool,
   }
 }
 
@@ -175,6 +177,7 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
       statusArrivedAt: workOrders.statusArrivedAt,
       statusOnderwegBy: workOrders.statusOnderwegBy,
       createdBy: workOrders.createdBy,
+      visibleInPool: workOrders.visibleInPool,
     })
     .from(workOrders)
     .innerJoin(customers, eq(workOrders.customerId, customers.id))
@@ -237,7 +240,7 @@ export async function getTodayInterventions(
   ).slice(0, MAX_PLANNED_ITEMS)
 
   const open = interventions
-    .filter(i => i.source === 'reactive')
+    .filter(i => i.source === 'reactive' && i.visibleInPool)
     .sort((a, b) => Number(b.isUrgent) - Number(a.isUrgent))
     .slice(0, MAX_OPEN_ITEMS)
 

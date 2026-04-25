@@ -102,6 +102,7 @@ export interface Intervention {
   statusOnderwegBy?: string
   createdBy?: string
   planningVersion?: number
+  visibleInPool?: boolean
 }
 
 export interface User {
