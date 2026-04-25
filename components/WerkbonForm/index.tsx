@@ -86,6 +86,15 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       .catch(() => {})
   }, [intervention.id, queuedPartIds, workflowRefresh])
 
+  // Poll every 10s while a load_parts task is pending (waiting for warehouse to finish pick_parts).
+  // Once pick_parts is marked done, the server promotes load_parts to ready — we pick that up here.
+  useEffect(() => {
+    const hasPendingLoad = workflowTasks.some(t => t.type === 'load_parts' && t.status === 'pending')
+    if (!hasPendingLoad) return
+    const interval = setInterval(() => setWorkflowRefresh(v => v + 1), 10_000)
+    return () => clearInterval(interval)
+  }, [workflowTasks])
+
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
