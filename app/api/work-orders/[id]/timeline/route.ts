@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { asc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { tasks, workOrderEvents } from '@/lib/db/schema'
 
@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       .from(workOrderEvents)
       .leftJoin(tasks, eq(workOrderEvents.taskId, tasks.id))
       .where(eq(workOrderEvents.workOrderId, id))
-      .orderBy(asc(workOrderEvents.occurredAt))
+      .orderBy(desc(workOrderEvents.occurredAt))
 
     const events = rows.map(row => ({
       ...row,

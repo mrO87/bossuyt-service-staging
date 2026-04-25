@@ -109,8 +109,8 @@ export async function activateReadySuccessors(
       workOrderId: successor.workOrderId,
       taskId:      dep.successorId,
       actorId:     'system',
-      eventType:   'task_ready',
-      payload:     { triggeredBy: completedTaskId },
+      eventType:   'task_status_changed',
+      payload:     { from: 'pending', to: 'ready', triggeredBy: completedTaskId },
     })
 
     activated.push(dep.successorId)

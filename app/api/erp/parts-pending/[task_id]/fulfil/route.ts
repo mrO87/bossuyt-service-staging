@@ -42,6 +42,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
     const [task] = await db.select().from(tasks).where(eq(tasks.id, taskId))
     if (!task) return NextResponse.json({ error: 'Taak niet gevonden' }, { status: 404 })
+    if (task.type !== 'order_part') return NextResponse.json({ error: 'Taak is geen bestelling' }, { status: 400 })
 
     const now = new Date()
     // Merge ERP data into the existing payload object

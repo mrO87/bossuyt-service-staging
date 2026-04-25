@@ -67,7 +67,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ ok: true, linkId }, { status: 201 })
   } catch (error: unknown) {
     // Unique constraint = link already exists
-    if (error instanceof Error && error.message.includes('work_order_link_unique')) {
+    const cause = (error as { cause?: { message?: string } })?.cause
+    if (cause?.message?.includes('work_order_link_unique')) {
       return NextResponse.json({ error: 'Link bestaat al' }, { status: 409 })
     }
     console.error('[api/work-orders/[id]/link POST]', error)

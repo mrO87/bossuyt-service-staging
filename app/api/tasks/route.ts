@@ -96,6 +96,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const VALID_TASK_TYPES: DbTaskType[] = [
+      'order_part', 'plan_revisit', 'pick_parts', 'load_parts',
+      'contact_customer', 'internal_note', 'quality_check', 'approval', 'other',
+    ]
+    if (!VALID_TASK_TYPES.includes(type)) {
+      return NextResponse.json({ error: `Ongeldig taaktype: ${type}` }, { status: 400 })
+    }
+
     // Idempotency: if we already processed this client_id, return the existing task
     if (clientId) {
       const [existing] = await db
@@ -175,6 +183,10 @@ export async function POST(req: NextRequest) {
     const [created] = await db.select().from(tasks).where(eq(tasks.id, taskId))
     return NextResponse.json({ task: toDbTask(created) }, { status: 201 })
   } catch (error) {
+    const cause = (error as { cause?: { code?: string } })?.cause
+    if (cause?.code === '23503') {
+      return NextResponse.json({ error: 'Werkorder of referentie niet gevonden' }, { status: 400 })
+    }
     console.error('[api/tasks POST]', error)
     return NextResponse.json({ error: 'Kon taak niet aanmaken' }, { status: 500 })
   }

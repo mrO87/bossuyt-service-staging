@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         .where(
           and(
             eq(workOrderEvents.clientId, clientId),
-            eq(workOrderEvents.eventType, `task_${action}`),
+            eq(workOrderEvents.eventType, 'task_status_changed'),
           ),
         )
         .limit(1)
@@ -117,8 +117,8 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         workOrderId: current.workOrderId,
         taskId:      id,
         actorId:     changedBy ?? completedBy ?? 'unknown',
-        eventType:   `task_${action}`,
-        payload:     { from: current.status, to: nextStatus, reasonCode, skipReason },
+        eventType:   'task_status_changed',
+        payload:     { action, from: current.status, to: nextStatus, reasonCode, skipReason },
         clientId,
       })
     })

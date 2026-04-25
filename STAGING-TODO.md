@@ -1,3 +1,23 @@
+## v1.46 — Deploy 2026-04-25 17:21  (sha: e5bcd08)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/warehouse/queue/route.ts
+    - app/magazijn/page.tsx
+    - components/WerkbonForm/TaskManager.tsx
+    - e2e/follow-up-flow.spec.ts
+    - lib/releases.ts
+    - playwright.config.ts
+    - tests/pick-parts-flow.test.ts
+    - tsconfig.json
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.45 — Deploy 2026-04-25 16:40  (sha: cc23566)
 
 ### Changenotes invullen — lib/releases.ts

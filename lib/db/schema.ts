@@ -304,8 +304,7 @@ export const tasks = pgTable(
     seq:         integer('seq').notNull().default(0),
     dueDate:     timestamp('due_date', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
-    completedBy: text('completed_by')
-      .references(() => technicians.id, { onDelete: 'set null' }),
+    completedBy: text('completed_by'),
     skipReason:  text('skip_reason'),
     reasonCode:  text('reason_code').$type<ReasonCode>(),
     payload:     jsonb('payload'),

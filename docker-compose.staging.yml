@@ -21,12 +21,14 @@ services:
         NEXT_PUBLIC_GIT_SHA: ${NEXT_PUBLIC_GIT_SHA:-unknown}
     container_name: bossuyt-staging
     restart: "no"           # niet auto-herstarten — staging is tijdelijk
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.staging.local
+        required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL_STAGING_DOCKER:-postgres://bossuyt:${POSTGRES_PASSWORD}@db-staging:5432/bossuyt_staging}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: https://staging.bossuyt.fixassistant.com
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
-      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       ORS_API_KEY: ${ORS_API_KEY}
       NODE_ENV: production
     ports:
@@ -49,10 +51,12 @@ services:
     image: postgres:16-alpine
     container_name: bossuyt-db-staging
     restart: "no"
+    env_file:
+      - path: .env.staging.local
+        required: false
     environment:
       POSTGRES_DB: bossuyt_staging
       POSTGRES_USER: ${POSTGRES_USER:-bossuyt}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "${POSTGRES_STAGING_PORT:-5433}:5432"
     volumes:

@@ -18,7 +18,7 @@ async function tableExists(tableName: string): Promise<boolean> {
     select to_regclass(${`public.${tableName}`}) as regclass
   `
 
-  return rows[0]?.regclass === `public.${tableName}`
+  return rows[0]?.regclass != null
 }
 
 describe('database schema validation', () => {

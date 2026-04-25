@@ -15,6 +15,18 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.47',
+    date: '25 april 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'TODO — invullen na deploy',
+        body: 'TODO — beschrijving invullen.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.46',
     date: '25 april 2026',
     changes: [
@@ -891,7 +903,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.46'
+const CURRENT_RELEASE_VERSION = 'v1.47'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

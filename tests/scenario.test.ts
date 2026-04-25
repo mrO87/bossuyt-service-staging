@@ -143,14 +143,17 @@ describe('task system end to end scenario', () => {
     const timelineResponse = await getWorkOrderTimeline(req(`http://localhost/api/work-orders/${originalWorkOrderId}/timeline`), idContext(originalWorkOrderId))
     const timelineBody = await json<{ events: Array<{ eventType: string; taskId: string | null }> }>(timelineResponse)
 
+    // Events are returned newest-first (DESC occurred_at).
+    // Activation of planRevisit by the dependency engine adds a 5th task_status_changed.
     expect(timelineBody.events.map(event => event.eventType)).toEqual([
-      'task_created',
-      'task_created',
-      'task_status_changed',
-      'task_status_changed',
-      'task_status_changed',
-      'task_status_changed',
       'follow_up_linked',
+      'task_status_changed',
+      'task_status_changed',
+      'task_status_changed',
+      'task_status_changed',
+      'task_status_changed',
+      'task_created',
+      'task_created',
     ])
 
     const workOrderTimelineEvents = await testDb
