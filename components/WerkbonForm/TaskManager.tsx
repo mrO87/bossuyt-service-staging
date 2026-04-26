@@ -80,20 +80,26 @@ function formatActivityDueDate(value?: string): string {
 
 // ── Workflow task cards ────────────────────────────────────────────────────────
 
-function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => Promise<boolean> }) {
   const parts = (task.payload?.parts ?? []) as PdfPart[]
   const isPending = task.status === 'pending'
   const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function toggle(id: string) {
     setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
-  function receiveAll() {
-    setChecked(new Set(parts.map(p => p.id)))
-    onComplete(task)
+  async function receiveAll() {
+    setError(null)
+    setSaving(true)
+    const ok = await onComplete(task)
+    setSaving(false)
+    if (ok) setChecked(new Set(parts.map(p => p.id)))
+    else setError('Opslaan mislukt — probeer opnieuw.')
   }
 
   return (
@@ -139,9 +145,9 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
               ))}
               {!isDone && (
                 <div className="flex justify-end gap-2 px-3 py-2.5 border-t border-stroke/40">
-                  <button type="button" onClick={receiveAll}
-                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green">
-                    ✅ Alles ontvangen
+                  <button type="button" onClick={receiveAll} disabled={saving}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green disabled:opacity-50">
+                    {saving ? 'Opslaan...' : '✅ Alles ontvangen'}
                   </button>
                 </div>
               )}
@@ -149,9 +155,12 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
           ) : (
             <div className="flex justify-end px-3 py-2.5 border-t border-stroke/40">
               {!isDone
-                ? <button type="button" onClick={() => onComplete(task)} className="text-xs text-brand-green">✅ Gereed</button>
+                ? <button type="button" onClick={receiveAll} className="text-xs text-brand-green">✅ Gereed</button>
                 : <span className="text-xs text-ink-soft">✓ Klaar</span>}
             </div>
+          )}
+          {error && (
+            <p className="px-3 py-2 text-xs font-medium text-brand-red border-t border-stroke/40">{error}</p>
           )}
         </div>
       )}
@@ -159,7 +168,7 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   )
 }
 
-function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+function PickPartsCard({ task, onComplete, technicianName }: { task: DbTask; onComplete: (t: DbTask) => Promise<boolean>; technicianName?: string }) {
   const { currentUser } = useTasks()
   const parts    = (task.payload?.parts ?? []) as PdfPart[]
   const isDone   = task.status === 'done' || task.status === 'skipped'
@@ -167,14 +176,20 @@ function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   const isWarehouse = currentUser.role === 'warehouse'
   const [expanded, setExpanded] = useState(isWarehouse && isActive)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function toggle(id: string) {
     setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
-  function markAllReady() {
-    setChecked(new Set(parts.map(p => p.id)))
-    onComplete(task)
+  async function markAllReady() {
+    setError(null)
+    setSaving(true)
+    const ok = await onComplete(task)
+    setSaving(false)
+    if (ok) setChecked(new Set(parts.map(p => p.id)))
+    else setError('Opslaan mislukt — probeer opnieuw.')
   }
 
   return (
@@ -188,8 +203,8 @@ function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
           <p className="text-sm font-bold text-ink">Onderdelen klaarzetten</p>
           <p className="text-xs text-ink-soft">
             Magazijn{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}
-            {isDone && ' • ✓ Klaar'}
-            {isActive && isWarehouse && ' • Jouw taak'}
+            {isDone && (technicianName ? ` • ✓ Klaargezet voor ${technicianName}` : ' • ✓ Klaar')}
+            {isActive && isWarehouse && (technicianName ? ` • Klaarzetten voor ${technicianName}` : ' • Jouw taak')}
             {isActive && !isWarehouse && ' • Bezig in magazijn'}
           </p>
         </div>
@@ -220,11 +235,14 @@ function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
           ))}
           {isWarehouse && !isDone && (
             <div className="flex justify-end gap-2 px-3 py-2.5 border-t border-stroke/40">
-              <button type="button" onClick={markAllReady}
-                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green">
-                ✅ Alles klaar — technieker verwittigen
+              <button type="button" onClick={markAllReady} disabled={saving}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green disabled:opacity-50">
+                {saving ? 'Opslaan...' : '✅ Alles klaar — technieker verwittigen'}
               </button>
             </div>
+          )}
+          {error && (
+            <p className="px-3 py-2 text-xs font-medium text-brand-red border-t border-stroke/40">{error}</p>
           )}
         </div>
       )}
@@ -232,8 +250,16 @@ function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   )
 }
 
-function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => Promise<boolean> }) {
   const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleComplete() {
+    setError(null)
+    const ok = await onComplete(task)
+    if (!ok) setError('Opslaan mislukt — probeer opnieuw.')
+  }
+
   return (
     <div className="rounded-xl border border-stroke bg-surface p-3 flex items-start gap-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">OF</div>
@@ -242,10 +268,11 @@ function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: D
         <p className="mt-0.5 text-xs text-ink-soft">Office / Planning{isDone ? ' • ✓ Klaar' : ''}</p>
         {!isDone && (
           <div className="mt-1.5 flex gap-3 text-xs font-medium">
-            <button type="button" onClick={() => onComplete(task)} className="text-brand-green">✅ Gereed</button>
+            <button type="button" onClick={handleComplete} className="text-brand-green">✅ Gereed</button>
             <span className="text-ink-faint cursor-not-allowed" title="Binnenkort beschikbaar">→ Naar planning</span>
           </div>
         )}
+        {error && <p className="mt-1 text-xs font-medium text-brand-red">{error}</p>}
       </div>
     </div>
   )
@@ -263,15 +290,16 @@ interface Props {
 export default function TaskManager({ intervention, werkbonId, orderTasks, workflowTasks = [], onWorkflowTaskComplete, initialActivityId }: Props) {
   const { currentUser, tasks, createTask, updateTask } = useTasks()
 
-  async function handleCompleteDbTask(task: DbTask) {
+  async function handleCompleteDbTask(task: DbTask): Promise<boolean> {
     try {
       const res = await fetch(`/api/tasks/${task.id}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'complete', completed_by: currentUser.id, changed_by: currentUser.id }),
       })
-      if (res.ok) onWorkflowTaskComplete?.()
-    } catch { /* ignore */ }
+      if (res.ok) { onWorkflowTaskComplete?.(); return true }
+      return false
+    } catch { return false }
   }
 
   const [editingTaskId, setEditingTaskId] = useState<string | 'new' | null>(() => initialActivityId ?? null)
@@ -411,7 +439,9 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
 
         {workflowTasks.map(task => {
           if (task.type === 'pick_parts') {
-            return <PickPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
+            const loadTask = workflowTasks.find(t => t.type === 'load_parts')
+            const techName = loadTask?.assigneeId ? getUserById(loadTask.assigneeId)?.name : undefined
+            return <PickPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} technicianName={techName} />
           }
           if (task.type === 'load_parts') {
             return <LoadPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />

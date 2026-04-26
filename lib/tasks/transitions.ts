@@ -15,7 +15,7 @@ export type TaskAction = 'start' | 'complete' | 'skip' | 'block' | 'cancel' | 'r
 // Missing action = forbidden transition.
 const TRANSITIONS: Record<DbTaskStatus, Partial<Record<TaskAction, DbTaskStatus>>> = {
   pending:     { cancel: 'cancelled' },
-  ready:       { start: 'in_progress', cancel: 'cancelled' },
+  ready:       { start: 'in_progress', complete: 'done', cancel: 'cancelled' },
   in_progress: {
     complete: 'done',
     skip:     'skipped',

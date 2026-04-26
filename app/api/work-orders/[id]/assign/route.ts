@@ -3,7 +3,8 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { tasks, workOrderAssignments, workOrderEvents, workOrders } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
-import type { DbTaskType } from '@/types'
+import { getUserById } from '@/lib/mock-data'
+import type { DbTaskType, TaskRole } from '@/types'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -68,6 +69,24 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
       // Keep load_parts task in sync with the lead technician
       if (isLead) {
+        const [loadTask] = await tx
+          .select()
+          .from(tasks)
+          .where(and(
+            eq(tasks.workOrderId, id),
+            eq(tasks.type, 'load_parts' as DbTaskType),
+          ))
+
+        const [pickTask] = await tx
+          .select()
+          .from(tasks)
+          .where(and(
+            eq(tasks.workOrderId, id),
+            eq(tasks.type, 'pick_parts' as DbTaskType),
+          ))
+
+        const oldTechnicianId = loadTask?.assigneeId ?? null
+
         await tx
           .update(tasks)
           .set({ assigneeId: technicianId })
@@ -75,6 +94,30 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
             eq(tasks.workOrderId, id),
             eq(tasks.type, 'load_parts' as DbTaskType),
           ))
+
+        // pick done but load not yet confirmed + technician changed → warehouse must move the parts
+        // covers both pending (warehouse just finished) and ready (tech hasn't confirmed yet)
+        if (
+          oldTechnicianId &&
+          oldTechnicianId !== technicianId &&
+          pickTask?.status === 'done' &&
+          (loadTask?.status === 'pending' || loadTask?.status === 'ready')
+        ) {
+          const oldName = getUserById(oldTechnicianId)?.name ?? oldTechnicianId
+          const newName = getUserById(technicianId)?.name ?? technicianId
+          await tx.insert(tasks).values({
+            id:          crypto.randomUUID(),
+            workOrderId: id,
+            type:        'other' as DbTaskType,
+            role:        'warehouse' as TaskRole,
+            status:      'ready',
+            title:       `Verplaats onderdelen: van ${oldName} naar ${newName}`,
+            description: `De planning heeft de technieker gewijzigd van ${oldName} naar ${newName}. Verplaats de klaargezette onderdelen naar de juiste bus/locatie.`,
+            seq:         99,
+            createdBy:   changedBy ?? 'system',
+            updatedAt:   new Date(),
+          })
+        }
       }
 
       await tx.insert(workOrderEvents).values({
