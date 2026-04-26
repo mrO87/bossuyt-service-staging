@@ -1,3 +1,15 @@
+## v1.48 — Deploy 2026-04-26 09:16  (sha: 9672c2a)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - lib/releases.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.46 — Deploy 2026-04-25 17:21  (sha: e5bcd08)
 
 ### Changenotes invullen — lib/releases.ts
