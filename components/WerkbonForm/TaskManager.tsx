@@ -159,13 +159,23 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   )
 }
 
-// Read-only view of the warehouse picking task — technician sees status only.
-// The warehouse worker completes this task from /magazijn, not from the werkbon.
-function PickPartsCard({ task }: { task: DbTask }) {
-  const parts  = (task.payload?.parts ?? []) as PdfPart[]
-  const isDone = task.status === 'done' || task.status === 'skipped'
+function PickPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbTask) => void }) {
+  const { currentUser } = useTasks()
+  const parts    = (task.payload?.parts ?? []) as PdfPart[]
+  const isDone   = task.status === 'done' || task.status === 'skipped'
   const isActive = task.status === 'ready' || task.status === 'in_progress'
-  const [expanded, setExpanded] = useState(false)
+  const isWarehouse = currentUser.role === 'warehouse'
+  const [expanded, setExpanded] = useState(isWarehouse && isActive)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+
+  function toggle(id: string) {
+    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  function markAllReady() {
+    setChecked(new Set(parts.map(p => p.id)))
+    onComplete(task)
+  }
 
   return (
     <div className="rounded-xl border border-stroke overflow-hidden">
@@ -179,7 +189,8 @@ function PickPartsCard({ task }: { task: DbTask }) {
           <p className="text-xs text-ink-soft">
             Magazijn{parts.length > 0 && ` • ${parts.length} onderdeel${parts.length !== 1 ? 'en' : ''}`}
             {isDone && ' • ✓ Klaar'}
-            {isActive && ' • Bezig'}
+            {isActive && isWarehouse && ' • Jouw taak'}
+            {isActive && !isWarehouse && ' • Bezig in magazijn'}
           </p>
         </div>
         {parts.length > 0 && (
@@ -190,14 +201,31 @@ function PickPartsCard({ task }: { task: DbTask }) {
       {expanded && parts.length > 0 && (
         <div className="bg-white border-t border-stroke">
           {parts.map(part => (
-            <div key={part.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-stroke/40 last:border-b-0">
+            <label key={part.id}
+              className={`flex items-center gap-3 px-3 py-2.5 border-b border-stroke/40 last:border-b-0 ${isWarehouse && !isDone ? 'cursor-pointer' : ''}`}>
+              {isWarehouse && !isDone && (
+                <input type="checkbox"
+                  checked={checked.has(part.id) || isDone}
+                  onChange={() => toggle(part.id)}
+                  className="h-5 w-5 rounded accent-brand-blue" />
+              )}
               <div className="flex-1 min-w-0">
-                <span className="text-sm text-ink">{part.description}</span>
+                <span className={`text-sm ${checked.has(part.id) || isDone ? 'line-through text-ink-soft' : 'text-ink'}`}>
+                  {part.description}
+                </span>
                 {part.code && <span className="ml-2 text-xs text-ink-faint">#{part.code}</span>}
               </div>
               <span className="text-xs text-ink-soft shrink-0">×{part.quantity}</span>
-            </div>
+            </label>
           ))}
+          {isWarehouse && !isDone && (
+            <div className="flex justify-end gap-2 px-3 py-2.5 border-t border-stroke/40">
+              <button type="button" onClick={markAllReady}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-brand-green/10 text-brand-green">
+                ✅ Alles klaar — technieker verwittigen
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -383,7 +411,7 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
 
         {workflowTasks.map(task => {
           if (task.type === 'pick_parts') {
-            return <PickPartsCard key={task.id} task={task} />
+            return <PickPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />
           }
           if (task.type === 'load_parts') {
             return <LoadPartsCard key={task.id} task={task} onComplete={handleCompleteDbTask} />

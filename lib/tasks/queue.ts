@@ -117,7 +117,7 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
   return result
 }
 
-/** Returns all tasks across all roles and statuses — used for the activity log. */
+/** Returns all tasks across all roles and statuses — used for the activity log. Oldest first. */
 export async function getAllQueueItems(): Promise<DbTask[]> {
   const rows = await db
     .select(TASK_COLS)
@@ -125,8 +125,8 @@ export async function getAllQueueItems(): Promise<DbTask[]> {
     .innerJoin(workOrders, eq(tasks.workOrderId, workOrders.id))
     .innerJoin(customers, eq(workOrders.customerId, customers.id))
     .orderBy(
-      desc(workOrders.isUrgent),
-      sql`${tasks.updatedAt} DESC NULLS LAST`,
+      asc(tasks.seq),
+      sql`${tasks.createdAt} ASC NULLS LAST`,
     )
   return rows.map(toDbTask)
 }
