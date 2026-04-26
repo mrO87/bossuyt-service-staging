@@ -37,24 +37,51 @@ function getDbTaskStatusLabel(status: DbTaskStatus): string {
   return labels[status] ?? status
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  warehouse:  'Magazijn',
+  technician: 'Technieker',
+  office:     'Office',
+  planner:    'Planner',
+  admin:      'Admin',
+  hr:         'HR',
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  done:        'bg-brand-green/10 text-brand-green',
+  in_progress: 'bg-brand-blue/10 text-brand-blue',
+  ready:       'bg-brand-orange/10 text-brand-orange',
+  pending:     'bg-stroke text-ink-faint',
+  cancelled:   'bg-stroke text-ink-faint',
+  skipped:     'bg-stroke text-ink-faint',
+  blocked:     'bg-brand-red/10 text-brand-red',
+}
+
 function DbTaskRow({ task }: { task: DbTask }) {
+  const roleLabel   = ROLE_LABELS[task.role] ?? task.role
+  const statusColor = STATUS_COLORS[task.status] ?? 'bg-stroke text-ink-faint'
+
   return (
     <div className="rounded-xl border border-stroke bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="font-bold text-base text-ink">{task.title}</p>
           <p className="mt-1 text-sm text-ink-soft">
-            {getDbTaskTypeLabel(task.type)} • {getDbTaskStatusLabel(task.status)}
+            {getDbTaskTypeLabel(task.type)}
           </p>
         </div>
-        <span className="rounded-full bg-brand-orange/10 px-2.5 py-1 text-xs font-medium text-brand-orange">
-          Werkbon
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusColor}`}>
+          {getDbTaskStatusLabel(task.status)}
         </span>
       </div>
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-ink-soft">
         {task.customerName && <p className="font-medium text-ink">{task.customerName}</p>}
         {task.workOrderDescription && <p>{task.workOrderDescription}</p>}
         {task.description && <p>{task.description}</p>}
+        <p className="mt-1">
+          <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-ink-faint border border-stroke">
+            {roleLabel}
+          </span>
+        </p>
       </div>
     </div>
   )
@@ -117,18 +144,15 @@ export default function ActivitiesPage() {
   const [dbTasks, setDbTasks] = useState<DbTask[]>([])
 
   const loadDbTasks = useCallback(async () => {
-    const param = currentUser.role === 'technician'
-      ? `technician_id=${currentUser.id}`
-      : `role=${currentUser.role}`
     try {
-      const res = await fetch(`/api/tasks/queue?${param}`, { cache: 'no-store' })
+      const res = await fetch('/api/tasks/queue?all=true', { cache: 'no-store' })
       if (!res.ok) return
       const data = await res.json() as { tasks: DbTask[] }
       setDbTasks(data.tasks)
     } catch {
       // silently ignore — DB tasks are supplemental
     }
-  }, [currentUser.id, currentUser.role])
+  }, [])
 
   useEffect(() => { loadDbTasks() }, [loadDbTasks])
 
@@ -139,7 +163,8 @@ export default function ActivitiesPage() {
   const openTasks = myTasks.filter(task => isTaskOpen(task.status))
   const closedTasks = myTasks.filter(task => !isTaskOpen(task.status))
 
-  const totalOpen = openTasks.length + dbTasks.length
+  const activeDbTasks = dbTasks.filter(t => t.status === 'ready' || t.status === 'in_progress')
+  const totalOpen = openTasks.length + activeDbTasks.length
 
   return (
     <div className="min-h-screen bg-surface">
@@ -172,8 +197,8 @@ export default function ActivitiesPage() {
         {dbTasks.length > 0 && (
           <section className="flex flex-col gap-3">
             <div>
-              <p className="font-bold text-sm text-ink">Werkbontaken</p>
-              <p className="text-xs text-ink-soft">Automatisch aangemaakte taken voor opvolgbonnen.</p>
+              <p className="font-bold text-sm text-ink">Activiteitenlog</p>
+              <p className="text-xs text-ink-soft">Alle taken van alle rollen — magazijn, technieker, planning.</p>
             </div>
             {dbTasks.map(task => (
               <DbTaskRow key={task.id} task={task} />

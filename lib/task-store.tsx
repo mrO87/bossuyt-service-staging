@@ -2,11 +2,12 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { currentUserId, getCurrentUser, getUserById, tasks as seededTasks } from '@/lib/mock-data'
+import { currentUserId, getUserById, users, tasks as seededTasks } from '@/lib/mock-data'
 import { isTaskAssignedToUser, isTaskOpen } from '@/lib/task-meta'
 import type { Task, TaskPriority, TaskStatus, TaskType, User } from '@/types'
 
 const TASKS_STORAGE_KEY = 'bossuyt-service:tasks'
+export const ACTIVE_USER_KEY = 'bossuyt-service:active-user-id'
 
 interface CreateTaskInput {
   type: TaskType
@@ -36,6 +37,8 @@ interface UpdateTaskInput {
 
 interface TaskContextValue {
   currentUser: User
+  allUsers: User[]
+  switchUser: (userId: string) => void
   tasks: Task[]
   createTask: (input: CreateTaskInput) => Task
   updateTaskStatus: (taskId: string, status: TaskStatus) => void
@@ -69,10 +72,18 @@ function sortTasks(list: Task[]): Task[] {
 }
 
 export function TaskProvider({ children }: { children: ReactNode }) {
-  const fallbackUser = getCurrentUser()
+  const [activeUserId, setActiveUserId] = useState<string>(() => {
+    if (typeof window === 'undefined') return currentUserId
+    return window.localStorage.getItem(ACTIVE_USER_KEY) ?? currentUserId
+  })
 
-  if (!fallbackUser) {
-    throw new Error(`Demo current user ${currentUserId} was not found in mock data.`)
+  const currentUser = getUserById(activeUserId) ?? getUserById(currentUserId)!
+
+  function switchUser(userId: string) {
+    setActiveUserId(userId)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ACTIVE_USER_KEY, userId)
+    }
   }
 
   const [tasks, setTasks] = useState<Task[]>(() => {
@@ -173,7 +184,9 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   }
 
   const value: TaskContextValue = {
-    currentUser: fallbackUser,
+    currentUser,
+    allUsers: users,
+    switchUser,
     tasks,
     createTask,
     updateTaskStatus,

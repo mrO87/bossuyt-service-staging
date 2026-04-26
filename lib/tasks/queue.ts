@@ -117,6 +117,20 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
   return result
 }
 
+/** Returns all tasks across all roles and statuses — used for the activity log. */
+export async function getAllQueueItems(): Promise<DbTask[]> {
+  const rows = await db
+    .select(TASK_COLS)
+    .from(tasks)
+    .innerJoin(workOrders, eq(tasks.workOrderId, workOrders.id))
+    .innerJoin(customers, eq(workOrders.customerId, customers.id))
+    .orderBy(
+      desc(workOrders.isUrgent),
+      sql`${tasks.updatedAt} DESC NULLS LAST`,
+    )
+  return rows.map(toDbTask)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toDbTask(row: any): DbTask {
   return {

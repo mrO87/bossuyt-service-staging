@@ -1232,6 +1232,14 @@ export const users: User[] = [
     role: 'hr',
     active: true,
   },
+  {
+    id: 'u6',
+    name: 'Demo Planner',
+    initials: 'PL',
+    email: 'planning@bossuyt-service.be',
+    role: 'planner',
+    active: true,
+  },
 ]
 
 export const currentUserId = 'u1'

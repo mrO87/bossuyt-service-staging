@@ -110,7 +110,7 @@ export interface User {
   name: string
   initials: string
   email: string
-  role: 'technician' | 'office' | 'admin' | 'hr' | 'warehouse'
+  role: 'technician' | 'office' | 'admin' | 'hr' | 'warehouse' | 'planner'
   active: boolean
 }
 

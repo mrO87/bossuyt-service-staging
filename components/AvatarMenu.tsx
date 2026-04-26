@@ -16,6 +16,7 @@ function getRoleLabel(role: string): string {
     case 'office': return 'Office'
     case 'warehouse': return 'Magazijn'
     case 'hr': return 'HR'
+    case 'planner': return 'Planner'
     default: return role
   }
 }
@@ -26,7 +27,7 @@ export default function AvatarMenu() {
   const [open, setOpen] = useState(false)
   const [tasksOpen, setTasksOpen] = useState(false)
   const { settings, updateSetting } = useSettings()
-  const { currentUser, tasks, getOpenTaskCountForUser } = useTasks()
+  const { currentUser, tasks, getOpenTaskCountForUser, switchUser } = useTasks()
 
   const openTasks = useMemo(() => (
     tasks.filter(task => isTaskAssignedToUser(task, currentUser) && isTaskOpen(task.status))
@@ -66,6 +67,38 @@ export default function AvatarMenu() {
           <div className="border-b border-stroke pb-3 mb-4">
             <p className="font-bold text-sm text-ink">{currentUser.name}</p>
             <p className="text-xs text-ink-soft">{getRoleLabel(currentUser.role)}</p>
+          </div>
+
+          {/* — Rol wisselen — */}
+          <div className="mb-5">
+            <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
+              Actieve rol (voor testen)
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { id: 'u1', label: 'Olivier',    sub: 'Technieker'  },
+                { id: 'u4', label: 'Tom',        sub: 'Magazijnier' },
+                { id: 'u6', label: 'Planner',    sub: 'Planning'    },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => switchUser(opt.id)}
+                  className={[
+                    'flex items-center justify-between px-3 py-2 rounded-xl border text-left transition-colors',
+                    currentUser.id === opt.id
+                      ? 'bg-brand-orange text-white border-brand-orange'
+                      : 'bg-surface text-ink border-stroke',
+                  ].join(' ')}
+                >
+                  <div>
+                    <p className="font-semibold text-sm">{opt.label}</p>
+                    <p className={`text-xs ${currentUser.id === opt.id ? 'text-white/70' : 'text-ink-soft'}`}>{opt.sub}</p>
+                  </div>
+                  {currentUser.id === opt.id && <span className="text-xs font-bold">✓</span>}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* — Startlocatie — */}

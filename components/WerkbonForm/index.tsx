@@ -14,7 +14,7 @@ import type { Intervention, DbTask, Task, User } from '@/types'
 function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
   if (task.assigneeType === 'group' && task.assigneeRole) {
     const labels: Record<User['role'], string> = {
-      technician: 'Techniekers', admin: 'Admin', office: 'Office', warehouse: 'Magazijn', hr: 'HR',
+      technician: 'Techniekers', admin: 'Admin', office: 'Office', warehouse: 'Magazijn', hr: 'HR', planner: 'Planner',
     }
     return labels[task.assigneeRole] ?? task.assigneeRole
   }

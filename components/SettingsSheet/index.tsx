@@ -17,7 +17,7 @@ interface Props {
 export default function SettingsSheet({ open, onClose }: Props) {
   const router = useRouter()
   const { settings, updateSetting } = useSettings()
-  const { currentUser, tasks, getOpenTaskCountForUser } = useTasks()
+  const { currentUser, tasks, getOpenTaskCountForUser, switchUser } = useTasks()
   const [tasksOpen, setTasksOpen] = useState(false)
   const openTasks = tasks.filter(task => isTaskAssignedToUser(task, currentUser) && isTaskOpen(task.status))
   const openTaskCount = getOpenTaskCountForUser(currentUser.id)
@@ -67,6 +67,38 @@ export default function SettingsSheet({ open, onClose }: Props) {
 
         {/* Content */}
         <div className="px-4 py-4 space-y-5 pb-10 max-h-[80vh] overflow-y-auto">
+
+          {/* — Actieve rol — */}
+          <div>
+            <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
+              Actieve rol (voor testen)
+            </p>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: 'u1', label: 'Olivier Pierrard', sub: 'Technieker' },
+                { id: 'u4', label: 'Tom Magazijn',     sub: 'Magazijnier' },
+                { id: 'u6', label: 'Demo Planner',     sub: 'Planner' },
+              ].map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => switchUser(option.id)}
+                  className={[
+                    'flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-colors',
+                    currentUser.id === option.id
+                      ? 'bg-brand-orange text-white border-brand-orange'
+                      : 'bg-surface text-ink border-stroke',
+                  ].join(' ')}
+                >
+                  <div>
+                    <p className="font-semibold text-sm">{option.label}</p>
+                    <p className={`text-xs ${currentUser.id === option.id ? 'text-white/70' : 'text-ink-soft'}`}>{option.sub}</p>
+                  </div>
+                  {currentUser.id === option.id && <span className="text-white text-xs font-bold">✓ Actief</span>}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* — Startlocatie — */}
           <div>
