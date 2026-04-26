@@ -1,3 +1,19 @@
+## v1.51 — Deploy 2026-04-26 16:33  (sha: 366b4c8)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - app/api/work-orders/[id]/assign/route.ts
+    - components/WerkbonForm/TaskManager.tsx
+    - lib/releases.ts
+    - lib/tasks/transitions.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.50 — Deploy 2026-04-26 10:29  (sha: fd9cae4)
 
 ### Changenotes invullen — lib/releases.ts

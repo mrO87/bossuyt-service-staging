@@ -254,6 +254,9 @@ function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: D
   const isDone = task.status === 'done' || task.status === 'skipped' || task.status === 'cancelled'
   const [error, setError] = useState<string | null>(null)
 
+  const intendedTechId   = (task.payload as Record<string, unknown> | null)?.intended_technician_id as string | undefined
+  const intendedTechName = intendedTechId ? getUserById(intendedTechId)?.name : undefined
+
   async function handleComplete() {
     setError(null)
     const ok = await onComplete(task)
@@ -265,7 +268,11 @@ function PlanRevisitCard({ task, onComplete }: { task: DbTask; onComplete: (t: D
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">OF</div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-ink">Opvolgbon inplannen</p>
-        <p className="mt-0.5 text-xs text-ink-soft">Office / Planning{isDone ? ' • ✓ Klaar' : ''}</p>
+        <p className="mt-0.5 text-xs text-ink-soft">
+          Office / Planning
+          {intendedTechName && !isDone && ` • voor ${intendedTechName}`}
+          {isDone && ' • ✓ Klaar'}
+        </p>
         {!isDone && (
           <div className="mt-1.5 flex gap-3 text-xs font-medium">
             <button type="button" onClick={handleComplete} className="text-brand-green">✅ Gereed</button>

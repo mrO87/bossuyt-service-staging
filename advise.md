@@ -92,3 +92,106 @@ curl -X POST http://localhost:3000/api/work-orders/test-id/complete \
   -F "changedBy=test" \
   -F "completionParts=GEEN_JSON"
 ```
+
+---
+
+## 6. Volledige Codebase Review — 26 april 2026
+
+Algehele kwaliteit: **7.5/10** — Solide basis met geavanceerde offline-sync, maar een aantal scherpe pijnpunten die aandacht verdienen voor de app naar echte gebruikers gaat.
+
+### 🔴 Kritiek (kan data verloren laten gaan)
+
+**1. Stille JSON parse fout bij werkbon-afwerking**
+- **Locatie:** `app/api/work-orders/[id]/complete/route.ts` regels 22–23
+- **Probleem:** `JSON.parse` fouten worden opgevangen maar de data wordt dan als `null` opgeslagen zonder de technieker te waarschuwen. De technieker denkt dat zijn onderdelenlijst opgeslagen is — dat is hij niet.
+- **Fix:** Geef een `400` fout terug in plaats van stilzwijgend te falen:
+  ```typescript
+  if (partsRaw) {
+    try { parts = JSON.parse(partsRaw) }
+    catch { return NextResponse.json({ error: 'Ongeldige onderdelenlijst' }, { status: 400 }) }
+  }
+  ```
+
+**2. Geen detectie van circulaire task-afhankelijkheden**
+- **Locatie:** `lib/tasks/dependencies.ts`
+- **Probleem:** Als taak A afhankelijk is van B en B van A, loopt `isTaskReady()` in een oneindige lus. Eén verkeerde klik van een gebruiker kan de server blokkeren.
+- **Fix:** Voeg een DFS cycle-detectie toe in de POST `/api/tasks` route vóór een nieuwe dependency wordt opgeslagen.
+
+---
+
+### 🟠 Hoog (verbergen problemen in productie)
+
+**3. Geen gestructureerde logging**
+- **Locatie:** alle `/app/api/` routes (~23 `console.error()` calls)
+- **Probleem:** In Docker gaat alles naar stderr zonder request ID, user context of correlatie. Productiefouten zijn niet traceerbaar.
+- **Fix:** Installeer `pino`, maak `lib/logging.ts`, vervang alle `console.error` door `logger.error({ route, userId }, 'omschrijving')`.
+
+**4. IndexedDB opslaglimiet wordt niet bewaakt**
+- **Locatie:** `lib/idb.ts`
+- **Probleem:** Foto's worden als blobs gecached zonder te controleren of de browser-quota vol raakt. Als die vol is, stopt het cachen stil — geen waarschuwing voor de technieker.
+- **Fix:** Voeg `navigator.storage.estimate()` check toe in `lib/sync.ts`, waarschuw bij >80% gebruik.
+
+**5. Geen input validatie bibliotheek**
+- **Locatie:** alle API routes
+- **Probleem:** Elke route valideert handmatig op een andere manier. Inconsistent en foutgevoelig.
+- **Fix:** Voeg `zod` toe. Maak schema's per route — TypeScript types komen er gratis bij.
+
+---
+
+### 🟡 Medium (code kwaliteit & UX)
+
+**6. `AssigneeSelect` aangemaakt binnen component — verliest focus**
+- **Locatie:** `components/WerkbonForm/TaskManager.tsx` regel 405
+- **Probleem:** De `AssigneeSelect` functie staat *binnen* `TaskManager`. React ziet bij elke render een nieuw component type en mount de dropdown volledig opnieuw — inclusief verlies van toetsenbord-focus.
+- **Fix:** Verplaats `AssigneeSelect` naar buiten de `TaskManager` functie (één niveau hoger in het bestand).
+
+**7. Task-aanmaak niet atomisch bij fout in successors**
+- **Locatie:** `app/api/tasks/[id]/transition/route.ts` regels 142–154
+- **Probleem:** Als het aanmaken van opvolger-taken halverwege mislukt, zijn de eerste al aangemaakt. Geen rollback.
+- **Fix:** Wikkel de hele flow in een `withAudit` transactie.
+
+**8. Geen error boundaries in React**
+- **Locatie:** `components/DayTimeline/`, `components/WerkbonForm/`
+- **Probleem:** Een JavaScript-fout in een sub-component gooit de hele pagina plat — witte scherm, geen uitleg.
+- **Fix:** Maak een `ErrorBoundary` component en wikkel de grote componenten erin.
+
+**9. Sync foutmeldingen te generiek**
+- **Locatie:** `lib/sync.ts`
+- **Probleem:** Netwerk time-out, server down, en IndexedDB vol — allemaal dezelfde `'Onbekende fout'`. De technieker weet niet wat hij moet doen.
+- **Fix:** Categoriseer fouten: `NetworkError`, `ServerError`, `StorageError` met specifieke boodschappen.
+
+**10. Drizzle config crasht niet vroeg genoeg**
+- **Locatie:** `drizzle.config.ts`
+- **Probleem:** `process.env.DATABASE_URL ?? ''` geeft een lege string als de variabele ontbreekt → cryptische fout diep in de code.
+- **Fix:** `if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is niet ingesteld')`
+
+**11. Geen paginering op geschiedenis-endpoints**
+- **Locatie:** `/api/devices/[id]/history/route.ts`
+- **Probleem:** Geeft alle records terug in één response. Toestellen met jaren service-geschiedenis → trage laadtijden.
+- **Fix:** Voeg `?page=1&limit=20` query parameters toe.
+
+---
+
+### 🟢 Klein (nice to have)
+
+**12. Release notes worden nooit ingevuld**
+- `STAGING-TODO.md` heeft 30+ versies met onafgewerkte "Changenotes invullen" TO-DO's.
+- Overweeg een GitHub Actions check die een merge blokkeert als `lib/releases.ts` niet bijgewerkt is.
+
+**13. NextAuth is onvolledig geconfigureerd**
+- Rollen zijn gedefinieerd in de types, maar API-routes worden niet beschermd door auth-middleware.
+- Belangrijk vóór de app naar echte gebruikers gaat.
+
+---
+
+### Aanbevolen volgorde
+
+| Prioriteit | Taak | Geschatte tijd |
+|---|---|---|
+| 1 | Silent JSON parse fix (complete route) | 1 uur |
+| 2 | Circular dependency detectie | 2 uur |
+| 3 | `AssigneeSelect` buiten component verplaatsen | 15 min |
+| 4 | Structured logging met Pino | 4 uur |
+| 5 | IndexedDB quota monitoring | 2 uur |
+| 6 | Zod validatie toevoegen | 1 dag |
+| 7 | Error boundaries | 2 uur |

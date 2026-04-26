@@ -164,6 +164,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       })
 
       // Task 3 — Office: schedule the follow-up work order
+      // payload carries the intended technician so the planning module can enforce it
       await tx.insert(tasks).values({
         id:          crypto.randomUUID(),
         workOrderId: newId,
@@ -175,6 +176,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         seq:         3,
         createdBy:   changedBy ?? 'system',
         updatedAt:   now,
+        payload:     leadTechnicianId ? { intended_technician_id: leadTechnicianId } : null,
       })
     })
 
