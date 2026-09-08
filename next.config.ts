@@ -1,9 +1,15 @@
-import type { NextConfig } from "next";
+import { dirname } from 'path'
+import { fileURLToPath } from 'url'
+import type { NextConfig } from 'next'
+
+const projectRoot = dirname(fileURLToPath(import.meta.url))
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactCompiler: true,
-  output: "standalone",
-};
+  output: 'standalone',
+  turbopack: {
+    root: projectRoot,
+  },
+}
 
-export default nextConfig;
+export default nextConfig

@@ -54,6 +54,9 @@ export async function getQueueForRole(role: TaskRole): Promise<DbTask[]> {
       desc(workOrders.isUrgent),
       sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
+      sql`CASE WHEN ${tasks.status} = 'ready' THEN 0 WHEN ${tasks.status} = 'in_progress' THEN 1 ELSE 2 END`,
+      sql`${tasks.createdAt} ASC NULLS LAST`,
+      asc(tasks.id),
     )
 
   return rows.map(toDbTask)
@@ -83,6 +86,9 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
       desc(workOrders.isUrgent),
       sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
+      sql`CASE WHEN ${tasks.status} = 'ready' THEN 0 WHEN ${tasks.status} = 'in_progress' THEN 1 ELSE 2 END`,
+      sql`${tasks.createdAt} ASC NULLS LAST`,
+      asc(tasks.id),
     )
 
   // Unassigned technician-role tasks that are ready (open pool)
@@ -102,6 +108,9 @@ export async function getQueueForTechnician(technicianId: string): Promise<DbTas
       desc(workOrders.isUrgent),
       sql`${tasks.dueDate} ASC NULLS LAST`,
       asc(tasks.seq),
+      sql`CASE WHEN ${tasks.status} = 'ready' THEN 0 WHEN ${tasks.status} = 'in_progress' THEN 1 ELSE 2 END`,
+      sql`${tasks.createdAt} ASC NULLS LAST`,
+      asc(tasks.id),
     )
 
   // Merge and deduplicate by id (assigned tasks take precedence)

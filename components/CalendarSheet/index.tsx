@@ -43,6 +43,13 @@ function formatMonthYear(date: Date): string {
   return new Intl.DateTimeFormat('nl-BE', { month: 'long', year: 'numeric' }).format(date)
 }
 
+function getMonthStart(date: Date): Date {
+  const monthStart = new Date(date)
+  monthStart.setDate(1)
+  monthStart.setHours(0, 0, 0, 0)
+  return monthStart
+}
+
 export default function CalendarSheet({
   open,
   onClose,
@@ -50,26 +57,25 @@ export default function CalendarSheet({
   onSelect,
   technicianId,
 }: CalendarSheetProps) {
-  const [viewMonth, setViewMonth] = useState<Date>(() => {
-    const d = new Date(selected)
-    d.setDate(1)
-    d.setHours(0, 0, 0, 0)
-    return d
-  })
+  const [viewMonth, setViewMonth] = useState<Date>(() => getMonthStart(selected))
   const [busyDays, setBusyDays] = useState<Set<string>>(new Set())
 
   // Keep viewMonth in sync when selected jumps to a different month
   useEffect(() => {
-    const selMonth = new Date(selected)
-    selMonth.setDate(1)
-    selMonth.setHours(0, 0, 0, 0)
+    const selMonth = getMonthStart(selected)
     if (
       selMonth.getFullYear() !== viewMonth.getFullYear() ||
       selMonth.getMonth() !== viewMonth.getMonth()
     ) {
-      setViewMonth(selMonth)
+      const timer = window.setTimeout(() => {
+        setViewMonth(selMonth)
+      }, 0)
+
+      return () => {
+        window.clearTimeout(timer)
+      }
     }
-  }, [selected])
+  }, [selected, viewMonth])
 
   // Fetch busy days whenever the viewed month changes (or sheet opens)
   useEffect(() => {

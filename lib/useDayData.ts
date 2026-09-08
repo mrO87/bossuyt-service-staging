@@ -14,10 +14,6 @@ function toLocalDateStr(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-function isToday(date: Date): boolean {
-  return toLocalDateStr(date) === toLocalDateStr(new Date())
-}
-
 function sortPlanned(interventions: Intervention[]): Intervention[] {
   return [...interventions].sort((a, b) => {
     const aLead = a.technicians.find(technician => technician.isLead)?.plannedOrder ?? Number.MAX_SAFE_INTEGER
@@ -57,7 +53,9 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
       setError(null)
       setNotice(null)
 
-      if (isToday(date)) {
+      const isCurrentDay = dateStr === toLocalDateStr(new Date())
+
+      if (isCurrentDay) {
         // Today: use IDB cache + sync logic
         const cached = await readCachedDayData()
         if (isCancelled) return

@@ -6,30 +6,30 @@
 // - Updates CURRENT_RELEASE_VERSION to the new version
 // - Prints the new version to stdout (for shell capture)
 
-const fs   = require('fs')
-const path = require('path')
+async function main() {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
 
-const releasesPath = path.join(__dirname, '..', 'lib', 'releases.ts')
-const content      = fs.readFileSync(releasesPath, 'utf8')
+  const releasesPath = path.join(__dirname, '..', 'lib', 'releases.ts')
+  const content = fs.readFileSync(releasesPath, 'utf8')
 
-// Read from the authoritative CURRENT_RELEASE_VERSION constant
-const match = content.match(/const CURRENT_RELEASE_VERSION\s*=\s*'v(\d+)\.(\d+)'/)
-if (!match) {
-  process.stderr.write('FOUT: CURRENT_RELEASE_VERSION niet gevonden in lib/releases.ts\n')
-  process.exit(1)
-}
+  // Read from the authoritative CURRENT_RELEASE_VERSION constant
+  const match = content.match(/const CURRENT_RELEASE_VERSION\s*=\s*'v(\d+)\.(\d+)'/)
+  if (!match) {
+    process.stderr.write('FOUT: CURRENT_RELEASE_VERSION niet gevonden in lib/releases.ts\n')
+    process.exit(1)
+  }
 
-const major      = parseInt(match[1])
-const minor      = parseInt(match[2])
-const newVersion = `v${major}.${minor + 1}`
+  const major = Number.parseInt(match[1], 10)
+  const minor = Number.parseInt(match[2], 10)
+  const newVersion = `v${major}.${minor + 1}`
 
-// Dutch date string
-const now    = new Date()
-const months = ['januari','februari','maart','april','mei','juni','juli',
-                'augustus','september','oktober','november','december']
-const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`
+  // Dutch date string
+  const now = new Date()
+  const months = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december']
+  const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`
 
-const placeholder = `  {
+  const placeholder = `  {
     version: '${newVersion}',
     date: '${dateStr}',
     changes: [
@@ -42,24 +42,27 @@ const placeholder = `  {
   },
 `
 
-// Insert new entry at top of RELEASES array
-let updated = content.replace(
-  /export const RELEASES: ReleaseEntry\[\] = \[/,
-  `export const RELEASES: ReleaseEntry[] = [\n${placeholder}`
-)
+  // Insert new entry at top of RELEASES array
+  let updated = content.replace(
+    /export const RELEASES: ReleaseEntry\[\] = \[/,
+    `export const RELEASES: ReleaseEntry[] = [\n${placeholder}`,
+  )
 
-// Update CURRENT_RELEASE_VERSION to point to the new entry
-updated = updated.replace(
-  /const CURRENT_RELEASE_VERSION\s*=\s*'v\d+\.\d+'/,
-  `const CURRENT_RELEASE_VERSION = '${newVersion}'`
-)
+  // Update CURRENT_RELEASE_VERSION to point to the new entry
+  updated = updated.replace(
+    /const CURRENT_RELEASE_VERSION\s*=\s*'v\d+\.\d+'/,
+    `const CURRENT_RELEASE_VERSION = '${newVersion}'`,
+  )
 
-if (updated === content) {
-  process.stderr.write('FOUT: niets aangepast in lib/releases.ts\n')
-  process.exit(1)
+  if (updated === content) {
+    process.stderr.write('FOUT: niets aangepast in lib/releases.ts\n')
+    process.exit(1)
+  }
+
+  fs.writeFileSync(releasesPath, updated)
+
+  process.stderr.write(`✓ Versie v${major}.${minor} → ${newVersion}\n`)
+  process.stdout.write(newVersion)
 }
 
-fs.writeFileSync(releasesPath, updated)
-
-process.stderr.write(`✓ Versie v${major}.${minor} → ${newVersion}\n`)
-process.stdout.write(newVersion)
+void main()

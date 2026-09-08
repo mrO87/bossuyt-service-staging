@@ -181,6 +181,14 @@ export async function cleanup(ids: CleanupIds): Promise<void> {
   }
 }
 
+export async function resetTaskState(): Promise<void> {
+  await testDb.delete(taskDependencies)
+  await testDb.delete(workOrderEvents)
+  await testDb.delete(workOrderLinks)
+  await testDb.delete(tasks)
+  await testDb.delete(werkbonnen)
+}
+
 export async function fetchTask(taskId: string) {
   const [task] = await testDb.select().from(tasks).where(eq(tasks.id, taskId))
   return task ?? null

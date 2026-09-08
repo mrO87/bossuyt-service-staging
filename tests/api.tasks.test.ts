@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { eq } from 'drizzle-orm'
 import { NextRequest } from 'next/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GET as getTaskQueue } from '@/app/api/tasks/queue/route'
 import { PATCH as patchTask } from '@/app/api/tasks/[id]/route'
 import { POST as postTaskTransition } from '@/app/api/tasks/[id]/transition/route'
@@ -9,7 +9,7 @@ import { GET as getTasks, POST as postTasks } from '@/app/api/tasks/route'
 import { POST as postWorkOrderLink } from '@/app/api/work-orders/[id]/link/route'
 import { GET as getWorkOrderLinks } from '@/app/api/work-orders/[id]/links/route'
 import { GET as getWorkOrderTimeline } from '@/app/api/work-orders/[id]/timeline/route'
-import { taskDependencies, tasks, workOrderEvents, workOrderLinks } from '@/lib/db/schema'
+import { tasks, workOrderEvents, workOrderLinks } from '@/lib/db/schema'
 import type { CleanupIds } from './setup'
 import {
   cleanup,
@@ -19,7 +19,7 @@ import {
   hasDependency,
   insertDependency,
   insertTask,
-  taskExists,
+  resetTaskState,
   testDb,
 } from './setup'
 
@@ -50,6 +50,10 @@ async function createTaskViaApi(body: Record<string, unknown>) {
 
 describe('task API routes', () => {
   let ids: CleanupIds
+
+  beforeAll(async () => {
+    await resetTaskState()
+  })
 
   beforeEach(() => {
     ids = { work_order_ids: [], task_ids: [], technician_ids: [] }

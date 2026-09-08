@@ -5,7 +5,7 @@ import { taskDependencies, tasks, workOrderEvents } from '@/lib/db/schema'
 import { isTaskReady } from '@/lib/tasks/dependencies'
 import { toDbTask } from '@/lib/tasks/queue'
 import { withAudit } from '@/lib/db/with-audit'
-import type { DbTaskStatus, DbTaskType, ReasonCode, TaskRole } from '@/types'
+import type { DbTaskStatus, DbTaskType, TaskRole } from '@/types'
 
 // ── GET /api/tasks ─────────────────────────────────────────────────────────────
 // Query params (all optional, combinable): work_order_id, role, status, assignee_id

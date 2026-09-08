@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { workOrderEvents, workOrderLinks } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import type { ReasonCode, WorkOrderLinkType } from '@/types'

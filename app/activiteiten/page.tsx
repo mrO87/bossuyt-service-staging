@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import AvatarMenu from '@/components/AvatarMenu'
@@ -143,18 +143,29 @@ export default function ActivitiesPage() {
 
   const [dbTasks, setDbTasks] = useState<DbTask[]>([])
 
-  const loadDbTasks = useCallback(async () => {
-    try {
-      const res = await fetch('/api/tasks/queue?all=true', { cache: 'no-store' })
-      if (!res.ok) return
-      const data = await res.json() as { tasks: DbTask[] }
-      setDbTasks(data.tasks)
-    } catch {
-      // silently ignore — DB tasks are supplemental
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDbTasks() {
+      try {
+        const res = await fetch('/api/tasks/queue?all=true', { cache: 'no-store' })
+        if (!res.ok || cancelled) return
+
+        const data = await res.json() as { tasks: DbTask[] }
+        if (!cancelled) {
+          setDbTasks(data.tasks)
+        }
+      } catch {
+        // silently ignore — DB tasks are supplemental
+      }
+    }
+
+    void loadDbTasks()
+
+    return () => {
+      cancelled = true
     }
   }, [])
-
-  useEffect(() => { loadDbTasks() }, [loadDbTasks])
 
   const myTasks = useMemo(() => (
     tasks.filter(task => isTaskAssignedToUser(task, currentUser))

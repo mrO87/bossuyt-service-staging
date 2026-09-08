@@ -4,10 +4,8 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { currentUserId, getUserById, users, tasks as seededTasks } from '@/lib/mock-data'
 import { isTaskAssignedToUser, isTaskOpen } from '@/lib/task-meta'
+import { ACTIVE_USER_STORAGE_KEY, LEGACY_TASKS_STORAGE_KEY } from '@/lib/tasks/storage'
 import type { Task, TaskPriority, TaskStatus, TaskType, User } from '@/types'
-
-const TASKS_STORAGE_KEY = 'bossuyt-service:tasks'
-export const ACTIVE_USER_KEY = 'bossuyt-service:active-user-id'
 
 interface CreateTaskInput {
   type: TaskType
@@ -74,7 +72,7 @@ function sortTasks(list: Task[]): Task[] {
 export function TaskProvider({ children }: { children: ReactNode }) {
   const [activeUserId, setActiveUserId] = useState<string>(() => {
     if (typeof window === 'undefined') return currentUserId
-    return window.localStorage.getItem(ACTIVE_USER_KEY) ?? currentUserId
+    return window.localStorage.getItem(ACTIVE_USER_STORAGE_KEY) ?? currentUserId
   })
 
   const currentUser = getUserById(activeUserId) ?? getUserById(currentUserId)!
@@ -82,7 +80,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   function switchUser(userId: string) {
     setActiveUserId(userId)
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(ACTIVE_USER_KEY, userId)
+      window.localStorage.setItem(ACTIVE_USER_STORAGE_KEY, userId)
     }
   }
 
@@ -91,7 +89,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       return sortTasks(seededTasks)
     }
 
-    const raw = window.localStorage.getItem(TASKS_STORAGE_KEY)
+    const raw = window.localStorage.getItem(LEGACY_TASKS_STORAGE_KEY)
 
     if (!raw) {
       return sortTasks(seededTasks)
@@ -102,7 +100,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
-    window.localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(tasks))
+    window.localStorage.setItem(LEGACY_TASKS_STORAGE_KEY, JSON.stringify(tasks))
   }, [tasks])
 
   function createTask(input: CreateTaskInput): Task {

@@ -6,7 +6,7 @@ import { GET as getPartsPending } from '@/app/api/erp/parts-pending/route'
 import { POST as postPartFulfil } from '@/app/api/erp/parts-pending/[task_id]/fulfil/route'
 import { POST as postExternalRef } from '@/app/api/erp/work-orders/[id]/external-ref/route'
 import { GET as getErpWorkOrders } from '@/app/api/erp/work-orders/route'
-import { tasks, workOrderEvents, workOrders } from '@/lib/db/schema'
+import { workOrderEvents, workOrders } from '@/lib/db/schema'
 import type { CleanupIds } from './setup'
 import { cleanup, createTestWorkOrder, fetchTask, insertDependency, insertTask, testDb } from './setup'
 

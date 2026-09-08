@@ -240,7 +240,6 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         deviceId={intervention.deviceId}
         brand={intervention.deviceBrand}
         model={intervention.deviceModel}
-        currentWorkOrderId={intervention.id}
         refreshKey={deviceRefresh}
       />
 

@@ -145,7 +145,15 @@ function PickingCard({
   const [checked, setChecked] = useState<Set<string>>(new Set())
 
   function toggle(id: string) {
-    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
   }
 
   function checkAll() {

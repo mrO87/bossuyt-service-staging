@@ -117,22 +117,6 @@ export default function DayView() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showOpenPool, setShowOpenPool] = useState(true)
-  const [hiddenPoolIds, setHiddenPoolIds] = useState<Set<string>>(new Set())
-
-  async function togglePoolVisibility(id: string, currentlyVisible: boolean) {
-    const next = !currentlyVisible
-    setHiddenPoolIds(prev => {
-      const s = new Set(prev)
-      if (!next) s.add(id)
-      else s.delete(id)
-      return s
-    })
-    await fetch(`/api/work-orders/${id}/pool-visibility`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visibleInPool: next }),
-    })
-  }
 
   function navigate(delta: number) {
     setSelectedDate(d => {
@@ -157,7 +141,6 @@ export default function DayView() {
     notice,
   } = useDayData(currentUser.id, selectedDate)
   const openTaskCount = getOpenTaskCountForUser(currentUser.id)
-  const visiblePoolItems = openPool.filter(i => !hiddenPoolIds.has(i.id))
 
   return (
     <div className="min-h-screen bg-surface">
@@ -299,7 +282,7 @@ export default function DayView() {
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-                {visiblePoolItems.length} tonen
+                {openPool.length} tonen
               </>
             )}
           </button>
@@ -314,7 +297,7 @@ export default function DayView() {
 
         {showOpenPool && (
         <div className="flex flex-col gap-3">
-          {visiblePoolItems.map(intervention => (
+          {openPool.map(intervention => (
             <div
               key={intervention.id}
               onClick={() => router.push(`/interventions/${intervention.id}`)}
@@ -322,22 +305,9 @@ export default function DayView() {
             >
               <div className={`w-1 shrink-0 ${typeBorderClass(intervention.type, intervention.isUrgent)}`} />
               <div className="flex-1 p-3">
-                <div className="flex items-start justify-between mb-1">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
-                    <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
-                  </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); togglePoolVisibility(intervention.id, intervention.visibleInPool ?? true) }}
-                    className="ml-2 shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-ink-soft active:opacity-70 transition-opacity"
-                    aria-label="Verbergen uit pool"
-                    title="Verbergen uit pool"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </button>
+                <div className="mb-1">
+                  <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
+                  <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
                 </div>
                 {intervention.deviceBrand && (
                   <p className="text-xs font-medium mt-1 text-ink">
@@ -361,7 +331,7 @@ export default function DayView() {
         </div>
         )}
 
-        {showOpenPool && visiblePoolItems.length === 0 && (
+        {showOpenPool && openPool.length === 0 && (
           <p className="text-center mt-6 text-ink-soft text-sm">
             Geen jobs in de pool
           </p>

@@ -10,7 +10,7 @@
  * so if the browser crashes mid-way, re-running is safe.
  */
 
-const LEGACY_KEY = 'bossuyt-service:tasks'
+import { LEGACY_TASKS_STORAGE_KEY } from '@/lib/tasks/storage'
 
 interface LegacyTask {
   id: string
@@ -70,7 +70,7 @@ export interface MigrationResult {
 export async function migrateLocalStorageTasks(): Promise<MigrationResult> {
   if (typeof window === 'undefined') return { migrated: 0, failed: 0, skipped: 0 }
 
-  const raw = window.localStorage.getItem(LEGACY_KEY)
+  const raw = window.localStorage.getItem(LEGACY_TASKS_STORAGE_KEY)
   if (!raw) return { migrated: 0, failed: 0, skipped: 0 }
 
   let tasks: LegacyTask[]
@@ -78,12 +78,12 @@ export async function migrateLocalStorageTasks(): Promise<MigrationResult> {
     tasks = JSON.parse(raw) as LegacyTask[]
   } catch {
     console.warn('[migrate] Kon localStorage taken niet parsen, verwijder sleutel')
-    window.localStorage.removeItem(LEGACY_KEY)
+    window.localStorage.removeItem(LEGACY_TASKS_STORAGE_KEY)
     return { migrated: 0, failed: 0, skipped: 0 }
   }
 
   if (!Array.isArray(tasks) || tasks.length === 0) {
-    window.localStorage.removeItem(LEGACY_KEY)
+    window.localStorage.removeItem(LEGACY_TASKS_STORAGE_KEY)
     return { migrated: 0, failed: 0, skipped: 0 }
   }
 
@@ -130,7 +130,7 @@ export async function migrateLocalStorageTasks(): Promise<MigrationResult> {
   // Remove the localStorage key when fully done (even on partial failure —
   // client_id idempotency means safe to re-run on next load if needed)
   if (failed === 0) {
-    window.localStorage.removeItem(LEGACY_KEY)
+    window.localStorage.removeItem(LEGACY_TASKS_STORAGE_KEY)
   }
 
   console.info(`[migrate] Migratie klaar: ${migrated} gesynchroniseerd, ${failed} mislukt, ${skipped} overgeslagen`)

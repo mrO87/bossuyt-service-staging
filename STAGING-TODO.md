@@ -1,3 +1,19 @@
+## v1.52 — Deploy 2026-04-26 16:58  (sha: 29a82a4)
+
+### Changenotes invullen — lib/releases.ts
+- [ ] Beschrijving per wijziging schrijven (placeholder staat klaar)
+- Gewijzigde bestanden:
+    - STAGING-TODO.md
+    - advise.md
+    - app/api/work-orders/[id]/follow-up/route.ts
+    - components/WerkbonForm/TaskManager.tsx
+    - lib/releases.ts
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor bovenstaande wijzigingen
+
+---
+
 ## v1.51 — Deploy 2026-04-26 16:33  (sha: 366b4c8)
 
 ### Changenotes invullen — lib/releases.ts

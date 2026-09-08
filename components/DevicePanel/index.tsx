@@ -7,7 +7,6 @@ interface Props {
   deviceId: string
   brand?: string
   model?: string
-  currentWorkOrderId?: string
   refreshKey?: number
 }
 
@@ -262,7 +261,7 @@ function HistoryList({ entries }: { entries: HistoryEntry[] }) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function DevicePanel({ deviceId, brand, model, currentWorkOrderId, refreshKey }: Props) {
+export default function DevicePanel({ deviceId, brand, model, refreshKey }: Props) {
   const [open,          setOpen]          = useState(false)
   const [detail,        setDetail]        = useState<DeviceDetail | null>(null)
   const [docs,          setDocs]          = useState<Docs | null>(null)
@@ -274,28 +273,53 @@ export default function DevicePanel({ deviceId, brand, model, currentWorkOrderId
   // so the next open fetches fresh history from the server
   useEffect(() => {
     if (refreshKey === undefined) return
-    setDetail(null)
-    setHistory(null)
+
+    const timer = window.setTimeout(() => {
+      setDetail(null)
+      setHistory(null)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [refreshKey])
 
   useEffect(() => {
     if (!open || detail) return
-    setLoadingDetail(true)
+    let cancelled = false
 
-    const historyUrl = `/api/devices/${deviceId}/history`
+    async function loadDevicePanelData() {
+      setLoadingDetail(true)
 
-    Promise.all([
-      fetch(`/api/devices/${deviceId}`).then(r => r.ok ? r.json() : null),
-      brand && model
-        ? fetch(`/api/devices/documents?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).then(r => r.json())
-        : Promise.resolve(null),
-      fetch(historyUrl).then(r => r.json()),
-    ]).then(([dev, docsData, hist]) => {
-      setDetail({ serialNumber: dev?.serialNumber ?? null, installDate: dev?.installDate ?? null })
-      setDocs(docsData)
-      setHistory(hist ?? [])
-    }).finally(() => setLoadingDetail(false))
-  }, [open, deviceId, brand, model, detail, currentWorkOrderId])
+      const historyUrl = `/api/devices/${deviceId}/history`
+
+      try {
+        const [dev, docsData, hist] = await Promise.all([
+          fetch(`/api/devices/${deviceId}`).then(r => r.ok ? r.json() : null),
+          brand && model
+            ? fetch(`/api/devices/documents?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).then(r => r.json())
+            : Promise.resolve(null),
+          fetch(historyUrl).then(r => r.json()),
+        ])
+
+        if (cancelled) return
+
+        setDetail({ serialNumber: dev?.serialNumber ?? null, installDate: dev?.installDate ?? null })
+        setDocs(docsData)
+        setHistory(hist ?? [])
+      } finally {
+        if (!cancelled) {
+          setLoadingDetail(false)
+        }
+      }
+    }
+
+    void loadDevicePanelData()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, deviceId, brand, model, detail])
 
   const histCount = history?.length ?? 0
 

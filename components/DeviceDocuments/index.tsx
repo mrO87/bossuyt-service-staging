@@ -72,12 +72,34 @@ export default function DeviceDocuments({ brand, model }: Props) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    fetch(`/api/devices/documents?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`)
-      .then(r => r.json())
-      .then(data => setDocs(data))
-      .catch(() => setDocs(null))
-      .finally(() => setLoading(false))
+    let cancelled = false
+
+    async function loadDocuments() {
+      setLoading(true)
+
+      try {
+        const response = await fetch(`/api/devices/documents?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`)
+        const data = await response.json()
+
+        if (!cancelled) {
+          setDocs(data)
+        }
+      } catch {
+        if (!cancelled) {
+          setDocs(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadDocuments()
+
+    return () => {
+      cancelled = true
+    }
   }, [brand, model])
 
   if (loading) {

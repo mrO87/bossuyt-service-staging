@@ -76,6 +76,27 @@ function formatActivityDueDate(value?: string): string {
   return new Date(value).toLocaleDateString('nl-BE')
 }
 
+function AssigneeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink"
+    >
+      <optgroup label="Personen">
+        {users.filter(u => u.active).map(u => (
+          <option key={u.id} value={`user:${u.id}`}>{u.name}</option>
+        ))}
+      </optgroup>
+      <optgroup label="Groepen">
+        {GROUP_ASSIGNMENT_OPTIONS.map(option => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </optgroup>
+    </select>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 // ── Workflow task cards ────────────────────────────────────────────────────────
@@ -90,7 +111,15 @@ function LoadPartsCard({ task, onComplete }: { task: DbTask; onComplete: (t: DbT
   const [error, setError] = useState<string | null>(null)
 
   function toggle(id: string) {
-    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
   }
 
   async function receiveAll() {
@@ -180,7 +209,15 @@ function PickPartsCard({ task, onComplete, technicianName }: { task: DbTask; onC
   const [error, setError] = useState<string | null>(null)
 
   function toggle(id: string) {
-    setChecked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
   }
 
   async function markAllReady() {
@@ -407,24 +444,6 @@ export default function TaskManager({ intervention, werkbonId, orderTasks, workf
     })
     setTaskError('')
     closeTaskEditor()
-  }
-
-  function AssigneeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-    return (
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="rounded-lg px-3 py-2 text-sm outline-none bg-surface border border-stroke text-ink">
-        <optgroup label="Personen">
-          {users.filter(u => u.active).map(u => (
-            <option key={u.id} value={`user:${u.id}`}>{u.name}</option>
-          ))}
-        </optgroup>
-        <optgroup label="Groepen">
-          {GROUP_ASSIGNMENT_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </optgroup>
-      </select>
-    )
   }
 
   return (

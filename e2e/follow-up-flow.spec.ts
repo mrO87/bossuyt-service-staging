@@ -29,10 +29,6 @@ import { expect, test, type Page } from '@playwright/test'
 // Example: /interventions/some-uuid-here
 const WORKORDER_PATH = process.env.TEST_WORKORDER_PATH ?? '/interventions/PASTE_WORKORDER_ID_HERE'
 
-// User names as they appear in the AvatarMenu user switcher
-const TECHNICIAN_NAME = process.env.TEST_TECH_NAME ?? 'Marc Bossuyt'
-const WAREHOUSE_NAME  = process.env.TEST_WH_NAME  ?? 'Magazijn'
-
 // Part to add during the test
 const TEST_PART = {
   code:        'TST-001',
@@ -41,14 +37,6 @@ const TEST_PART = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function switchUser(page: Page, userName: string) {
-  // Open the AvatarMenu (top-right avatar button)
-  await page.locator('header button').last().click()
-  // Find and click the user by name in the dropdown
-  await page.getByText(userName, { exact: false }).first().click()
-  await page.waitForTimeout(300)
-}
 
 async function goToWorkOrder(page: Page) {
   await page.goto(WORKORDER_PATH)

@@ -1,11 +1,11 @@
 import { randomUUID } from 'crypto'
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { tasks, workOrders } from '@/lib/db/schema'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { workOrders } from '@/lib/db/schema'
 import { getQueueForRole, getQueueForTechnician } from '@/lib/tasks/queue'
 import type { DbTaskStatus, DbTaskType, TaskRole } from '@/types'
 import type { CleanupIds } from './setup'
-import { cleanup, createTestTechnician, createTestWorkOrder, insertTask, testDb } from './setup'
+import { cleanup, createTestTechnician, createTestWorkOrder, insertTask, resetTaskState, testDb } from './setup'
 
 function buildTaskId(label: string) {
   return `${label}-${randomUUID()}`
@@ -13,6 +13,10 @@ function buildTaskId(label: string) {
 
 describe('task queues', () => {
   let ids: CleanupIds
+
+  beforeAll(async () => {
+    await resetTaskState()
+  })
 
   beforeEach(() => {
     ids = { work_order_ids: [], task_ids: [], technician_ids: [] }

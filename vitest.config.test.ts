@@ -32,6 +32,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
     testTimeout: 15000,
+    fileParallelism: false,
     pool: 'forks',
     forks: {
       singleFork: true,
