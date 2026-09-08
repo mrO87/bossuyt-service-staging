@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import type { PdfPart } from '@/lib/pdf'
 
 interface Props {
-  deviceId: string
+  deviceId: string | null
   brand?: string
   model?: string
   refreshKey?: number
@@ -289,6 +289,7 @@ export default function DevicePanel({ deviceId, brand, model, refreshKey }: Prop
     let cancelled = false
 
     async function loadDevicePanelData() {
+      if (!deviceId) { setDetail({ serialNumber: null, installDate: null }); setHistory([]); setLoadingDetail(false); return }
       setLoadingDetail(true)
 
       const historyUrl = `/api/devices/${deviceId}/history`

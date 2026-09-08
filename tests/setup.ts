@@ -86,6 +86,44 @@ export async function createTestWorkOrder(): Promise<string> {
   return workOrderId
 }
 
+export async function createTestWorkOrderWithoutDevice(): Promise<string> {
+  const suffix = randomUUID()
+  const customerId = `customer-${suffix}`
+  const siteId = `site-${suffix}`
+  const workOrderId = `wo-${suffix}`
+
+  await testDb.insert(customers).values({
+    id: customerId,
+    name: `Test Customer ${suffix.slice(0, 8)}`,
+    phone: '0123456789',
+    address: 'Teststraat 1',
+    city: 'Gent',
+  })
+
+  await testDb.insert(sites).values({
+    id: siteId,
+    customerId,
+    name: `Test Site ${suffix.slice(0, 8)}`,
+    address: 'Teststraat 1',
+    city: 'Gent',
+  })
+
+  await testDb.insert(workOrders).values({
+    id: workOrderId,
+    customerId,
+    siteId,
+    deviceId: null,
+    plannedDate: new Date('2026-04-17T09:00:00.000Z'),
+    status: 'gepland',
+    type: 'warm',
+    source: 'planned',
+    isUrgent: false,
+    planningVersion: 1,
+  })
+
+  return workOrderId
+}
+
 export async function createTestTechnician(): Promise<string> {
   const technicianId = `tech-${randomUUID()}`
 
@@ -118,7 +156,10 @@ export async function cleanup(ids: CleanupIds): Promise<void> {
     : []
   const customerIds = [...new Set([...(ids.customer_ids ?? []), ...workOrderRows.map(row => row.customerId)])]
   const siteIds = [...new Set([...(ids.site_ids ?? []), ...workOrderRows.map(row => row.siteId)])]
-  const deviceIds = [...new Set([...(ids.device_ids ?? []), ...workOrderRows.map(row => row.deviceId)])]
+  const deviceIds = [...new Set([
+    ...(ids.device_ids ?? []),
+    ...workOrderRows.map(row => row.deviceId).filter((id): id is string => id !== null),
+  ])]
 
   const relatedTaskIds = workOrderIds.length
     ? await testDb
@@ -234,7 +275,7 @@ export async function deleteWorkOrderById(workOrderId: string) {
     work_order_ids: [workOrderId],
     customer_ids: workOrder ? [workOrder.customerId] : [],
     site_ids: workOrder ? [workOrder.siteId] : [],
-    device_ids: workOrder ? [workOrder.deviceId] : [],
+    device_ids: workOrder?.deviceId ? [workOrder.deviceId] : [],
   })
 }
 

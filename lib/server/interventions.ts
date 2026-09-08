@@ -23,9 +23,9 @@ type InterventionCoreRow = {
   siteCity: string
   siteLat: number | null
   siteLon: number | null
-  deviceId: string
-  deviceBrand: string
-  deviceModel: string
+  deviceId: string | null
+  deviceBrand: string | null
+  deviceModel: string | null
   plannedDate: Date
   status: Intervention['status']
   type: Intervention['type']
@@ -81,8 +81,8 @@ function toIntervention(
     siteLat: row.siteLat ?? undefined,
     siteLon: row.siteLon ?? undefined,
     deviceId: row.deviceId,
-    deviceBrand: row.deviceBrand,
-    deviceModel: row.deviceModel,
+    deviceBrand: row.deviceBrand ?? undefined,
+    deviceModel: row.deviceModel ?? undefined,
     plannedDate: row.plannedDate.toISOString(),
     status: row.status,
     type: row.type,
@@ -182,7 +182,7 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
     .from(workOrders)
     .innerJoin(customers, eq(workOrders.customerId, customers.id))
     .innerJoin(sites, eq(workOrders.siteId, sites.id))
-    .innerJoin(devices, eq(workOrders.deviceId, devices.id))
+    .leftJoin(devices, eq(workOrders.deviceId, devices.id))
     .where(inArray(workOrders.id, workOrderIds))
 
   const assignmentsByWorkOrder = await fetchAssignmentsForWorkOrders(workOrderIds)

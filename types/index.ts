@@ -20,6 +20,8 @@ export interface Customer {
   address: string         // billing address
   city: string            // billing city
   vatNumber?: string      // BTW nummer — optional for now
+  customerNumber?: string          // KLANT N° L (e.g. K04647)
+  invoiceCustomerNumber?: string   // KLANT N° F — invoice customer when different
 }
 
 export interface Site {
@@ -31,6 +33,7 @@ export interface Site {
   phones: string[]        // one or more phone numbers for this location
   lat?: number            // GPS latitude (WGS84)
   lon?: number            // GPS longitude (WGS84)
+  closingDay?: string     // SLUITINGSDAG, free text
 }
 
 export interface Contact {
@@ -50,6 +53,9 @@ export interface Device {
   serialNumber?: string
   installDate?: string
   notes?: string
+  unitNumber?: string     // UNIT N°
+  deliveryDate?: string   // LEVERDATUM (ISO date)
+  warrantyUntil?: string  // GARANTIE (ISO date)
 }
 
 export interface DeviceDocument {
@@ -82,19 +88,32 @@ export interface Intervention {
   id: string
   customerId: string
   customerName: string    // denormalized for display in day view
+  customerNumber?: string          // KLANT N° L
+  invoiceCustomerNumber?: string   // KLANT N° F
   siteId: string
   siteName: string        // denormalized for display
   siteAddress: string     // denormalized for display
   siteCity: string        // denormalized for display
   siteLat?: number        // denormalized GPS latitude
   siteLon?: number        // denormalized GPS longitude
-  deviceId: string
+  sitePhones?: string[]   // Tel & GSM
+  closingDay?: string     // SLUITINGSDAG
+  contactName?: string    // CONTACT (first contact of the site)
+  contactPhone?: string
+  deviceId: string | null // null when the ticket has no known unit yet
   deviceBrand?: string
   deviceModel?: string
+  deviceUnitNumber?: string
+  deviceSerial?: string
+  deviceDeliveryDate?: string
+  deviceWarrantyUntil?: string
+  ticketNumber?: string   // TICKET N° (ERP)
+  ticketDate?: string     // DATUM TICKET (ISO)
+  createdAt?: string
   plannedDate: string
   status: InterventionStatus
   type: InterventionType
-  description?: string    // reported problem
+  description?: string    // reported problem (OMSCHRIJVING KLANT)
   estimatedMinutes?: number
   isUrgent: boolean
   source: InterventionSource
@@ -114,21 +133,6 @@ export interface User {
   email: string
   role: 'technician' | 'office' | 'admin' | 'hr' | 'warehouse' | 'planner'
   active: boolean
-}
-
-export interface Werkbon {
-  id: string
-  interventionId: string
-  createdBy: string
-  arrivalTime?: string
-  workStart?: string
-  workEnd?: string
-  description?: string
-  status: 'concept' | 'ingediend' | 'goedgekeurd'
-  signatureData?: string
-  pdfUrl?: string
-  submittedAt?: string
-  syncedAt?: string
 }
 
 export type WorkOrderPhotoSyncStatus = 'pending' | 'uploaded' | 'failed' | 'deleting'

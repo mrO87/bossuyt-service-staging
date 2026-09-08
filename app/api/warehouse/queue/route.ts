@@ -90,7 +90,7 @@ export async function GET() {
       .from(workOrders)
       .innerJoin(customers, eq(workOrders.customerId, customers.id))
       .innerJoin(sites,     eq(workOrders.siteId,     sites.id))
-      .innerJoin(devices,   eq(workOrders.deviceId,   devices.id))
+      .leftJoin(devices,    eq(workOrders.deviceId,   devices.id))
       .where(inArray(workOrders.id, allWorkOrderIds))
 
     const woMap = new Map(woRows.map(r => [r.id, r]))
@@ -128,8 +128,8 @@ export async function GET() {
             workOrderId:  row.workOrderId,
             customerName: wo.customerName,
             siteName:     wo.siteName,
-            deviceBrand:  wo.deviceBrand,
-            deviceModel:  wo.deviceModel,
+            deviceBrand:  wo.deviceBrand ?? '',
+            deviceModel:  wo.deviceModel ?? '',
             isUrgent:     wo.isUrgent,
             plannedDate:  wo.plannedDate instanceof Date
               ? wo.plannedDate.toISOString()
