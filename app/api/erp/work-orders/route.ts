@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { and, eq, gte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { tasks, werkbonnen, workOrders } from '@/lib/db/schema'
+import { handleCreateWorkOrderRequest } from '@/lib/server/work-orders'
 import type { InterventionStatus } from '@/types'
 
 function requireErpKey(req: NextRequest): Response | null {
@@ -77,4 +78,23 @@ export async function GET(req: NextRequest) {
     console.error('[api/erp/work-orders GET]', error)
     return NextResponse.json({ error: 'Intern serverfout' }, { status: 500 })
   }
+}
+
+// ── POST /api/erp/work-orders ─────────────────────────────────────────────────
+// The ERP pushes a new ticket ("Service Bon" header). Body is snake_case JSON,
+// see tests/fixtures/sauna-molenhoeve.json. 201 on success, 409 on duplicate
+// ticket_number, 400 with the offending field on validation errors.
+export async function POST(req: NextRequest) {
+  const authError = requireErpKey(req)
+  if (authError) return authError
+
+  let rawBody: unknown
+  try {
+    rawBody = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Ongeldige JSON', field: 'body' }, { status: 400 })
+  }
+
+  const result = await handleCreateWorkOrderRequest(rawBody, 'erp')
+  return NextResponse.json(result.body, { status: result.status })
 }

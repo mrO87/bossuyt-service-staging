@@ -400,3 +400,25 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
     return { id, ticketNumber: input.ticketNumber }
   })
 }
+
+// ── HTTP glue shared by both POST routes ─────────────────────────────────────
+// Kept here so the ERP route and the internal route answer identically.
+
+export type CreateWorkOrderHttpResult =
+  | { status: 201; body: { id: string; ticket_number: string } }
+  | { status: 400; body: { error: string; field: string } }
+  | { status: 409; body: { error: string; id: string } }
+  | { status: 500; body: { error: string } }
+
+export async function handleCreateWorkOrderRequest(rawBody: unknown, createdBy?: string): Promise<CreateWorkOrderHttpResult> {
+  try {
+    const input = parseCreateWorkOrderBody(rawBody)
+    const result = await createWorkOrder({ ...input, createdBy: input.createdBy ?? createdBy })
+    return { status: 201, body: { id: result.id, ticket_number: result.ticketNumber } }
+  } catch (err) {
+    if (err instanceof ValidationError)      return { status: 400, body: { error: err.message, field: err.field } }
+    if (err instanceof DuplicateTicketError) return { status: 409, body: { error: 'Ticket bestaat al', id: err.existingId } }
+    console.error('[createWorkOrder]', err)
+    return { status: 500, body: { error: 'Intern serverfout' } }
+  }
+}
