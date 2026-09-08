@@ -76,6 +76,13 @@ describe('wizard lookup routes', () => {
       method: 'POST', body: JSON.stringify({ brand: 'Berner' }), headers: { 'content-type': 'application/json' },
     }), ctx(wo!.siteId))
     expect(bad.status).toBe(400)
+
+    const missingSite = await postSiteDevice(new NextRequest('http://localhost/x', {
+      method: 'POST',
+      body: JSON.stringify({ brand: 'Berner', model: 'Friteuse' }),
+      headers: { 'content-type': 'application/json' },
+    }), ctx(`site-${randomUUID()}`))
+    expect(missingSite.status).toBe(404)
   })
 
   it('GET /api/technicians returns active technicians ordered by name', async () => {
