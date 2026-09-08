@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { Intervention, InterventionTechnician } from '@/types'
 import { db } from '@/lib/db'
 import {
+  contacts,
   customers,
   devices,
   sites,
@@ -26,6 +27,18 @@ type InterventionCoreRow = {
   deviceId: string | null
   deviceBrand: string | null
   deviceModel: string | null
+  customerNumber: string | null
+  invoiceCustomerNumber: string | null
+  sitePhonePrimary: string | null
+  sitePhoneSecondary: string | null
+  closingDay: string | null
+  deviceUnitNumber: string | null
+  deviceSerial: string | null
+  deviceDeliveryDate: string | null
+  deviceWarrantyUntil: string | null
+  ticketNumber: string | null
+  ticketDate: Date | null
+  createdAt: Date | null
   plannedDate: Date
   status: Intervention['status']
   type: Intervention['type']
@@ -66,23 +79,39 @@ function getDayBounds(date: string): { start: Date; end: Date } {
   return { start, end }
 }
 
+type PrimaryContact = { name: string; phone: string }
+
 function toIntervention(
   row: InterventionCoreRow,
   techniciansForWorkOrder: InterventionTechnician[],
+  contact: PrimaryContact | undefined,
 ): Intervention {
   return {
     id: row.id,
     customerId: row.customerId,
     customerName: row.customerName,
+    customerNumber: row.customerNumber ?? undefined,
+    invoiceCustomerNumber: row.invoiceCustomerNumber ?? undefined,
     siteId: row.siteId,
     siteName: row.siteName,
     siteAddress: row.siteAddress,
     siteCity: row.siteCity,
     siteLat: row.siteLat ?? undefined,
     siteLon: row.siteLon ?? undefined,
+    sitePhones: [row.sitePhonePrimary, row.sitePhoneSecondary].filter((p): p is string => Boolean(p)),
+    closingDay: row.closingDay ?? undefined,
+    contactName: contact?.name,
+    contactPhone: contact?.phone,
     deviceId: row.deviceId,
     deviceBrand: row.deviceBrand ?? undefined,
     deviceModel: row.deviceModel ?? undefined,
+    deviceUnitNumber: row.deviceUnitNumber ?? undefined,
+    deviceSerial: row.deviceSerial ?? undefined,
+    deviceDeliveryDate: row.deviceDeliveryDate ?? undefined,
+    deviceWarrantyUntil: row.deviceWarrantyUntil ?? undefined,
+    ticketNumber: row.ticketNumber ?? undefined,
+    ticketDate: row.ticketDate?.toISOString(),
+    createdAt: row.createdAt?.toISOString(),
     plannedDate: row.plannedDate.toISOString(),
     status: row.status,
     type: row.type,
@@ -146,6 +175,21 @@ async function fetchAssignmentsForWorkOrders(workOrderIds: string[]): Promise<Ma
   return assignmentsByWorkOrder
 }
 
+/** First contact (alphabetical) per site — printed as CONTACT on the bon. */
+async function fetchPrimaryContacts(siteIds: string[]): Promise<Map<string, PrimaryContact>> {
+  if (siteIds.length === 0) return new Map()
+  const rows = await db
+    .select({ siteId: contacts.siteId, name: contacts.name, phone: contacts.phone })
+    .from(contacts)
+    .where(inArray(contacts.siteId, siteIds))
+    .orderBy(asc(contacts.name))
+  const bySite = new Map<string, PrimaryContact>()
+  for (const row of rows) {
+    if (!bySite.has(row.siteId)) bySite.set(row.siteId, { name: row.name, phone: row.phone })
+  }
+  return bySite
+}
+
 async function fetchInterventionRows(workOrderIds: string[]): Promise<Intervention[]> {
   if (workOrderIds.length === 0) {
     return []
@@ -165,6 +209,18 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
       deviceId: devices.id,
       deviceBrand: devices.brand,
       deviceModel: devices.model,
+      customerNumber: customers.customerNumber,
+      invoiceCustomerNumber: customers.invoiceCustomerNumber,
+      sitePhonePrimary: sites.phonePrimary,
+      sitePhoneSecondary: sites.phoneSecondary,
+      closingDay: sites.closingDay,
+      deviceUnitNumber: devices.unitNumber,
+      deviceSerial: devices.serialNumber,
+      deviceDeliveryDate: devices.deliveryDate,
+      deviceWarrantyUntil: devices.warrantyUntil,
+      ticketNumber: workOrders.ticketNumber,
+      ticketDate: workOrders.ticketDate,
+      createdAt: workOrders.createdAt,
       plannedDate: workOrders.plannedDate,
       status: workOrders.status,
       type: workOrders.type,
@@ -186,9 +242,10 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
     .where(inArray(workOrders.id, workOrderIds))
 
   const assignmentsByWorkOrder = await fetchAssignmentsForWorkOrders(workOrderIds)
+  const contactsBySite = await fetchPrimaryContacts([...new Set(rows.map(row => row.siteId))])
 
   return rows.map((row: InterventionCoreRow) =>
-    toIntervention(row, assignmentsByWorkOrder.get(row.id) ?? []),
+    toIntervention(row, assignmentsByWorkOrder.get(row.id) ?? [], contactsBySite.get(row.siteId)),
   )
 }
 
