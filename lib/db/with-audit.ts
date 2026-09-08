@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm'
 import { db }  from '@/lib/db'
 
 // The transaction object Drizzle passes to the callback
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function withAudit<T>(
   changedBy: string | null | undefined,

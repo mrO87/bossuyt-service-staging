@@ -1,0 +1,19 @@
+{
+  "ticket_number": "TKT20/12752",
+  "ticket_date": "2026-09-04",
+  "planned_date": "2026-09-05",
+  "description": "Nazicht/ herstel 2 friteuses Berner - controleren op lekken",
+  "is_urgent": false,
+  "customer": {
+    "number": "K04647",
+    "invoice_number": "K04647",
+    "name": "Molenhoeve group bvba",
+    "address": "Van den nestlaan 132",
+    "postal_code": "2520",
+    "city": "Broechem",
+    "phone": "",
+    "contact": "",
+    "closing_day": ""
+  },
+  "device": null
+}
