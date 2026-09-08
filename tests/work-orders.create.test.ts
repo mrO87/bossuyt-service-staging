@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { eq } from 'drizzle-orm'
+import postgres from 'postgres'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DuplicateTicketError,
@@ -22,6 +23,30 @@ function molenhoeve(overrides: Record<string, unknown> = {}) {
   const suffix = randomUUID().slice(0, 8)
   const customer = { ...(fixture.customer as Record<string, unknown>), number: `K-${suffix}`, invoice_number: `K-${suffix}` }
   return { ...fixture, ticket_number: `TKT-${suffix}`, customer, ...overrides }
+}
+
+/**
+ * The app pool is `max: 1`, so a second transaction has to run on its own
+ * connection. `withRival` opens one, hands the caller a transaction that stays
+ * open until it releases the gate, and closes the connection afterwards.
+ *
+ * This is what makes the unique-race path deterministic: the rival INSERT is
+ * uncommitted while createWorkOrder runs its SELECT (so the read-path duplicate
+ * check passes), and createWorkOrder's own INSERT then blocks on the unique
+ * index until the rival commits, which is precisely the 23505 path.
+ */
+function openRivalSql() {
+  return postgres(process.env.DATABASE_URL_TEST!, { max: 1 })
+}
+type RivalSql = ReturnType<typeof openRivalSql>
+
+async function withRival(work: (rivalSql: RivalSql) => Promise<void>): Promise<void> {
+  const rivalSql = openRivalSql()
+  try {
+    await work(rivalSql)
+  } finally {
+    await rivalSql.end({ timeout: 5 })
+  }
 }
 
 describe('parseCreateWorkOrderBody', () => {
@@ -135,6 +160,178 @@ describe('createWorkOrder', () => {
     } catch (err) {
       expect((err as DuplicateTicketError).existingId).toBe(first.id)
     }
+  })
+
+  it('keeps a phone number and invoice number an earlier ticket recorded when the next one omits them', async () => {
+    const first = molenhoeve()
+    const customerNumber = (first.customer as { number: string }).number
+    const a = await createWorkOrder(parseCreateWorkOrderBody({
+      ...first,
+      customer: { ...(first.customer as object), phone: '0470 00 00 00', invoice_number: 'F-9001' },
+    }))
+    ids.work_order_ids?.push(a.id)
+
+    // Second ticket for the same customer, phone and invoice number absent.
+    const b = await createWorkOrder(parseCreateWorkOrderBody({
+      ...first,
+      ticket_number: `${first.ticket_number}-B`,
+      customer: { ...(first.customer as object), phone: '', invoice_number: '' },
+    }))
+    ids.work_order_ids?.push(b.id)
+
+    const [customer] = await testDb
+      .select()
+      .from(customers)
+      .where(eq(customers.customerNumber, customerNumber))
+    expect(customer?.phone).toBe('0470 00 00 00')
+    expect(customer?.invoiceCustomerNumber).toBe('F-9001')
+  })
+
+  it('reuses a device matched on brand, model and serial number when no unit number is given', async () => {
+    const body = molenhoeve({
+      device: { brand: 'Berner', model: 'Friteuse 2x8L', serial_number: 'SN-NOUNIT-1' },
+    })
+    const a = await createWorkOrder(parseCreateWorkOrderBody(body))
+    const b = await createWorkOrder(parseCreateWorkOrderBody({ ...body, ticket_number: `${body.ticket_number}-B` }))
+    ids.work_order_ids?.push(a.id, b.id)
+
+    const [woA] = await testDb.select().from(workOrders).where(eq(workOrders.id, a.id))
+    const [woB] = await testDb.select().from(workOrders).where(eq(workOrders.id, b.id))
+    expect(woA?.deviceId).toBeTruthy()
+    expect(woB?.deviceId).toBe(woA?.deviceId)
+
+    const siteDevices = await testDb.select().from(devices).where(eq(devices.siteId, woA!.siteId))
+    expect(siteDevices).toHaveLength(1)
+    expect(siteDevices[0]).toMatchObject({ unitNumber: null, serialNumber: 'SN-NOUNIT-1' })
+  })
+
+  it('reuses a device matched on brand and model alone when neither unit number nor serial is given', async () => {
+    const body = molenhoeve({ device: { brand: 'Berner', model: 'Bakplaat 60' } })
+    const a = await createWorkOrder(parseCreateWorkOrderBody(body))
+    const b = await createWorkOrder(parseCreateWorkOrderBody({ ...body, ticket_number: `${body.ticket_number}-B` }))
+    ids.work_order_ids?.push(a.id, b.id)
+
+    const [woA] = await testDb.select().from(workOrders).where(eq(workOrders.id, a.id))
+    const [woB] = await testDb.select().from(workOrders).where(eq(workOrders.id, b.id))
+    expect(woA?.deviceId).toBeTruthy()
+    expect(woB?.deviceId).toBe(woA?.deviceId)
+
+    const siteDevices = await testDb.select().from(devices).where(eq(devices.siteId, woA!.siteId))
+    expect(siteDevices).toHaveLength(1)
+    expect(siteDevices[0]).toMatchObject({ unitNumber: null, serialNumber: null })
+  })
+
+  it('turns a concurrent duplicate ticket insert into DuplicateTicketError, not a raw 23505', async () => {
+    const body = molenhoeve()
+    const ticketNumber = body.ticket_number as string
+
+    // A committed customer + site for the rival row, with its own customer number
+    // so that ticket_number is the only unique index that can collide.
+    const rivalCustomerId = `customer-${randomUUID()}`
+    const rivalSiteId = `site-${randomUUID()}`
+    const rivalWorkOrderId = `wo-${randomUUID()}`
+    await testDb.insert(customers).values({
+      id: rivalCustomerId,
+      customerNumber: `K-RIVAL-${randomUUID().slice(0, 8)}`,
+      name: 'Rival bvba',
+      phone: '0',
+      address: 'Rivalstraat 1',
+      city: '9000 Gent',
+    })
+    await testDb.insert(sites).values({
+      id: rivalSiteId,
+      customerId: rivalCustomerId,
+      name: 'Rival bvba',
+      address: 'Rivalstraat 1',
+      city: '9000 Gent',
+    })
+
+    let attempt!: Promise<{ id: string }>
+    await withRival(async (rivalSql) => {
+      let rowWritten!: () => void
+      let release!: () => void
+      const written = new Promise<void>(resolve => { rowWritten = resolve })
+      const gate = new Promise<void>(resolve => { release = resolve })
+
+      const rivalTx = rivalSql.begin(async (tx) => {
+        // `tx.unsafe` rather than a tagged template: postgres.js builds
+        // TransactionSql with Omit<Sql, …>, which strips the call signature, so
+        // the template form does not type-check. The query is still parameterised.
+        await tx.unsafe(
+          `INSERT INTO work_orders (id, customer_id, site_id, planned_date, status, type, source, ticket_number)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [rivalWorkOrderId, rivalCustomerId, rivalSiteId, '2026-09-05T00:00:00Z', 'gepland', 'warm', 'planned', ticketNumber],
+        )
+        rowWritten()
+        await gate
+      })
+
+      // Opening the rival connection is slower than a query on the app pool, so
+      // wait until its row is really written (and still uncommitted) before we
+      // start. Only then does the attempt's duplicate SELECT miss the row while
+      // its INSERT blocks on work_orders_ticket_number_unique.
+      await written
+      attempt = createWorkOrder(parseCreateWorkOrderBody(body))
+      attempt.catch(() => {}) // keep the rejection handled while we wait on the gate
+      await new Promise(resolve => setTimeout(resolve, 400))
+      release()
+      await rivalTx
+    })
+
+    ids.work_order_ids?.push(rivalWorkOrderId)
+    await expect(attempt).rejects.toThrowError(DuplicateTicketError)
+    await attempt.catch((err: DuplicateTicketError) => {
+      expect(err.existingId).toBe(rivalWorkOrderId)
+    })
+
+    // The losing transaction rolled back: no orphan customer was left behind.
+    const orphans = await testDb
+      .select()
+      .from(customers)
+      .where(eq(customers.customerNumber, (body.customer as { number: string }).number))
+    expect(orphans).toHaveLength(0)
+  })
+
+  it('adopts a customer created concurrently instead of failing the work order', async () => {
+    const body = molenhoeve()
+    const customerNumber = (body.customer as { number: string }).number
+    const rivalCustomerId = `customer-${randomUUID()}`
+
+    let attempt!: Promise<{ id: string }>
+    await withRival(async (rivalSql) => {
+      let rowWritten!: () => void
+      let release!: () => void
+      const written = new Promise<void>(resolve => { rowWritten = resolve })
+      const gate = new Promise<void>(resolve => { release = resolve })
+
+      const rivalTx = rivalSql.begin(async (tx) => {
+        await tx.unsafe(
+          `INSERT INTO customers (id, customer_number, name, phone, address, city)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [rivalCustomerId, customerNumber, 'Rival copy', '0', 'Rivalstraat 1', '9000 Gent'],
+        )
+        rowWritten()
+        await gate
+      })
+
+      await written
+      attempt = createWorkOrder(parseCreateWorkOrderBody(body))
+      attempt.catch(() => {}) // handled below; nothing should reject here
+      await new Promise(resolve => setTimeout(resolve, 400))
+      release()
+      await rivalTx
+    })
+
+    const result = await attempt
+    ids.work_order_ids?.push(result.id)
+
+    const [wo] = await testDb.select().from(workOrders).where(eq(workOrders.id, result.id))
+    expect(wo?.customerId).toBe(rivalCustomerId)
+
+    // Adopted, then updated from the ticket — one row, not two.
+    const rows = await testDb.select().from(customers).where(eq(customers.customerNumber, customerNumber))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('Molenhoeve group bvba')
   })
 
   it('creates assignments when technicianIds are given', async () => {

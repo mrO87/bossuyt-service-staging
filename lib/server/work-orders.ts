@@ -186,6 +186,37 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
 
 // ── Find-or-create helpers (all inside the caller's transaction) ─────────────
 
+/**
+ * Postgres SQLSTATE for a unique-index violation. Drizzle wraps driver errors in
+ * a DrizzleQueryError, so the PostgresError carrying the code sits on `cause`.
+ * We match on the code, never on the message text.
+ */
+const UNIQUE_VIOLATION = '23505'
+
+function isUniqueViolation(error: unknown): boolean {
+  for (let current: unknown = error, depth = 0; current != null && depth < 5; depth++) {
+    if (typeof current === 'object' && (current as { code?: unknown }).code === UNIQUE_VIOLATION) return true
+    current = (current as { cause?: unknown }).cause
+  }
+  return false
+}
+
+/**
+ * Run an INSERT inside a SAVEPOINT so a unique violation rolls back only that
+ * statement. Without the savepoint the whole transaction would be aborted and the
+ * recovery SELECT would fail with "current transaction is aborted".
+ * Returns true when the insert succeeded, false when it lost a unique race.
+ */
+async function insertUnlessRaced(tx: Tx, insert: (sp: Tx) => PromiseLike<unknown>): Promise<boolean> {
+  try {
+    await tx.transaction(async (sp) => { await insert(sp) })
+    return true
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error
+    return false
+  }
+}
+
 function cityLine(postalCode: string | undefined, city: string): string {
   return [postalCode, city].filter(Boolean).join(' ')
 }
@@ -196,22 +227,42 @@ async function findOrCreateCustomer(tx: Tx, input: CreateWorkOrderCustomer): Pro
     .from(customers)
     .where(eq(customers.customerNumber, input.number))
 
-  const values = {
+  // Name, address and city are required by the parser, so the ERP always supplies
+  // them and they overwrite unconditionally. Phone and invoice number are optional:
+  // writing them unconditionally would erase a value an earlier ticket recorded.
+  const updates = {
     name: input.name,
-    phone: input.phone ?? '',
     address: input.address,
     city: cityLine(input.postalCode, input.city),
-    invoiceCustomerNumber: input.invoiceNumber ?? null,
+    ...(input.phone         ? { phone: input.phone }                         : {}),
+    ...(input.invoiceNumber ? { invoiceCustomerNumber: input.invoiceNumber } : {}),
   }
 
   if (existing) {
-    await tx.update(customers).set(values).where(eq(customers.id, existing.id))
+    await tx.update(customers).set(updates).where(eq(customers.id, existing.id))
     return existing.id
   }
 
   const id = `customer-${randomUUID()}`
-  await tx.insert(customers).values({ id, customerNumber: input.number, ...values })
-  return id
+  const inserted = await insertUnlessRaced(tx, sp => sp.insert(customers).values({
+    id,
+    customerNumber: input.number,
+    phone: '',                       // notNull; `updates` supplies the real value when present
+    invoiceCustomerNumber: null,
+    ...updates,
+  }))
+  if (inserted) return id
+
+  // A concurrent request created this customer number between our SELECT and our
+  // INSERT. That is a benign race, not a duplicate ticket: adopt the row that won
+  // and apply our updates to it.
+  const [raced] = await tx
+    .select({ id: customers.id })
+    .from(customers)
+    .where(eq(customers.customerNumber, input.number))
+  if (!raced) throw new Error(`Klant ${input.number} kon niet worden aangemaakt of teruggevonden`)
+  await tx.update(customers).set(updates).where(eq(customers.id, raced.id))
+  return raced.id
 }
 
 async function findOrCreateSite(
@@ -304,7 +355,7 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
     const deviceId   = input.device ? await findOrCreateDevice(tx, siteId, input.device) : null
 
     const id = `wo-${randomUUID()}`
-    await tx.insert(workOrders).values({
+    const inserted = await insertUnlessRaced(tx, sp => sp.insert(workOrders).values({
       id,
       customerId,
       siteId,
@@ -319,7 +370,19 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       isUrgent: input.isUrgent ?? false,
       createdBy: input.createdBy ?? null,
       visibleInPool: true,
-    })
+    }))
+    if (!inserted) {
+      // A concurrent request committed the same ticket number between our SELECT
+      // above and this INSERT — exactly what an ERP retry looks like. The unique
+      // index kept the data correct; translate it into the error Task 4 maps to
+      // HTTP 409 instead of letting a raw 23505 surface as a 500.
+      const [raced] = await tx
+        .select({ id: workOrders.id })
+        .from(workOrders)
+        .where(eq(workOrders.ticketNumber, input.ticketNumber))
+      if (!raced) throw new Error(`Werkbon ${input.ticketNumber} kon niet worden aangemaakt`)
+      throw new DuplicateTicketError(input.ticketNumber, raced.id)
+    }
 
     const technicianIds = input.technicianIds ?? []
     if (technicianIds.length > 0) {
