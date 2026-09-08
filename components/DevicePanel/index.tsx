@@ -285,11 +285,10 @@ export default function DevicePanel({ deviceId, brand, model, refreshKey }: Prop
   }, [refreshKey])
 
   useEffect(() => {
-    if (!open || detail) return
+    if (!open || detail || !deviceId) return
     let cancelled = false
 
     async function loadDevicePanelData() {
-      if (!deviceId) { setDetail({ serialNumber: null, installDate: null }); setHistory([]); setLoadingDetail(false); return }
       setLoadingDetail(true)
 
       const historyUrl = `/api/devices/${deviceId}/history`
@@ -419,9 +418,9 @@ export default function DevicePanel({ deviceId, brand, model, refreshKey }: Prop
               <p className="text-[10px] font-black uppercase tracking-widest text-ink-soft mb-1">
                 Interventiegeschiedenis ({histCount})
               </p>
-              {history === null
+              {history === null && deviceId
                 ? <p className="text-xs text-ink-soft">Laden…</p>
-                : <HistoryList entries={history} />
+                : <HistoryList entries={history ?? []} />
               }
             </div>
           )}

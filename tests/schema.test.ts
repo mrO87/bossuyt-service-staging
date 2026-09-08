@@ -147,17 +147,20 @@ describe('database schema validation', () => {
     expect(rows[0]?.is_nullable).toBe('YES')
   })
 
-  it('the service bon unique indexes exist', async () => {
-    const rows = await testSql<{ indexname: string }[]>`
-      select indexname from pg_indexes
-      where schemaname = 'public'
-        and indexname in ('customers_customer_number_unique', 'work_orders_ticket_number_unique')
-      order by indexname
+  it('the service bon unique indexes exist and are unique', async () => {
+    const rows = await testSql<{ index_name: string; is_unique: boolean }[]>`
+      select c.relname as index_name, i.indisunique as is_unique
+      from pg_index i
+      join pg_class c on c.oid = i.indexrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relname in ('customers_customer_number_unique', 'work_orders_ticket_number_unique')
+      order by c.relname
     `
 
-    expect(rows.map(row => row.indexname)).toEqual([
-      'customers_customer_number_unique',
-      'work_orders_ticket_number_unique',
+    expect(rows).toEqual([
+      { index_name: 'customers_customer_number_unique', is_unique: true },
+      { index_name: 'work_orders_ticket_number_unique', is_unique: true },
     ])
   })
 
