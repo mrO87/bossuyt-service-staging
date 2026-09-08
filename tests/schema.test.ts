@@ -146,4 +146,44 @@ describe('database schema validation', () => {
     `
     expect(rows[0]?.is_nullable).toBe('YES')
   })
+
+  it('the service bon unique indexes exist', async () => {
+    const rows = await testSql<{ indexname: string }[]>`
+      select indexname from pg_indexes
+      where schemaname = 'public'
+        and indexname in ('customers_customer_number_unique', 'work_orders_ticket_number_unique')
+      order by indexname
+    `
+
+    expect(rows.map(row => row.indexname)).toEqual([
+      'customers_customer_number_unique',
+      'work_orders_ticket_number_unique',
+    ])
+  })
+
+  it('werkbonnen technician and device foreign keys delete with SET NULL', async () => {
+    const rows = await testSql<{ column_name: string; delete_rule: string }[]>`
+      select
+        (select attname from pg_attribute
+         where attrelid = c.conrelid and attnum = c.conkey[1]) as column_name,
+        case c.confdeltype
+          when 'n' then 'SET NULL'
+          when 'c' then 'CASCADE'
+          when 'a' then 'NO ACTION'
+          when 'r' then 'RESTRICT'
+          when 'd' then 'SET DEFAULT'
+        end as delete_rule
+      from pg_constraint c
+      where c.conrelid = 'public.werkbonnen'::regclass
+        and c.contype = 'f'
+        and (select attname from pg_attribute
+             where attrelid = c.conrelid and attnum = c.conkey[1]) in ('technician_id', 'device_id')
+      order by column_name
+    `
+
+    expect(rows).toEqual([
+      { column_name: 'device_id', delete_rule: 'SET NULL' },
+      { column_name: 'technician_id', delete_rule: 'SET NULL' },
+    ])
+  })
 })
