@@ -32,10 +32,10 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
     testTimeout: 15000,
+    // Tests share one database, so they must not run concurrently.
+    // In Vitest 4 `fileParallelism: false` forces maxWorkers to 1, which is
+    // what the removed `poolOptions.forks.singleFork` used to express.
     fileParallelism: false,
     pool: 'forks',
-    forks: {
-      singleFork: true,
-    },
   },
 })
