@@ -11,6 +11,8 @@ export type InterventionType = 'warm' | 'montage' | 'preventief'
 
 export type InterventionSource = 'planned' | 'reactive'
 
+export type InterventionKind = 'week' | 'weekend'
+
 export interface Customer {
   id: string
   name: string

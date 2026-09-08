@@ -120,4 +120,30 @@ describe('database schema validation', () => {
       'planning_version',
     ]))
   })
+
+  it('service bon columns exist on customers, sites, devices, work_orders and werkbonnen', async () => {
+    expect(await getColumns('customers')).toEqual(expect.arrayContaining([
+      'customer_number', 'invoice_customer_number',
+    ]))
+    expect(await getColumns('sites')).toEqual(expect.arrayContaining(['closing_day']))
+    expect(await getColumns('devices')).toEqual(expect.arrayContaining([
+      'unit_number', 'delivery_date', 'warranty_until',
+    ]))
+    expect(await getColumns('work_orders')).toEqual(expect.arrayContaining([
+      'ticket_number', 'ticket_date', 'created_at',
+    ]))
+    expect(await getColumns('werkbonnen')).toEqual(expect.arrayContaining([
+      'bon_number', 'technician_id', 'device_id', 'visit_date', 'arrival_time',
+      'departure_time', 'intervention_kind', 'trip_count', 'person_count',
+      'remarks', 'signature_data',
+    ]))
+  })
+
+  it('work_orders.device_id is nullable', async () => {
+    const rows = await testSql<{ is_nullable: string }[]>`
+      select is_nullable from information_schema.columns
+      where table_schema = 'public' and table_name = 'work_orders' and column_name = 'device_id'
+    `
+    expect(rows[0]?.is_nullable).toBe('YES')
+  })
 })

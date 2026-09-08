@@ -11,11 +11,13 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import type {
   DbTaskStatus,
   DbTaskType,
   DependencyType,
+  InterventionKind,
   InterventionSource,
   InterventionStatus,
   InterventionType,
@@ -35,14 +37,22 @@ export const technicians = pgTable('technicians', {
   active: boolean('active').notNull().default(true),
 })
 
-export const customers = pgTable('customers', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  phone: text('phone').notNull(),
-  address: text('address').notNull(),
-  city: text('city').notNull(),
-  vatNumber: text('vat_number'),
-})
+export const customers = pgTable(
+  'customers',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    phone: text('phone').notNull(),
+    address: text('address').notNull(),
+    city: text('city').notNull(),
+    vatNumber: text('vat_number'),
+    customerNumber: text('customer_number'),                // KLANT N° L  (e.g. K04647)
+    invoiceCustomerNumber: text('invoice_customer_number'), // KLANT N° F  (invoice customer, optional)
+  },
+  (tbl) => ({
+    byCustomerNumber: uniqueIndex('customers_customer_number_unique').on(tbl.customerNumber),
+  }),
+)
 
 export const sites = pgTable('sites', {
   id: text('id').primaryKey(),
@@ -56,6 +66,7 @@ export const sites = pgTable('sites', {
   phoneSecondary: text('phone_secondary'),
   lat: doublePrecision('lat'),
   lon: doublePrecision('lon'),
+  closingDay: text('closing_day'),                          // SLUITINGSDAG | FERMÉ
 })
 
 export const contacts = pgTable('contacts', {
@@ -79,42 +90,54 @@ export const devices = pgTable('devices', {
   serialNumber: text('serial_number'),
   installDate: text('install_date'),
   notes: text('notes'),
+  unitNumber: text('unit_number'),                         // UNIT N°
+  deliveryDate: text('delivery_date'),                     // LEVERDATUM, ISO date
+  warrantyUntil: text('warranty_until'),                   // GARANTIE, ISO date
 })
 
-export const workOrders = pgTable('work_orders', {
-  id: text('id').primaryKey(),
-  customerId: text('customer_id')
-    .notNull()
-    .references(() => customers.id, { onDelete: 'restrict' }),
-  siteId: text('site_id')
-    .notNull()
-    .references(() => sites.id, { onDelete: 'restrict' }),
-  deviceId: text('device_id')
-    .notNull()
-    .references(() => devices.id, { onDelete: 'restrict' }),
-  plannedDate: timestamp('planned_date', { withTimezone: true }).notNull(),
-  status: text('status').$type<InterventionStatus>().notNull(),
-  type: text('type').$type<InterventionType>().notNull(),
-  source: text('source').$type<InterventionSource>().notNull(),
-  description: text('description'),
-  estimatedMinutes: integer('estimated_minutes'),
-  isUrgent: boolean('is_urgent').notNull().default(false),
-  planningVersion: integer('planning_version').notNull().default(1),
-  statusOnderwegAt: timestamp('status_onderweg_at', { withTimezone: true }),
-  statusArrivedAt: timestamp('status_arrived_at', { withTimezone: true }),
-  statusOnderwegBy: text('status_onderweg_by'),
-  createdBy: text('created_by'),
-  // Completion data — written when technician saves the werkbon
-  workStart:         timestamp('work_start', { withTimezone: true }),
-  workEnd:           timestamp('work_end',   { withTimezone: true }),
-  completionNotes:   text('completion_notes'),
-  completionParts:   jsonb('completion_parts').$type<PdfPart[]>(),
-  completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
-  completedAt:       timestamp('completed_at', { withTimezone: true }),
-  externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
-  prefillParts:      jsonb('prefill_parts').$type<PdfPart[]>(),
-  visibleInPool:     boolean('visible_in_pool').notNull().default(true),
-})
+export const workOrders = pgTable(
+  'work_orders',
+  {
+    id: text('id').primaryKey(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'restrict' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'restrict' }),
+    // Optional: a ticket can arrive before the technician knows which unit is broken.
+    deviceId: text('device_id')
+      .references(() => devices.id, { onDelete: 'restrict' }),
+    plannedDate: timestamp('planned_date', { withTimezone: true }).notNull(),
+    status: text('status').$type<InterventionStatus>().notNull(),
+    type: text('type').$type<InterventionType>().notNull(),
+    source: text('source').$type<InterventionSource>().notNull(),
+    description: text('description'),
+    estimatedMinutes: integer('estimated_minutes'),
+    isUrgent: boolean('is_urgent').notNull().default(false),
+    planningVersion: integer('planning_version').notNull().default(1),
+    statusOnderwegAt: timestamp('status_onderweg_at', { withTimezone: true }),
+    statusArrivedAt: timestamp('status_arrived_at', { withTimezone: true }),
+    statusOnderwegBy: text('status_onderweg_by'),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    ticketNumber: text('ticket_number'),                   // TICKET N° — owned by the ERP
+    ticketDate: timestamp('ticket_date', { withTimezone: true }), // DATUM TICKET
+    // Completion data — written when technician saves the werkbon
+    workStart:         timestamp('work_start', { withTimezone: true }),
+    workEnd:           timestamp('work_end',   { withTimezone: true }),
+    completionNotes:   text('completion_notes'),
+    completionParts:   jsonb('completion_parts').$type<PdfPart[]>(),
+    completionPdfPath: text('completion_pdf_path'), // /uploads/werkbonnen/{id}.pdf
+    completedAt:       timestamp('completed_at', { withTimezone: true }),
+    externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
+    prefillParts:      jsonb('prefill_parts').$type<PdfPart[]>(),
+    visibleInPool:     boolean('visible_in_pool').notNull().default(true),
+  },
+  (tbl) => ({
+    byTicketNumber: uniqueIndex('work_orders_ticket_number_unique').on(tbl.ticketNumber),
+  }),
+)
 
 export const workOrderAssignments = pgTable(
   'work_order_assignments',
@@ -214,11 +237,24 @@ export const werkbonnen = pgTable('werkbonnen', {
   workOrderId: text('work_order_id')
     .notNull()
     .references(() => workOrders.id, { onDelete: 'cascade' }),
+  bonNumber:   text('bon_number'),                         // SERVICE BON N°: `${ticket}-NN`
+  technicianId: text('technician_id')
+    .references(() => technicians.id, { onDelete: 'set null' }),
+  deviceId:    text('device_id')
+    .references(() => devices.id, { onDelete: 'set null' }),
+  visitDate:     timestamp('visit_date',     { withTimezone: true }), // BEZOEKDATUM
+  arrivalTime:   timestamp('arrival_time',   { withTimezone: true }), // AANKOMSTUUR
+  departureTime: timestamp('departure_time', { withTimezone: true }), // VERTREKUUR
   workStart:   timestamp('work_start',  { withTimezone: true }),
   workEnd:     timestamp('work_end',    { withTimezone: true }),
-  notes:       text('notes'),                              // omschrijving werkzaamheden
-  parts:       jsonb('parts').$type<PdfPart[]>(),
+  interventionKind: text('intervention_kind').$type<InterventionKind>(), // WEEK | WEEKEND
+  tripCount:   integer('trip_count'),                      // AANTAL RITTEN
+  personCount: integer('person_count'),                    // AANTAL PERSONEN
+  notes:       text('notes'),                              // TECHNICUS RAPPORT
+  remarks:     text('remarks'),                            // OPMERKINGEN
+  parts:       jsonb('parts').$type<PdfPart[]>(),          // MATERIALEN
   followUp:    jsonb('follow_up').$type<PdfFollowUp[]>(),
+  signatureData: text('signature_data'),                   // AKKOORD VAN KLANT, base64 PNG data URL
   pdfPath:     text('pdf_path'),                           // /api/uploads/werkbonnen/{id}.pdf
   completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
   changedBy:   text('changed_by'),
