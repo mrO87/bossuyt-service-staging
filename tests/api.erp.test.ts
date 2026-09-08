@@ -6,7 +6,7 @@ import { GET as getPartsPending } from '@/app/api/erp/parts-pending/route'
 import { POST as postPartFulfil } from '@/app/api/erp/parts-pending/[task_id]/fulfil/route'
 import { POST as postExternalRef } from '@/app/api/erp/work-orders/[id]/external-ref/route'
 import { GET as getErpWorkOrders } from '@/app/api/erp/work-orders/route'
-import { workOrderEvents, workOrders } from '@/lib/db/schema'
+import { werkbonnen, workOrderEvents, workOrders } from '@/lib/db/schema'
 import type { CleanupIds } from './setup'
 import { cleanup, createTestWorkOrder, fetchTask, insertDependency, insertTask, testDb } from './setup'
 
@@ -105,6 +105,7 @@ describe('ERP API surface', () => {
         status: 'bezig',
         plannedDate: new Date('2026-04-17T12:00:00.000Z'),
         completedAt: null,
+        ticketNumber: 'TKT-TEST',
       })
       .where(eq(workOrders.id, matchingWorkOrderId))
     await testDb.update(workOrders)
@@ -130,6 +131,18 @@ describe('ERP API surface', () => {
     })
     ids.task_ids?.push(taskId)
 
+    await testDb.insert(werkbonnen).values({
+      id: randomUUID(),
+      workOrderId: matchingWorkOrderId,
+      bonNumber: 'TKT-TEST-01',
+      notes: 'Lek gedicht',
+      parts: [],
+      tripCount: 1,
+      personCount: 2,
+      interventionKind: 'week',
+      remarks: 'Klant tevreden',
+    })
+
     const response = await getErpWorkOrders(req(
       'http://localhost/api/erp/work-orders?since=2026-04-17T00:00:00.000Z&status=bezig',
       undefined,
@@ -147,7 +160,17 @@ describe('ERP API surface', () => {
     expect(body.work_orders[0]?.tasks).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: taskId, type: 'order_part' }),
     ]))
-    expect(body.work_orders[0]).toHaveProperty('werkbon')
+    expect(body.work_orders[0]).toMatchObject({ ticket_number: 'TKT-TEST' })
+    expect(body.work_orders[0]).toHaveProperty('customer_number')
+    expect(body.work_orders[0]).toHaveProperty('created_at')
+    expect(body.work_orders[0]?.werkbon).toMatchObject({
+      bon_number: 'TKT-TEST-01',
+      notes: 'Lek gedicht',
+      trip_count: 1,
+      person_count: 2,
+      intervention_kind: 'week',
+      remarks: 'Klant tevreden',
+    })
   })
 
   it('external-ref endpoint sets and overwrites external_ref and returns 404 for a missing work order', async () => {

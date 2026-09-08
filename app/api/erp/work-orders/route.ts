@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { and, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { tasks, werkbonnen, workOrders } from '@/lib/db/schema'
+import { customers, tasks, werkbonnen, workOrders } from '@/lib/db/schema'
 import { handleCreateWorkOrderRequest } from '@/lib/server/work-orders'
 import type { InterventionStatus } from '@/types'
 
@@ -33,12 +33,13 @@ export async function GET(req: NextRequest) {
     if (siteId) conditions.push(eq(workOrders.siteId, siteId))
 
     const orders = await db
-      .select()
+      .select({ wo: workOrders, customerNumber: customers.customerNumber })
       .from(workOrders)
+      .innerJoin(customers, eq(workOrders.customerId, customers.id))
       .where(and(...conditions))
 
     // For each work order, fetch its tasks and latest werkbon
-    const result = await Promise.all(orders.map(async wo => {
+    const result = await Promise.all(orders.map(async ({ wo, customerNumber }) => {
       const woTasks = await db
         .select({
           id:      tasks.id,
@@ -54,21 +55,46 @@ export async function GET(req: NextRequest) {
         .select()
         .from(werkbonnen)
         .where(eq(werkbonnen.workOrderId, wo.id))
-        .orderBy(werkbonnen.completedAt)
+        .orderBy(desc(werkbonnen.completedAt))
         .limit(1)
 
+      const iso = (d: Date | string | null | undefined) => (d instanceof Date ? d.toISOString() : d ?? null)
       return {
-        id:           wo.id,
-        external_ref: wo.externalRef,
-        site_id:      wo.siteId,
-        status:       wo.status,
-        type:         wo.type,
-        planned_date: wo.plannedDate instanceof Date ? wo.plannedDate.toISOString() : wo.plannedDate,
-        completed_at: wo.completedAt instanceof Date ? wo.completedAt.toISOString() : wo.completedAt,
-        is_urgent:    wo.isUrgent,
-        tasks:        woTasks,
-        werkbon:      latestWerkbon
-          ? { parts: latestWerkbon.parts, notes: latestWerkbon.notes, work_start: latestWerkbon.workStart, work_end: latestWerkbon.workEnd }
+        id:              wo.id,
+        external_ref:    wo.externalRef,
+        ticket_number:   wo.ticketNumber,
+        ticket_date:     iso(wo.ticketDate),
+        created_at:      iso(wo.createdAt),
+        customer_number: customerNumber,
+        site_id:         wo.siteId,
+        device_id:       wo.deviceId,
+        status:          wo.status,
+        type:            wo.type,
+        planned_date:    iso(wo.plannedDate),
+        completed_at:    iso(wo.completedAt),
+        is_urgent:       wo.isUrgent,
+        description:     wo.description,
+        tasks:           woTasks,
+        werkbon:         latestWerkbon
+          ? {
+              id:                latestWerkbon.id,
+              bon_number:        latestWerkbon.bonNumber,
+              technician_id:     latestWerkbon.technicianId,
+              device_id:         latestWerkbon.deviceId,
+              visit_date:        iso(latestWerkbon.visitDate),
+              arrival_time:      iso(latestWerkbon.arrivalTime),
+              departure_time:    iso(latestWerkbon.departureTime),
+              work_start:        iso(latestWerkbon.workStart),
+              work_end:          iso(latestWerkbon.workEnd),
+              intervention_kind: latestWerkbon.interventionKind,
+              trip_count:        latestWerkbon.tripCount,
+              person_count:      latestWerkbon.personCount,
+              notes:             latestWerkbon.notes,
+              remarks:           latestWerkbon.remarks,
+              parts:             latestWerkbon.parts,
+              pdf_path:          latestWerkbon.pdfPath,
+              completed_at:      iso(latestWerkbon.completedAt),
+            }
           : null,
       }
     }))
