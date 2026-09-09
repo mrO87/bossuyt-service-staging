@@ -4,13 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
-import type { PdfPart, PdfTaskItem } from '@/lib/pdf'
+import type { PdfPart, ServiceBonPdfData } from '@/lib/pdf'
 import { useTasks } from '@/lib/task-store'
 import { queueTaskCommand } from '@/lib/tasks/sync'
-import { getTaskStatusLabel } from '@/lib/task-meta'
-import { getUserById } from '@/lib/mock-data'
 import { deleteWerkbon, loadWerkbon, saveWerkbon } from '@/lib/idb'
-import type { Device, Intervention, DbTask, Task, User, WerkbonFormState } from '@/types'
+import type { Device, Intervention, DbTask, WerkbonFormState } from '@/types'
 import PartsSection from './PartsSection'
 import PhotoUploadSection from './PhotoUploadSection'
 import TaskManager from './TaskManager'
@@ -18,16 +16,6 @@ import Section from './Section'
 import BonHeaderCard from './BonHeaderCard'
 import VisitSection from './VisitSection'
 import DevicePicker from './DevicePicker'
-
-function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
-  if (task.assigneeType === 'group' && task.assigneeRole) {
-    const labels: Record<User['role'], string> = {
-      technician: 'Techniekers', admin: 'Admin', office: 'Office', warehouse: 'Magazijn', hr: 'HR', planner: 'Planner',
-    }
-    return labels[task.assigneeRole] ?? task.assigneeRole
-  }
-  return getUserById(task.assigneeUserId ?? '')?.name ?? 'Onbekende gebruiker'
-}
 
 const STATUS_OPTIONS = [
   { value: 'gepland',          label: 'Gepland',               activeClass: 'bg-stroke text-ink-soft border-stroke',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
@@ -168,23 +156,43 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     bonNumber ?? `${intervention.ticketNumber ?? intervention.id}-${String(existingCount + 1).padStart(2, '0')}`
   const technicianName = intervention.technicians.find(t => t.technicianId === form.technicianId)?.name ?? ''
 
-  /** Single place that maps form + intervention to the PDF input. */
-  function buildPdfData(pdfTasks: PdfTaskItem[]) {
+  /** Single place that maps form + intervention to the Service Bon PDF input. */
+  function buildPdfData(): ServiceBonPdfData {
+    const invoiceNumber =
+      intervention.invoiceCustomerNumber && intervention.invoiceCustomerNumber !== intervention.customerNumber
+        ? intervention.invoiceCustomerNumber
+        : ''
+
     return {
+      ticketNumber: intervention.ticketNumber ?? '',
+      bonNumber: bonNumberPreview,
+      ticketDate: intervention.ticketDate ?? intervention.createdAt ?? '',
+      customerNumber: intervention.customerNumber ?? '',
+      invoiceCustomerNumber: invoiceNumber,
       customerName: intervention.customerName,
-      siteName: intervention.siteName,
       siteAddress: intervention.siteAddress,
       siteCity: intervention.siteCity,
-      deviceBrand: pickedDevice?.brand ?? intervention.deviceBrand ?? '',
-      deviceModel: pickedDevice?.model ?? intervention.deviceModel ?? '',
-      deviceSerial: pickedDevice?.serialNumber ?? intervention.deviceSerial,
-      status: form.status,
-      workStart: form.workStart,
-      workEnd: form.workEnd,
-      description: form.notes,
+      contactName: intervention.contactName ?? '',
+      phones: [intervention.contactPhone, ...(intervention.sitePhones ?? [])].filter((p): p is string => Boolean(p)),
+      closingDay: intervention.closingDay ?? '',
+      deviceUnitNumber: pickedDevice?.unitNumber ?? intervention.deviceUnitNumber ?? '',
+      deviceDescription: [
+        pickedDevice?.brand ?? intervention.deviceBrand,
+        pickedDevice?.model ?? intervention.deviceModel,
+      ].filter(Boolean).join(' '),
+      deviceDeliveryDate: pickedDevice?.deliveryDate ?? intervention.deviceDeliveryDate ?? '',
+      deviceWarrantyUntil: pickedDevice?.warrantyUntil ?? intervention.deviceWarrantyUntil ?? '',
+      customerDescription: intervention.description ?? '',
+      technicianReport: form.notes,
       parts: form.parts,
-      followUp: [],
-      tasks: pdfTasks,
+      technicianName,
+      visitDate: form.visitDate ? new Date(`${form.visitDate}T00:00:00`).toISOString() : '',
+      arrivalTime: form.arrivalTime,
+      departureTime: form.departureTime,
+      interventionKind: form.interventionKind,
+      tripCount: form.tripCount,
+      personCount: form.personCount,
+      remarks: form.remarks,
       signature: form.signature,
     }
   }
@@ -192,17 +200,9 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   async function handleSubmit() {
     setSaving(true)
     const linkedTasks = tasks.filter(task => task.werkbonId === werkbonId)
-    const pdfTasks: PdfTaskItem[] = linkedTasks.map(task => ({
-      id: task.id,
-      title: task.title,
-      assigneeName: getAssignmentLabel(task),
-      priority: task.priority,
-      dueDate: task.dueDate ?? '',
-      statusLabel: getTaskStatusLabel(task.status),
-    }))
 
     try {
-      const pdfBlob = await Promise.resolve(generateWerkbonPDF(buildPdfData(pdfTasks)))
+      const pdfBlob = await generateWerkbonPDF(buildPdfData())
 
       const fd = new FormData()
       fd.append('changedBy', form.technicianId ?? intervention.technicians[0]?.technicianId ?? '')
