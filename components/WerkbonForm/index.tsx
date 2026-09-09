@@ -80,33 +80,48 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [workflowTasks, setWorkflowTasks] = useState<DbTask[]>([])
   const [workflowRefresh, setWorkflowRefresh] = useState(0)
   const saveTimer = useRef<number | null>(null)
+  // Set the moment the technician changes anything. Guards three separate races
+  // around the IndexedDB draft — see the two effects below and handleSubmit.
+  const isDirty = useRef(false)
 
   // ── Draft: load once, then autosave (debounced 500 ms) ──────────────────────
   useEffect(() => {
     let cancelled = false
     loadWerkbon(intervention.id)
-      .then(draft => { if (!cancelled && draft) setForm(draft.form) })
+      .then(draft => {
+        // IndexedDB is async. If the technician started typing while we were
+        // reading, their input is newer than the draft and must win.
+        if (!cancelled && draft && !isDirty.current) setForm(draft.form)
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setDraftLoaded(true) })
     return () => { cancelled = true }
   }, [intervention.id])
 
   useEffect(() => {
-    if (!draftLoaded) return
+    // Only save real edits. Saving an untouched form would persist initialForm
+    // and let a stale local copy shadow assignment changes made on the server.
+    // And once the bon is submitted the draft is gone deliberately: writing it
+    // back here would resurrect it.
+    if (!draftLoaded || !isDirty.current || saveStatus === 'saved') return
     if (saveTimer.current) window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => { void saveWerkbon(intervention.id, form) }, 500)
     return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current) }
-  }, [form, draftLoaded, intervention.id])
+  }, [form, draftLoaded, saveStatus, intervention.id])
 
-  // How many werkbonnen already exist for this work order → bon number preview "-NN"
+  // How many werkbonnen already exist for this work order → bon number preview "-NN".
+  // Falls back to the device the technician picked on-site, so a work order that
+  // arrived without one does not sit frozen at -01. This is only a preview: the
+  // server assigns the authoritative number under a row lock.
+  const previewDeviceId = intervention.deviceId ?? form.deviceId
   useEffect(() => {
-    if (!intervention.deviceId) return
-    fetch(`/api/devices/${intervention.deviceId}/history`)
+    if (!previewDeviceId) return
+    fetch(`/api/devices/${previewDeviceId}/history`)
       .then(r => (r.ok ? r.json() : []))
       .then((rows: Array<{ workOrderId: string }>) =>
         setExistingCount(rows.filter(r => r.workOrderId === intervention.id).length))
       .catch(() => {})
-  }, [intervention.id, intervention.deviceId, saveStatus])
+  }, [intervention.id, previewDeviceId, saveStatus])
 
   useEffect(() => {
     fetch(`/api/tasks?work_order_id=${intervention.id}`)
@@ -129,19 +144,23 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   }, [workflowTasks])
 
   const update = useCallback(<K extends keyof WerkbonFormState>(field: K, value: WerkbonFormState[K]) => {
+    isDirty.current = true
     setForm(prev => ({ ...prev, [field]: value }))
   }, [])
 
   function addPart(toOrder: boolean) {
+    isDirty.current = true
     const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder, urgent: false }
     setForm(prev => ({ ...prev, parts: [...prev.parts, part] }))
   }
 
   function updatePart(id: string, field: keyof PdfPart, value: string | number | boolean) {
+    isDirty.current = true
     setForm(prev => ({ ...prev, parts: prev.parts.map(p => (p.id === id ? { ...p, [field]: value } : p)) }))
   }
 
   function removePart(id: string) {
+    isDirty.current = true
     setForm(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }))
   }
 
@@ -199,6 +218,12 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
 
   async function handleSubmit() {
     setSaving(true)
+    // Cancel any queued autosave. Without this, an edit made within 500ms of
+    // tapping submit fires after deleteWerkbon and writes the draft back.
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
     const linkedTasks = tasks.filter(task => task.werkbonId === werkbonId)
 
     try {
@@ -229,6 +254,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         setBonNumber(json.bonNumber)
         setSaveStatus('saved')
         setDeviceRefresh(current => current + 1)
+        isDirty.current = false
         await deleteWerkbon(intervention.id)
 
         for (const part of form.parts) {
@@ -350,10 +376,10 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={saving}
+        disabled={saving || saveStatus === 'saved'}
         className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange"
       >
-        {saving ? 'Bon afsluiten...' : 'Bon afsluiten & PDF'}
+        {saving ? 'Bon afsluiten...' : saveStatus === 'saved' ? '✓ Bon afgesloten' : 'Bon afsluiten & PDF'}
       </button>
 
       {saveStatus === 'saved' && bonNumber && (

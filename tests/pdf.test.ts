@@ -72,6 +72,43 @@ describe('generateWerkbonPDF', () => {
     expect((await bytes(overflow)).toString('latin1')).toContain('/Count 2')
   })
 
+  it('does not silently drop a long part description', async () => {
+    // The materials list is what the customer signs for, so text must never be
+    // lost. "Vervangingsdichting" is the distinctive tail of the description;
+    // if only line 0 of the wrap were drawn, it would be missing entirely.
+    const long = 'Thermokoppel met lange kabel en snelkoppeling, Vervangingsdichting'
+    const raw = Buffer.from(await (await generateWerkbonPDF({
+      ...data,
+      parts: [{ id: 'p1', code: 'A-1', description: long, quantity: 1, toOrder: false, urgent: false }],
+    }, { download: false })).arrayBuffer()).toString('latin1')
+
+    expect(raw).toContain('Thermokoppel')
+    expect(raw).toContain('Vervangingsdichting')
+  })
+
+  it('keeps the urgency wording on the continuation page', async () => {
+    // Page 1 holds 7 rows, so part 12 lands on the continuation page. Dropping
+    // ", dringend" there would understate an urgent part on the filed copy.
+    const parts = Array.from({ length: 12 }, (_, i) => ({
+      id: `p${i}`, code: `C-${i}`, description: `Onderdeel ${i}`, quantity: 1,
+      toOrder: true, urgent: i === 11,
+    }))
+    const raw = Buffer.from(await (await generateWerkbonPDF({ ...data, parts }, { download: false })).arrayBuffer())
+      .toString('latin1')
+
+    expect(raw).toContain('dringend')
+    expect(raw).toContain('/Count 2')
+  })
+
+  it('keeps a long customer name inside the right-hand column', async () => {
+    const blob = await generateWerkbonPDF({
+      ...data,
+      customerName: 'Grootkeuken en Restauratie Vennootschap Van Den Berghe & Partners BVBA',
+    }, { download: false })
+    // Wrapped rather than truncated: the tail of the name still reaches the page.
+    expect(Buffer.from(await blob.arrayBuffer()).toString('latin1')).toContain('Partners')
+  })
+
   it('keeps the customer number and bon number on the page', async () => {
     const raw = (await bytes(await generateWerkbonPDF(data, { download: false }))).toString('latin1')
     // jsPDF writes text uncompressed by default, so the field values are greppable.

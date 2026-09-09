@@ -55,7 +55,7 @@ export default function NieuwWerkbon() {
   const [showNew, setShowNew] = useState(false)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [serverError, setServerError] = useState<{ field?: string; message: string } | null>(null)
+  const [serverError, setServerError] = useState<{ field?: string; message: string; existingId?: string } | null>(null)
 
   // Customer search, debounced 300 ms
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function NieuwWerkbon() {
         return
       }
       if (res.status === 409 && json.id) {
-        setServerError({ field: 'ticket_number', message: 'Ticket bestaat al — tik hier om te openen' })
+        setServerError({ field: 'ticket_number', message: 'Ticket bestaat al', existingId: json.id })
         return
       }
       setServerError({ field: json.field, message: json.error ?? 'Aanmaken mislukt' })

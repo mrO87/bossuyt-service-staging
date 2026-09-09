@@ -207,12 +207,17 @@ export async function generateWerkbonPDF(
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('F', RX + 42, 40)
   value(fNumber, RX + 46, 40)
 
+  // The right column is only (204 - 130) = 74mm wide, so long values must wrap
+  // inside it rather than run off the edge of the form.
+  const COL_W = PAGE_W - MR - RX - 2
+
   label('NAAM | NOM', RX, 44.5)
-  value(data.customerName, RX, 49)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...BLACK)
+  doc.text((doc.splitTextToSize(data.customerName || '', COL_W) as string[]).slice(0, 2), RX, 49)
 
   label('ADRES | ADRESSE', RX, 57)
-  value(data.siteAddress, RX, 61.5)
-  value(data.siteCity, RX, 65.5)
+  doc.text((doc.splitTextToSize(data.siteAddress || '', COL_W) as string[]).slice(0, 1), RX, 61.5)
+  doc.text((doc.splitTextToSize(data.siteCity || '', COL_W) as string[]).slice(0, 1), RX, 65.5)
 
   label('CONTACT', RX, 70)
   value(data.contactName, RX, 74.5)
@@ -228,7 +233,8 @@ export async function generateWerkbonPDF(
   const cols = [ML, ML + 24, SPLIT, ML + 148, PAGE_W - MR]
   for (const x of cols.slice(1, -1)) line(x, DR_TOP + 3, x, DR_BOTTOM)
   label('UNIT N°', cols[0] + 2, DR_TOP + 5);                     value(data.deviceUnitNumber, cols[0] + 2, DR_TOP + 12)
-  label('OMSCHRIJVING | DÉSIGNATION', cols[1] + 2, DR_TOP + 5);  value(data.deviceDescription, cols[1] + 2, DR_TOP + 12)
+  label('OMSCHRIJVING | DÉSIGNATION', cols[1] + 2, DR_TOP + 5)
+  value((doc.splitTextToSize(data.deviceDescription || '', cols[2] - cols[1] - 4) as string[])[0] ?? '', cols[1] + 2, DR_TOP + 12)
   label('LEVERDATUM', cols[2] + 2, DR_TOP + 5);                  value(fmtDate(data.deviceDeliveryDate), cols[2] + 2, DR_TOP + 12)
   label('GARANTIE', cols[3] + 2, DR_TOP + 5);                    value(fmtDate(data.deviceWarrantyUntil), cols[3] + 2, DR_TOP + 12)
 
@@ -269,8 +275,20 @@ export async function generateWerkbonPDF(
     const p = partsToDraw[i]
     if (p) {
       value(p.code, ML + 2, y - 1.2, 8.5)
+      // A description longer than the column must not be silently dropped: this
+      // is the list the customer signs for. Fall back to two smaller lines
+      // inside the same row, and only then shorten with an ellipsis.
       const desc = p.toOrder ? `${p.description} (te bestellen${p.urgent ? ', dringend' : ''})` : p.description
-      value((doc.splitTextToSize(desc, 62) as string[])[0] ?? '', ML + 22, y - 1.2, 8.5)
+      const descLines = doc.splitTextToSize(desc, 62) as string[]
+      if (descLines.length <= 1) {
+        value(descLines[0] ?? '', ML + 22, y - 1.2, 8.5)
+      } else {
+        const small = doc.splitTextToSize(desc, 70) as string[]
+        value(small[0] ?? '', ML + 22, y - 3, 6.5)
+        const rest = small.slice(1).join(' ')
+        const tail = (doc.splitTextToSize(rest, 70) as string[])
+        value(tail.length > 1 ? `${tail[0]}…` : (tail[0] ?? ''), ML + 22, y - 0.4, 6.5)
+      }
       value(String(p.quantity), RIGHT_X - 4, y - 1.2, 8.5, 'right')
     }
     dotted(ML + 2, RIGHT_X - 4, y)
@@ -346,14 +364,30 @@ export async function generateWerkbonPDF(
     }
 
     if (partsOverflow.length > 0) {
-      label('MATERIALEN | MATÉRIAUX (vervolg)', ML + 2, y); y += 6
+      label('MATERIALEN | MATÉRIAUX (vervolg)', ML + 2, y); y += 5
+      // The continuation page needs its own column headers, or the numbers in
+      // the right-hand column have no meaning.
+      label('ART. N°', ML + 2, y, 7.5)
+      label('Omschrijving', ML + 24, y, 7.5)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
+      doc.text('AANTAL | NOMBRE', PAGE_W - MR - 2, y, { align: 'right' })
+      y += 5
+
       for (const p of partsOverflow) {
         if (y > PAGE_H - 30) { doc.addPage(); pageChrome(); y = 30 }
         value(p.code, ML + 2, y - 1, 8.5)
-        const desc = p.toOrder ? `${p.description} (te bestellen)` : p.description
-        value((doc.splitTextToSize(desc, 120) as string[])[0] ?? '', ML + 24, y - 1, 8.5)
+        // Same urgency wording as page 1 — dropping ", dringend" here would
+        // understate the part on exactly the copy the office files.
+        const desc = p.toOrder ? `${p.description} (te bestellen${p.urgent ? ', dringend' : ''})` : p.description
+        const lines = doc.splitTextToSize(desc, 120) as string[]
+        value(lines[0] ?? '', ML + 24, y - 1, 8.5)
         value(String(p.quantity), PAGE_W - MR - 2, y - 1, 8.5, 'right')
         dotted(ML + 2, PAGE_W - MR - 2, y); y += 6
+        for (const extra of lines.slice(1)) {
+          if (y > PAGE_H - 30) { doc.addPage(); pageChrome(); y = 30 }
+          value(extra, ML + 24, y - 1, 8.5)
+          dotted(ML + 2, PAGE_W - MR - 2, y); y += 6
+        }
       }
     }
   }

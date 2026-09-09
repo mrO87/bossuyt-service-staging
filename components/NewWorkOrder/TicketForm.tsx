@@ -16,7 +16,7 @@ interface TechnicianOption { id: string; name: string; initials: string; role: s
 
 interface Props {
   submitting: boolean
-  serverError: { field?: string; message: string } | null
+  serverError: { field?: string; message: string; existingId?: string } | null
   onSubmit: (draft: TicketDraft) => void
 }
 
@@ -39,6 +39,8 @@ export default function TicketForm({ submitting, serverError, onSubmit }: Props)
   const missing = (key: 'ticketNumber' | 'plannedDate' | 'description') =>
     touched && !draft[key].trim() ? 'Verplicht' : undefined
   const fieldError = (wire: string) => serverError?.field === wire ? serverError.message : undefined
+  // Fields this step renders inline; anything else needs the banner below.
+  const LOCAL_FIELDS = ['ticket_number', 'planned_date', 'description']
   const valid = draft.ticketNumber.trim() && draft.plannedDate && draft.description.trim()
 
   function toggleTechnician(id: string) {
@@ -88,8 +90,24 @@ export default function TicketForm({ submitting, serverError, onSubmit }: Props)
           </div>
         </div>
       )}
-      {serverError && !serverError.field && (
-        <p className="text-sm font-semibold text-brand-red">{serverError.message}</p>
+      {/* A 409 names the ticket that already exists — make it reachable. */}
+      {serverError?.existingId && (
+        <a
+          href={`/interventions/${serverError.existingId}`}
+          className="block text-sm font-bold text-brand-blue underline underline-offset-2"
+        >
+          Open bestaande werkbon →
+        </a>
+      )}
+
+      {/* Any error this step does not own would otherwise be invisible: the button
+          re-enables and nothing is shown. Rejected customer or site fields land here. */}
+      {serverError && !LOCAL_FIELDS.includes(serverError.field ?? '') && (
+        <div className="rounded-xl border border-brand-red bg-white px-3 py-2">
+          <p className="text-sm font-semibold text-brand-red">
+            {serverError.field ? `${serverError.field}: ${serverError.message}` : serverError.message}
+          </p>
+        </div>
       )}
       <button
         type="button"
