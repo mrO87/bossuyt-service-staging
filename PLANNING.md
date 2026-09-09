@@ -1,6 +1,6 @@
 # Bossuyt Service — Planning
 
-## Current State (v1.20)
+## Current State (v1.53)
 
 The app is a mobile-first field service PWA for Bossuyt technicians.
 Staging: https://staging.bossuyt.fixassistant.com
@@ -20,6 +20,12 @@ Staging: https://staging.bossuyt.fixassistant.com
 - [x] Offline-first: IndexedDB cache + pending write queue + morning sync via /api/sync/today
 - [x] Push notifications infrastructure (web-push)
 - [x] PWA service worker (next-pwa)
+- [x] Service Bon: every paper field on the work order + werkbon, bon number `${ticket}-NN`
+      generated under a row lock, stored signature
+- [x] Inbound ERP route `POST /api/erp/work-orders` + manual wizard (`/werkbon/nieuw`, "+" on day view)
+- [x] Device optional on a work order; the technician picks or adds it on-site
+- [x] PDF is a one-to-one replica of the paper Service Bon (logo, bilingual labels, bank footer)
+- [x] Werkbon draft autosaved to IndexedDB, restored after a refresh
 
 ---
 

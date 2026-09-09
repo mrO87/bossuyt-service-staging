@@ -1,3 +1,21 @@
+## v1.53 — Service Bon werkorders  (sha: b611153)
+
+### Changenotes — lib/releases.ts
+- [x] Beschrijving per wijziging geschreven (zie RELEASES v1.53)
+- Spec: docs/superpowers/specs/2026-09-08-service-bon-work-orders-design.md
+- Plan: docs/superpowers/plans/2026-09-08-service-bon-work-orders.md
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor: createWorkOrder (find-or-create in een transactie),
+      bonnummer met rijlock (SELECT ... FOR UPDATE), IndexedDB draft, jsPDF replica
+
+### Na deploy
+- [ ] `npm run load-example` tegen staging en de Molenhoeve-bon openen op een telefoon
+- [ ] Betekenis van KLANT N° L / F bevestigen met Bossuyt
+- [ ] lib/lessons.ts:370 noemt nog het verwijderde `Werkbon`-type
+
+---
+
 ## v1.52 — Deploy 2026-04-26 16:58  (sha: 29a82a4)
 
 ### Changenotes invullen — lib/releases.ts

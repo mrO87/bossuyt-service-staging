@@ -15,6 +15,65 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.53',
+    date: '9 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Service Bon: alle velden van de papieren werkbon',
+        body:
+          'De werkbon volgt nu de papieren Service Bon: ticket- en bonnummer, klantnummer L/F, ' +
+          'contact, sluitingsdag, unit/leverdatum/garantie, technicus rapport, materialen, ' +
+          'bezoekdatum, aankomst- en vertrekuur, week/weekend, aantal ritten en personen, ' +
+          'opmerkingen en handtekening.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Werkbon aanmaken vanuit de app',
+        body:
+          'De wizard onder "+" op het dagoverzicht zoekt echte klanten, locaties en toestellen, ' +
+          'laat nieuwe aanmaken en sluit af met een ticketstap. Een toestel is niet meer verplicht ' +
+          'bij aanmaak — de technieker kiest het ter plaatse.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'ERP-koppeling: tickets ontvangen',
+        body:
+          'POST /api/erp/work-orders neemt een ticket aan in Service Bon-formaat. Het bestaande ' +
+          'GET-export geeft nu ook ticketnummer en alle bonvelden terug.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'PDF is een replica van de papieren bon',
+        body:
+          'De gegenereerde PDF heeft dezelfde indeling, tweetalige labels, logo en bankgegevens ' +
+          'als de papieren Service Bon, en kan later opnieuw gegenereerd worden.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Concept van de werkbon blijft bewaard',
+        body:
+          'Elke wijziging wordt lokaal (IndexedDB) opgeslagen; na een refresh of een lege batterij ' +
+          'staat alles nog ingevuld.',
+      },
+      {
+        label: 'Fix',
+        title: 'Ongeldige onderdelenlijst wordt geweigerd',
+        body:
+          'Het afsluiten van een werkbon met een kapotte onderdelenlijst geeft nu een foutmelding ' +
+          'in plaats van stil niets op te slaan.',
+      },
+      {
+        label: 'Fix',
+        title: 'Werkbonnen zonder toestel verdwenen uit het magazijn',
+        body:
+          'Een werkorder zonder gekend toestel viel uit de magazijnwachtrij en uit het dagoverzicht. ' +
+          'Beide lijsten tonen die jobs nu wel.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.52',
     date: '26 april 2026',
     changes: [
@@ -963,7 +1022,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.52'
+const CURRENT_RELEASE_VERSION = 'v1.53'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

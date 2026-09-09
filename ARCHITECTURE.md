@@ -18,12 +18,14 @@
 
 ### Customer
 - id, name, phone, address, city, vat_number?
+- customer_number (KLANT N° L, unique — the ERP matches on this), invoice_customer_number (F)
 - Billing entity — address here is the invoicing address, not necessarily where the work happens
 - A customer can have multiple sites (e.g. large company with multiple locations)
 
 ### Site
 - id, customer_id, name, address, city
 - phones[] (one or more phone numbers for this location)
+- closing_day (SLUITINGSDAG)
 - A site can have multiple devices and multiple contacts
 
 ### Contact
@@ -34,6 +36,7 @@
 ### Device
 - id, site_id, brand, model, serial_number
 - install_date, notes
+- unit_number (UNIT N°), delivery_date (LEVERDATUM), warranty_until (GARANTIE)
 - Devices belong to a site (not directly to a customer)
 
 ### DeviceDocument
@@ -44,8 +47,9 @@
 - id, code, description, unit_price
 - compatible_device_ids[]
 
-### Intervention (job)
-- id, customer_id, device_id
+### Intervention (job, table `work_orders`)
+- id, customer_id, site_id, device_id (nullable — a ticket can arrive before the unit is known)
+- ticket_number (TICKET N°, unique, owned by the ERP), ticket_date, created_at
 - planned_date
 - status (gepland/onderweg/bezig/wacht_onderdelen/afgewerkt/geannuleerd)
 - type (warm/montage/preventief)
@@ -61,14 +65,15 @@
 - accepted (bool)
 - planned_order (each technician has own order)
 
-### Werkbon
-- id, intervention_id, created_by (technician_id)
-- arrival_time, work_start, work_end
-- description (free text)
-- status (concept/ingediend/goedgekeurd)
-- signature_data (base64)
-- pdf_url
-- submitted_at, synced_at
+### Werkbon (table `werkbonnen`, one row per submission — never overwritten)
+- id, work_order_id, bon_number (`${ticket_number}-NN`, generated server-side under a row lock)
+- technician_id, device_id (the unit actually worked on)
+- visit_date, arrival_time, departure_time, work_start, work_end
+- intervention_kind (week/weekend), trip_count, person_count
+- notes (technicus rapport), remarks (opmerkingen)
+- parts (jsonb), follow_up (jsonb)
+- signature_data (base64 PNG), pdf_path
+- completed_at, changed_by
 
 ### WerkbonPhoto
 - id, werkbon_id, filename, storage_url
