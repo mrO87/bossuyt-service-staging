@@ -216,6 +216,8 @@ export async function generateWerkbonPDF(
   doc.text((doc.splitTextToSize(data.customerName || '', COL_W) as string[]).slice(0, 2), RX, 49)
 
   label('ADRES | ADRESSE', RX, 57)
+  // label() leaves the font bold; these are values, not labels.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...BLACK)
   doc.text((doc.splitTextToSize(data.siteAddress || '', COL_W) as string[]).slice(0, 1), RX, 61.5)
   doc.text((doc.splitTextToSize(data.siteCity || '', COL_W) as string[]).slice(0, 1), RX, 65.5)
 
