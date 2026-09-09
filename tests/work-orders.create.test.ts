@@ -369,6 +369,11 @@ describe('createWorkOrder', () => {
     expect(row?.name).toBe('Legacy Klant zonder nummer')
     expect(row?.address).toBe('Oudestraat 4')
     expect(row?.phone).toBe('09 123 45 67')
+
+    // And it must not invent a customer number. A fix that adopts whatever the
+    // client sent as `number` would write the UUID into the business key here,
+    // permanently polluting customer_number and its unique index.
+    expect(row?.customerNumber).toBeNull()
   })
 
   it('adopts a customer number onto a legacy row when one is supplied alongside the id', async () => {
