@@ -162,6 +162,14 @@ export default function DayView() {
           </div>
           <button
             type="button"
+            onClick={() => router.push('/werkbon/nieuw')}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-brand-mid text-white text-xl font-bold active:opacity-80"
+            aria-label="Nieuwe werkbon"
+          >
+            +
+          </button>
+          <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
             className="relative w-10 h-10 rounded-full flex items-center justify-center bg-brand-orange active:opacity-80 transition-opacity"
             aria-label="Instellingen openen"
