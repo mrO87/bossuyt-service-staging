@@ -13,6 +13,25 @@ export type InterventionSource = 'planned' | 'reactive'
 
 export type InterventionKind = 'week' | 'weekend'
 
+/** Everything the technician fills in on the werkbon. Persisted as a draft in IndexedDB. */
+export interface WerkbonFormState {
+  status: InterventionStatus | string
+  deviceId: string | null
+  technicianId: string | null
+  visitDate: string            // yyyy-mm-dd
+  arrivalTime: string          // ISO datetime or ''
+  departureTime: string        // ISO datetime or ''
+  workStart: string            // ISO datetime or ''
+  workEnd: string              // ISO datetime or ''
+  interventionKind: InterventionKind
+  tripCount: number
+  personCount: number
+  notes: string                // TECHNICUS RAPPORT
+  remarks: string              // OPMERKINGEN
+  parts: import('@/lib/pdf').PdfPart[]
+  signature: string | null     // data URL
+}
+
 export interface Customer {
   id: string
   name: string

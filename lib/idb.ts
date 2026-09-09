@@ -15,6 +15,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
 import type {
   Intervention,
+  WerkbonFormState,
   WorkOrderPhotoDraft,
   WorkOrderPhotoSyncStatus,
 } from '@/types'
@@ -33,7 +34,7 @@ interface BossuytDB extends DBSchema {
   }
   werkbonnen: {
     key: string                 // intervention id (1-to-1)
-    value: WerkbonCache
+    value: WerkbonDraft
   }
   workOrderPhotos: {
     key: string
@@ -62,13 +63,9 @@ interface BossuytDB extends DBSchema {
   }
 }
 
-export interface WerkbonCache {
+export interface WerkbonDraft {
   interventionId: string
-  parts: Array<{ articleId: string; qty: number }>
-  notes: string
-  followUpRequired: boolean
-  followUpNote: string
-  signatureDataUrl?: string
+  form: WerkbonFormState
   lastSavedAt: string
 }
 
@@ -131,8 +128,8 @@ function normalizeIntervention(item: Intervention): Intervention {
 
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BossuytDB>('bossuyt-service', 2, {
-      upgrade(db) {
+    dbPromise = openDB<BossuytDB>('bossuyt-service', 3, {
+      upgrade(db, oldVersion) {
         // "interventions" store
         if (!db.objectStoreNames.contains('interventions')) {
           const intStore = db.createObjectStore('interventions', { keyPath: 'id' })
@@ -140,7 +137,12 @@ export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
           intStore.createIndex('by-status', 'status')
         }
 
-        // "werkbonnen" store — one per intervention
+        // "werkbonnen" store — one draft per intervention.
+        // v3 changed the record shape (WerkbonCache → WerkbonDraft); the old
+        // store was never written to, so dropping it loses nothing.
+        if (oldVersion < 3 && db.objectStoreNames.contains('werkbonnen')) {
+          db.deleteObjectStore('werkbonnen')
+        }
         if (!db.objectStoreNames.contains('werkbonnen')) {
           db.createObjectStore('werkbonnen', { keyPath: 'interventionId' })
         }
@@ -247,16 +249,22 @@ export async function updateInterventionSequence(
 
 // ---------- Werkbonnen ----------
 
-/** Save werkbon form state — called on every change so data survives refresh */
-export async function saveWerkbon(data: WerkbonCache): Promise<void> {
+/** Save the werkbon form as a draft — called (debounced) on every change so it survives a refresh or a dead battery. */
+export async function saveWerkbon(interventionId: string, form: WerkbonFormState): Promise<void> {
   const db = await getDB()
-  await db.put('werkbonnen', { ...data, lastSavedAt: new Date().toISOString() })
+  await db.put('werkbonnen', { interventionId, form, lastSavedAt: new Date().toISOString() })
 }
 
-/** Load saved werkbon for an intervention */
-export async function loadWerkbon(interventionId: string): Promise<WerkbonCache | undefined> {
+/** Load the saved draft for an intervention, if any */
+export async function loadWerkbon(interventionId: string): Promise<WerkbonDraft | undefined> {
   const db = await getDB()
   return db.get('werkbonnen', interventionId)
+}
+
+/** Remove the draft after a successful submit */
+export async function deleteWerkbon(interventionId: string): Promise<void> {
+  const db = await getDB()
+  await db.delete('werkbonnen', interventionId)
 }
 
 export async function createWorkOrderPhotoDraft(input: {
