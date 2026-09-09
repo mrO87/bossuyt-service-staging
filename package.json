@@ -10,6 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "npx -y tsx lib/db/seed.ts",
     "db:triggers": "npx -y tsx lib/db/apply-triggers.ts",
+    "load-example": "npx -y tsx scripts/load-example-order.ts",
     "test": "vitest run --config vitest.config.test.ts",
     "test:watch": "vitest --config vitest.config.test.ts"
   },
