@@ -13,8 +13,10 @@ async function main() {
   const releasesPath = path.join(__dirname, '..', 'lib', 'releases.ts')
   const content = fs.readFileSync(releasesPath, 'utf8')
 
-  // Read from the authoritative CURRENT_RELEASE_VERSION constant
-  const match = content.match(/const CURRENT_RELEASE_VERSION\s*=\s*'v(\d+)\.(\d+)'/)
+  // Read from the authoritative CURRENT_RELEASE_VERSION constant.
+  // A patch part (v1.53.1) is optional and is dropped when bumping: the next
+  // release after v1.53.1 is v1.54, not v1.54.1.
+  const match = content.match(/const CURRENT_RELEASE_VERSION\s*=\s*'v(\d+)\.(\d+)(?:\.(\d+))?'/)
   if (!match) {
     process.stderr.write('FOUT: CURRENT_RELEASE_VERSION niet gevonden in lib/releases.ts\n')
     process.exit(1)
@@ -50,7 +52,7 @@ async function main() {
 
   // Update CURRENT_RELEASE_VERSION to point to the new entry
   updated = updated.replace(
-    /const CURRENT_RELEASE_VERSION\s*=\s*'v\d+\.\d+'/,
+    /const CURRENT_RELEASE_VERSION\s*=\s*'v\d+\.\d+(?:\.\d+)?'/,
     `const CURRENT_RELEASE_VERSION = '${newVersion}'`,
   )
 
