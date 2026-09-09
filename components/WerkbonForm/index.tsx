@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
@@ -9,7 +9,15 @@ import { useTasks } from '@/lib/task-store'
 import { queueTaskCommand } from '@/lib/tasks/sync'
 import { getTaskStatusLabel } from '@/lib/task-meta'
 import { getUserById } from '@/lib/mock-data'
-import type { Intervention, DbTask, Task, User } from '@/types'
+import { deleteWerkbon, loadWerkbon, saveWerkbon } from '@/lib/idb'
+import type { Device, Intervention, DbTask, Task, User, WerkbonFormState } from '@/types'
+import PartsSection from './PartsSection'
+import PhotoUploadSection from './PhotoUploadSection'
+import TaskManager from './TaskManager'
+import Section from './Section'
+import BonHeaderCard from './BonHeaderCard'
+import VisitSection from './VisitSection'
+import DevicePicker from './DevicePicker'
 
 function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' | 'assigneeRole'>): string {
   if (task.assigneeType === 'group' && task.assigneeRole) {
@@ -20,19 +28,6 @@ function getAssignmentLabel(task: Pick<Task, 'assigneeType' | 'assigneeUserId' |
   }
   return getUserById(task.assigneeUserId ?? '')?.name ?? 'Onbekende gebruiker'
 }
-import PartsSection from './PartsSection'
-import PhotoUploadSection from './PhotoUploadSection'
-import TaskManager from './TaskManager'
-import Section from './Section'
-
-interface FormState {
-  status: string
-  workStart: string
-  workEnd: string
-  description: string
-  parts: PdfPart[]
-  signature: string | null
-}
 
 const STATUS_OPTIONS = [
   { value: 'gepland',          label: 'Gepland',               activeClass: 'bg-stroke text-ink-soft border-stroke',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
@@ -42,12 +37,37 @@ const STATUS_OPTIONS = [
   { value: 'afgewerkt',        label: 'Afgewerkt',             activeClass: 'bg-brand-green text-white border-brand-green',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
 ]
 
-function now() { return new Date().toISOString() }
+function todayISODate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
-function isoToHHMM(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function isWeekend(isoDate: string): boolean {
+  const day = new Date(`${isoDate}T12:00:00`).getDay()
+  return day === 0 || day === 6
+}
+
+function initialForm(intervention: Intervention): WerkbonFormState {
+  const today = todayISODate()
+  return {
+    status: intervention.status,
+    deviceId: intervention.deviceId,
+    technicianId:
+      intervention.technicians.find(t => t.isLead)?.technicianId ??
+      intervention.technicians[0]?.technicianId ??
+      null,
+    visitDate: today,
+    arrivalTime: '',
+    departureTime: '',
+    workStart: '',
+    workEnd: '',
+    interventionKind: isWeekend(today) ? 'weekend' : 'week',
+    tripCount: 1,
+    personCount: Math.max(1, intervention.technicians.length),
+    notes: '',
+    remarks: '',
+    parts: [],
+    signature: null,
+  }
 }
 
 interface Props {
@@ -59,21 +79,46 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const { tasks } = useTasks()
   const werkbonId = `wb-${intervention.id}`
 
-  const [form, setForm] = useState<FormState>({
-    status: intervention.status,
-    workStart: '',
-    workEnd: '',
-    description: '',
-    parts: [],
-    signature: null,
-  })
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [form, setForm] = useState<WerkbonFormState>(() => initialForm(intervention))
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  const [pickedDevice, setPickedDevice] = useState<Device | null>(null)
+  const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [bonNumber, setBonNumber] = useState<string | null>(null)
+  const [existingCount, setExistingCount] = useState(0)
   const [deviceRefresh, setDeviceRefresh] = useState(0)
   const [queuedPartIds, setQueuedPartIds] = useState<Set<string>>(new Set())
   const [orderTasks, setOrderTasks] = useState<DbTask[]>([])
   const [workflowTasks, setWorkflowTasks] = useState<DbTask[]>([])
   const [workflowRefresh, setWorkflowRefresh] = useState(0)
+  const saveTimer = useRef<number | null>(null)
+
+  // ── Draft: load once, then autosave (debounced 500 ms) ──────────────────────
+  useEffect(() => {
+    let cancelled = false
+    loadWerkbon(intervention.id)
+      .then(draft => { if (!cancelled && draft) setForm(draft.form) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setDraftLoaded(true) })
+    return () => { cancelled = true }
+  }, [intervention.id])
+
+  useEffect(() => {
+    if (!draftLoaded) return
+    if (saveTimer.current) window.clearTimeout(saveTimer.current)
+    saveTimer.current = window.setTimeout(() => { void saveWerkbon(intervention.id, form) }, 500)
+    return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current) }
+  }, [form, draftLoaded, intervention.id])
+
+  // How many werkbonnen already exist for this work order → bon number preview "-NN"
+  useEffect(() => {
+    if (!intervention.deviceId) return
+    fetch(`/api/devices/${intervention.deviceId}/history`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: Array<{ workOrderId: string }>) =>
+        setExistingCount(rows.filter(r => r.workOrderId === intervention.id).length))
+      .catch(() => {})
+  }, [intervention.id, intervention.deviceId, saveStatus])
 
   useEffect(() => {
     fetch(`/api/tasks?work_order_id=${intervention.id}`)
@@ -95,27 +140,9 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     return () => clearInterval(interval)
   }, [workflowTasks])
 
-  function update<K extends keyof FormState>(field: K, value: FormState[K]) {
+  const update = useCallback(<K extends keyof WerkbonFormState>(field: K, value: WerkbonFormState[K]) => {
     setForm(prev => ({ ...prev, [field]: value }))
-  }
-
-  function markStartWork() {
-    setForm(prev => ({ ...prev, workStart: now(), status: 'bezig' }))
-  }
-
-  function markEndWork() {
-    setForm(prev => ({ ...prev, workEnd: now(), status: 'afgewerkt' }))
-  }
-
-  function setTimeField(field: 'workStart' | 'workEnd', hhmm: string) {
-    if (!hhmm) { setForm(prev => ({ ...prev, [field]: '' })); return }
-    const [h, m] = hhmm.split(':').map(Number)
-    setForm(prev => {
-      const base = prev[field] ? new Date(prev[field]) : new Date()
-      base.setHours(h, m, 0, 0)
-      return { ...prev, [field]: base.toISOString() }
-    })
-  }
+  }, [])
 
   function addPart(toOrder: boolean) {
     const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder, urgent: false }
@@ -123,24 +150,47 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   }
 
   function updatePart(id: string, field: keyof PdfPart, value: string | number | boolean) {
-    setForm(prev => ({
-      ...prev,
-      parts: prev.parts.map(p => p.id === id ? { ...p, [field]: value } : p),
-    }))
+    setForm(prev => ({ ...prev, parts: prev.parts.map(p => (p.id === id ? { ...p, [field]: value } : p)) }))
   }
 
   function removePart(id: string) {
     setForm(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }))
   }
 
-  const handleSignature = useCallback((dataUrl: string | null) => {
-    setForm(prev => ({ ...prev, signature: dataUrl }))
-  }, [])
+  const handleSignature = useCallback((dataUrl: string | null) => update('signature', dataUrl), [update])
 
-  async function handlePDF() {
-    setPdfLoading(true)
-    await new Promise(resolve => setTimeout(resolve, 200))
+  function handleDevicePicked(device: Device) {
+    setPickedDevice(device)
+    update('deviceId', device.id)
+  }
 
+  const bonNumberPreview =
+    bonNumber ?? `${intervention.ticketNumber ?? intervention.id}-${String(existingCount + 1).padStart(2, '0')}`
+  const technicianName = intervention.technicians.find(t => t.technicianId === form.technicianId)?.name ?? ''
+
+  /** Single place that maps form + intervention to the PDF input. */
+  function buildPdfData(pdfTasks: PdfTaskItem[]) {
+    return {
+      customerName: intervention.customerName,
+      siteName: intervention.siteName,
+      siteAddress: intervention.siteAddress,
+      siteCity: intervention.siteCity,
+      deviceBrand: pickedDevice?.brand ?? intervention.deviceBrand ?? '',
+      deviceModel: pickedDevice?.model ?? intervention.deviceModel ?? '',
+      deviceSerial: pickedDevice?.serialNumber ?? intervention.deviceSerial,
+      status: form.status,
+      workStart: form.workStart,
+      workEnd: form.workEnd,
+      description: form.notes,
+      parts: form.parts,
+      followUp: [],
+      tasks: pdfTasks,
+      signature: form.signature,
+    }
+  }
+
+  async function handleSubmit() {
+    setSaving(true)
     const linkedTasks = tasks.filter(task => task.werkbonId === werkbonId)
     const pdfTasks: PdfTaskItem[] = linkedTasks.map(task => ({
       id: task.id,
@@ -152,40 +202,34 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     }))
 
     try {
-      const pdfBlob = generateWerkbonPDF({
-        customerName: intervention.customerName,
-        siteName: intervention.siteName,
-        siteAddress: intervention.siteAddress,
-        siteCity: intervention.siteCity,
-        deviceBrand: intervention.deviceBrand || '',
-        deviceModel: intervention.deviceModel || '',
-        status: form.status,
-        workStart: form.workStart,
-        workEnd: form.workEnd,
-        description: form.description,
-        parts: form.parts,
-        followUp: [],
-        tasks: pdfTasks,
-        signature: form.signature,
-      })
+      const pdfBlob = await Promise.resolve(generateWerkbonPDF(buildPdfData(pdfTasks)))
 
       const fd = new FormData()
-      fd.append('changedBy', intervention.technicians[0]?.technicianId ?? '')
-      fd.append('completionNotes', form.description)
+      fd.append('changedBy', form.technicianId ?? intervention.technicians[0]?.technicianId ?? '')
+      if (form.technicianId) fd.append('technicianId', form.technicianId)
+      if (form.deviceId) fd.append('deviceId', form.deviceId)
+      fd.append('completionNotes', form.notes)
+      fd.append('remarks', form.remarks)
       fd.append('completionParts', JSON.stringify(form.parts))
       fd.append('followUp', JSON.stringify(linkedTasks))
-      if (form.workStart) fd.append('workStart', form.workStart)
-      if (form.workEnd) fd.append('workEnd', form.workEnd)
-      fd.append('pdf', pdfBlob, `werkbon-${intervention.id}.pdf`)
+      fd.append('visitDate', new Date(`${form.visitDate}T00:00:00`).toISOString())
+      for (const key of ['arrivalTime', 'departureTime', 'workStart', 'workEnd'] as const) {
+        if (form[key]) fd.append(key, form[key])
+      }
+      fd.append('interventionKind', form.interventionKind)
+      fd.append('tripCount', String(form.tripCount))
+      fd.append('personCount', String(form.personCount))
+      if (form.signature) fd.append('signature', form.signature)
+      fd.append('pdf', pdfBlob, `servicebon-${intervention.id}.pdf`)
 
-      const res = await fetch(`/api/work-orders/${intervention.id}/complete`, {
-        method: 'POST',
-        body: fd,
-      })
+      const res = await fetch(`/api/work-orders/${intervention.id}/complete`, { method: 'POST', body: fd })
 
       if (res.ok) {
+        const json = (await res.json()) as { bonNumber: string }
+        setBonNumber(json.bonNumber)
         setSaveStatus('saved')
         setDeviceRefresh(current => current + 1)
+        await deleteWerkbon(intervention.id)
 
         for (const part of form.parts) {
           await queueTaskCommand('/api/tasks', 'POST', {
@@ -214,84 +258,57 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         setSaveStatus('error')
       }
     } catch (err) {
-      console.error('PDF error:', err)
+      console.error('Submit error:', err)
       setSaveStatus('error')
     }
 
-    setPdfLoading(false)
+    setSaving(false)
   }
+
+  const deviceKnown = Boolean(form.deviceId)
 
   return (
     <div className="flex flex-col gap-4 pb-10">
-      <Section title="KLANT & TOESTEL">
-        <div className="flex flex-col gap-1">
-          <p className="font-bold text-base text-ink">{intervention.customerName}</p>
-          <p className="text-sm text-ink-soft">{intervention.siteName}</p>
-          <p className="text-sm text-ink-soft">{intervention.siteAddress}, {intervention.siteCity}</p>
-          {intervention.description && (
-            <p className="text-sm mt-2 pt-2 border-t border-stroke italic text-brand-orange">
-              Melding: {intervention.description}
-            </p>
-          )}
-        </div>
+      <BonHeaderCard intervention={intervention} bonNumberPreview={bonNumberPreview} />
+
+      <div className="flex flex-wrap gap-2 px-1">
+        {STATUS_OPTIONS.map(s => (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => update('status', s.value)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+              form.status === s.value ? s.activeClass : s.inactiveClass
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {deviceKnown ? (
+        <DevicePanel
+          deviceId={form.deviceId}
+          brand={pickedDevice?.brand ?? intervention.deviceBrand}
+          model={pickedDevice?.model ?? intervention.deviceModel}
+          refreshKey={deviceRefresh}
+        />
+      ) : (
+        <DevicePicker siteId={intervention.siteId} onPick={handleDevicePicked} />
+      )}
+
+      <Section title="OMSCHRIJVING KLANT | OBSERVATIONS CLIENT">
+        <p className="text-sm text-ink whitespace-pre-wrap">{intervention.description || '—'}</p>
       </Section>
 
-      <DevicePanel
-        deviceId={intervention.deviceId}
-        brand={intervention.deviceBrand}
-        model={intervention.deviceModel}
-        refreshKey={deviceRefresh}
-      />
-
-      <Section title="STATUS">
-        <div className="flex flex-wrap gap-2">
-          {STATUS_OPTIONS.map(s => (
-            <button key={s.value} type="button" onClick={() => update('status', s.value)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity border ${form.status === s.value ? s.activeClass : s.inactiveClass}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="TIJDREGISTRATIE">
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {[
-            { label: 'Werk start', value: form.workStart, field: 'workStart' as const },
-            { label: 'Werk einde', value: form.workEnd,   field: 'workEnd'   as const },
-          ].map(item => (
-            <label key={item.label} className="rounded-xl p-3 text-center bg-surface block">
-              <p className="text-xs mb-1 text-ink-soft">{item.label}</p>
-              {item.value ? (
-                <input type="time" value={isoToHHMM(item.value)}
-                  onChange={e => setTimeField(item.field, e.target.value)}
-                  className="w-full text-xl font-bold text-ink bg-transparent text-center outline-none" />
-              ) : (
-                <p className="text-xl font-bold text-ink">--:--</p>
-              )}
-            </label>
-          ))}
-        </div>
-        <div className="flex flex-col gap-2">
-          {!form.workStart && (
-            <button type="button" onClick={markStartWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-blue">
-              Start werk
-            </button>
-          )}
-          {form.workStart && !form.workEnd && (
-            <button type="button" onClick={markEndWork}
-              className="w-full py-3 rounded-xl font-bold text-white text-sm bg-brand-green">
-              Werk beëindigen
-            </button>
-          )}
-        </div>
-      </Section>
-
-      <Section title="OMSCHRIJVING WERKZAAMHEDEN">
-        <textarea rows={5} placeholder="Beschrijf de uitgevoerde werkzaamheden..."
-          value={form.description} onChange={e => update('description', e.target.value)}
-          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink" />
+      <Section title="TECHNICUS RAPPORT | RAPPORT TECHNICIEN">
+        <textarea
+          rows={5}
+          placeholder="Wat heb je vastgesteld en gedaan?"
+          value={form.notes}
+          onChange={e => update('notes', e.target.value)}
+          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink"
+        />
       </Section>
 
       <PartsSection
@@ -302,10 +319,19 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         queuedPartIds={queuedPartIds}
       />
 
-      <PhotoUploadSection
-        workOrderId={intervention.id}
-        technicianId={intervention.technicians[0]?.technicianId ?? null}
-      />
+      <VisitSection form={form} technicians={intervention.technicians} onChange={update} />
+
+      <Section title="OPMERKINGEN | REMARQUES">
+        <textarea
+          rows={3}
+          placeholder="Opmerkingen voor kantoor of volgende technieker"
+          value={form.remarks}
+          onChange={e => update('remarks', e.target.value)}
+          className="w-full rounded-xl p-3 text-sm resize-none outline-none bg-surface border border-stroke text-ink"
+        />
+      </Section>
+
+      <PhotoUploadSection workOrderId={intervention.id} technicianId={form.technicianId} />
 
       <TaskManager
         intervention={intervention}
@@ -316,20 +342,25 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         initialActivityId={initialActivityId}
       />
 
-      <Section title="HANDTEKENING KLANT">
+      <Section title="AKKOORD VAN KLANT | ACCORD DU CLIENT">
         <SignaturePad signature={form.signature} onSignatureChange={handleSignature} />
+        {technicianName && <p className="mt-2 text-xs text-ink-soft">Technicus: {technicianName}</p>}
       </Section>
 
-      <button type="button" onClick={handlePDF} disabled={pdfLoading}
-        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange">
-        {pdfLoading ? 'PDF aanmaken...' : 'PDF Genereren & Opslaan'}
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={saving}
+        className="w-full py-4 rounded-xl font-bold text-white text-base disabled:opacity-60 bg-brand-orange"
+      >
+        {saving ? 'Bon afsluiten...' : 'Bon afsluiten & PDF'}
       </button>
 
-      {saveStatus === 'saved' && (
-        <p className="text-center text-sm font-semibold text-brand-green">✓ Werkbon opgeslagen</p>
+      {saveStatus === 'saved' && bonNumber && (
+        <p className="text-center text-sm font-semibold text-brand-green">✓ Service bon {bonNumber} opgeslagen</p>
       )}
       {saveStatus === 'error' && (
-        <p className="text-center text-sm font-semibold text-brand-red">✗ Opslaan mislukt — zie console</p>
+        <p className="text-center text-sm font-semibold text-brand-red">✗ Opslaan mislukt — probeer opnieuw</p>
       )}
     </div>
   )
