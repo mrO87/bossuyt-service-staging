@@ -34,12 +34,19 @@ export class DuplicateTicketError extends Error {
 // ── Input shape (camelCase, validated) ───────────────────────────────────────
 
 export interface CreateWorkOrderCustomer {
-  number: string
+  /**
+   * Existing customer, picked from a list. Authoritative when present, and the
+   * descriptive fields below are then optional — we are referencing, not
+   * creating. This is what stops a legacy row (customer_number IS NULL) being
+   * cloned when the wizard has nothing but a UUID to identify it by.
+   */
+  id?: string
+  number?: string
   invoiceNumber?: string
-  name: string
-  address: string
+  name?: string
+  address?: string
   postalCode?: string
-  city: string
+  city?: string
   phone?: string
   phoneSecondary?: string
   contact?: string
@@ -48,6 +55,8 @@ export interface CreateWorkOrderCustomer {
 }
 
 export interface CreateWorkOrderSite {
+  /** Existing site, picked from a list. Authoritative when present. */
+  id?: string
   name?: string
   address?: string
   postalCode?: string
@@ -55,9 +64,11 @@ export interface CreateWorkOrderSite {
 }
 
 export interface CreateWorkOrderDevice {
+  /** Existing device, picked from a list. Authoritative when present. */
+  id?: string
   unitNumber?: string
-  brand: string
-  model: string
+  brand?: string
+  model?: string
   serialNumber?: string
   deliveryDate?: string
   warrantyUntil?: string
@@ -125,13 +136,16 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
 
   if (!isObject(json.customer)) throw new ValidationError('customer', 'customer is verplicht')
   const c = json.customer
+  // An existing customer is referenced by id; only a new one must describe itself.
+  const customerId = optionalString(c, 'id')
   const customer: CreateWorkOrderCustomer = {
-    number:         requiredString(c, 'number', 'customer.number'),
+    id:             customerId,
+    number:         customerId ? optionalString(c, 'number') : requiredString(c, 'number', 'customer.number'),
     invoiceNumber:  optionalString(c, 'invoice_number'),
-    name:           requiredString(c, 'name', 'customer.name'),
-    address:        requiredString(c, 'address', 'customer.address'),
+    name:           customerId ? optionalString(c, 'name') : requiredString(c, 'name', 'customer.name'),
+    address:        customerId ? optionalString(c, 'address') : requiredString(c, 'address', 'customer.address'),
     postalCode:     optionalString(c, 'postal_code'),
-    city:           requiredString(c, 'city', 'customer.city'),
+    city:           customerId ? optionalString(c, 'city') : requiredString(c, 'city', 'customer.city'),
     phone:          optionalString(c, 'phone'),
     phoneSecondary: optionalString(c, 'phone_secondary'),
     contact:        optionalString(c, 'contact'),
@@ -142,6 +156,7 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
   let site: CreateWorkOrderSite | undefined
   if (isObject(json.site)) {
     site = {
+      id:         optionalString(json.site, 'id'),
       name:       optionalString(json.site, 'name'),
       address:    optionalString(json.site, 'address'),
       postalCode: optionalString(json.site, 'postal_code'),
@@ -151,10 +166,12 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
 
   let device: CreateWorkOrderDevice | null = null
   if (isObject(json.device)) {
+    const deviceId = optionalString(json.device, 'id')
     device = {
+      id:            deviceId,
       unitNumber:    optionalString(json.device, 'unit_number'),
-      brand:         requiredString(json.device, 'brand', 'device.brand'),
-      model:         requiredString(json.device, 'model', 'device.model'),
+      brand:         deviceId ? optionalString(json.device, 'brand') : requiredString(json.device, 'brand', 'device.brand'),
+      model:         deviceId ? optionalString(json.device, 'model') : requiredString(json.device, 'model', 'device.model'),
       serialNumber:  optionalString(json.device, 'serial_number'),
       deliveryDate:  optionalDate(json.device, 'delivery_date'),
       warrantyUntil: optionalDate(json.device, 'warranty_until'),
@@ -217,39 +234,72 @@ async function insertUnlessRaced(tx: Tx, insert: (sp: Tx) => PromiseLike<unknown
   }
 }
 
-function cityLine(postalCode: string | undefined, city: string): string {
+function cityLine(postalCode: string | undefined, city: string | undefined): string {
   return [postalCode, city].filter(Boolean).join(' ')
 }
 
 async function findOrCreateCustomer(tx: Tx, input: CreateWorkOrderCustomer): Promise<string> {
+  // Only overwrite what the caller actually supplied. A caller referencing an
+  // existing customer by id sends no descriptive fields at all, and must not
+  // blank the row it is pointing at.
+  const updates = {
+    ...(input.name          ? { name: input.name }                           : {}),
+    ...(input.address       ? { address: input.address }                     : {}),
+    ...(input.city          ? { city: cityLine(input.postalCode, input.city) } : {}),
+    ...(input.phone         ? { phone: input.phone }                         : {}),
+    ...(input.invoiceNumber ? { invoiceCustomerNumber: input.invoiceNumber } : {}),
+  }
+
+  // An id is authoritative: the caller picked this customer from a list.
+  if (input.id) {
+    const [byId] = await tx
+      .select({ id: customers.id, customerNumber: customers.customerNumber })
+      .from(customers)
+      .where(eq(customers.id, input.id))
+    if (!byId) throw new ValidationError('customer.id', `Klant ${input.id} bestaat niet`)
+
+    // Adopt the number onto a legacy row that has none, so it is indexed from now on.
+    const adopt = !byId.customerNumber && input.number ? { customerNumber: input.number } : {}
+    if (Object.keys(updates).length > 0 || Object.keys(adopt).length > 0) {
+      await tx.update(customers).set({ ...updates, ...adopt }).where(eq(customers.id, byId.id))
+    }
+    return byId.id
+  }
+
+  if (!input.number) throw new ValidationError('customer.number', 'customer.number is verplicht')
+
   const [existing] = await tx
     .select({ id: customers.id })
     .from(customers)
     .where(eq(customers.customerNumber, input.number))
-
-  // Name, address and city are required by the parser, so the ERP always supplies
-  // them and they overwrite unconditionally. Phone and invoice number are optional:
-  // writing them unconditionally would erase a value an earlier ticket recorded.
-  const updates = {
-    name: input.name,
-    address: input.address,
-    city: cityLine(input.postalCode, input.city),
-    ...(input.phone         ? { phone: input.phone }                         : {}),
-    ...(input.invoiceNumber ? { invoiceCustomerNumber: input.invoiceNumber } : {}),
-  }
 
   if (existing) {
     await tx.update(customers).set(updates).where(eq(customers.id, existing.id))
     return existing.id
   }
 
+  // Creating rather than referencing: the descriptive fields are mandatory here.
+  // The parser enforces this for a body with no id; the guard makes it explicit
+  // to the type checker and gives a clear error if a caller ever bypasses it.
+  if (!input.name || !input.address || !input.city) {
+    throw new ValidationError('customer.name', 'Naam, adres en gemeente zijn verplicht voor een nieuwe klant')
+  }
+
+  // Bound to locals: the guard above narrows these, but that narrowing does not
+  // survive into the closure below, because `input` is a mutable binding.
+  const name = input.name
+  const address = input.address
+  const city = cityLine(input.postalCode, input.city)
+
   const id = `customer-${randomUUID()}`
   const inserted = await insertUnlessRaced(tx, sp => sp.insert(customers).values({
     id,
     customerNumber: input.number,
-    phone: '',                       // notNull; `updates` supplies the real value when present
-    invoiceCustomerNumber: null,
-    ...updates,
+    name,
+    address,
+    city,
+    phone: input.phone ?? '',        // column is notNull
+    invoiceCustomerNumber: input.invoiceNumber ?? null,
   }))
   if (inserted) return id
 
@@ -271,20 +321,52 @@ async function findOrCreateSite(
   customer: CreateWorkOrderCustomer,
   site: CreateWorkOrderSite | undefined,
 ): Promise<string> {
-  const address = site?.address ?? customer.address
-  const city    = cityLine(site?.postalCode ?? customer.postalCode, site?.city ?? customer.city)
-  const name    = site?.name ?? customer.name
-
-  const [existing] = await tx
-    .select({ id: sites.id })
-    .from(sites)
-    .where(and(eq(sites.customerId, customerId), eq(sites.address, address), eq(sites.city, city)))
-
   const optional = {
     ...(customer.phone          ? { phonePrimary: customer.phone }            : {}),
     ...(customer.phoneSecondary ? { phoneSecondary: customer.phoneSecondary } : {}),
     ...(customer.closingDay     ? { closingDay: customer.closingDay }         : {}),
   }
+
+  // An id is authoritative: the caller picked this site from a list.
+  if (site?.id) {
+    const [byId] = await tx
+      .select({ id: sites.id, customerId: sites.customerId })
+      .from(sites)
+      .where(eq(sites.id, site.id))
+    if (!byId) throw new ValidationError('site.id', `Locatie ${site.id} bestaat niet`)
+    if (byId.customerId !== customerId) {
+      throw new ValidationError('site.id', 'Locatie hoort niet bij deze klant')
+    }
+    if (Object.keys(optional).length > 0) {
+      await tx.update(sites).set(optional).where(eq(sites.id, byId.id))
+    }
+    return byId.id
+  }
+
+  let address = site?.address ?? customer.address
+  let city    = cityLine(site?.postalCode ?? customer.postalCode, site?.city ?? customer.city)
+  let name    = site?.name ?? customer.name
+
+  // A caller referencing a customer by id sends no address of its own. Fall back
+  // to the address already stored on that customer rather than refusing.
+  if (!address || !city) {
+    const [row] = await tx
+      .select({ name: customers.name, address: customers.address, city: customers.city })
+      .from(customers)
+      .where(eq(customers.id, customerId))
+    address = address || row?.address
+    city    = city    || row?.city
+    name    = name    || row?.name
+  }
+
+  if (!address || !city) {
+    throw new ValidationError('customer.address', 'Adres en gemeente zijn verplicht voor een nieuwe locatie')
+  }
+
+  const [existing] = await tx
+    .select({ id: sites.id })
+    .from(sites)
+    .where(and(eq(sites.customerId, customerId), eq(sites.address, address), eq(sites.city, city)))
 
   if (existing) {
     if (Object.keys(optional).length > 0) {
@@ -294,7 +376,7 @@ async function findOrCreateSite(
   }
 
   const id = `site-${randomUUID()}`
-  await tx.insert(sites).values({ id, customerId, name, address, city, ...optional })
+  await tx.insert(sites).values({ id, customerId, name: name ?? address, address, city, ...optional })
   return id
 }
 
@@ -314,6 +396,23 @@ async function ensureContact(tx: Tx, siteId: string, customer: CreateWorkOrderCu
 }
 
 async function findOrCreateDevice(tx: Tx, siteId: string, device: CreateWorkOrderDevice): Promise<string> {
+  // An id is authoritative: the caller picked this device from a list.
+  if (device.id) {
+    const [byId] = await tx
+      .select({ id: devices.id, siteId: devices.siteId })
+      .from(devices)
+      .where(eq(devices.id, device.id))
+    if (!byId) throw new ValidationError('device.id', `Toestel ${device.id} bestaat niet`)
+    if (byId.siteId !== siteId) {
+      throw new ValidationError('device.id', 'Toestel hoort niet bij deze locatie')
+    }
+    return byId.id
+  }
+
+  if (!device.brand || !device.model) {
+    throw new ValidationError('device.brand', 'Merk en model zijn verplicht voor een nieuw toestel')
+  }
+
   const conds: SQL[] = [eq(devices.siteId, siteId)]
   if (device.unitNumber) {
     conds.push(eq(devices.unitNumber, device.unitNumber))

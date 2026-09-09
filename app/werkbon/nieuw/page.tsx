@@ -120,14 +120,14 @@ export default function NieuwWerkbon() {
   function buildBody(ticket: TicketDraft): Record<string, unknown> {
     if (!customer) throw new Error('no customer')
 
+    // Anything picked from a list is referenced by id, so the server never has to
+    // guess which row we meant. Only a record typed into a "nieuw" form describes
+    // itself. Sending a customer number here would clone any customer that has
+    // none — and most legacy customers have none.
     const customerBody = customer.kind === 'existing'
       ? {
-          number: customer.value.customerNumber ?? customer.value.id,
-          invoice_number: customer.value.invoiceCustomerNumber,
-          name: customer.value.name,
-          address: customer.value.address,
-          city: customer.value.city,
-          phone: customer.value.phone,
+          id: customer.value.id,
+          number: customer.value.customerNumber,
         }
       : {
           number: customer.value.number,
@@ -143,7 +143,7 @@ export default function NieuwWerkbon() {
         }
 
     const siteBody = site?.kind === 'existing'
-      ? { name: site.value.name, address: site.value.address, city: site.value.city }
+      ? { id: site.value.id }
       : site?.kind === 'new'
         ? { name: site.value.name, address: site.value.address, postal_code: site.value.postalCode, city: site.value.city }
         : undefined
@@ -151,7 +151,7 @@ export default function NieuwWerkbon() {
     const deviceBody = device === 'none' || device === null
       ? null
       : device.kind === 'existing'
-        ? { unit_number: device.value.unitNumber, brand: device.value.brand, model: device.value.model, serial_number: device.value.serialNumber }
+        ? { id: device.value.id }
         : { unit_number: device.value.unitNumber, brand: device.value.brand, model: device.value.model, serial_number: device.value.serialNumber, delivery_date: device.value.deliveryDate, warranty_until: device.value.warrantyUntil }
 
     return {

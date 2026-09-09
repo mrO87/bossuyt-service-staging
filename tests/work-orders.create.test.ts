@@ -334,6 +334,67 @@ describe('createWorkOrder', () => {
     expect(rows[0]?.name).toBe('Molenhoeve group bvba')
   })
 
+  it('references an existing customer by id instead of cloning it, even when it has no customer number', async () => {
+    // Reproduces the real staging shape: 16 of 17 customers have customer_number NULL.
+    // The wizard used to send the UUID as `number`, which matched nothing and inserted
+    // a duplicate customer every time an office user picked an existing one.
+    const legacyId = `customer-${randomUUID()}`
+    await testDb.insert(customers).values({
+      id: legacyId,
+      name: 'Legacy Klant zonder nummer',
+      phone: '09 123 45 67',
+      address: 'Oudestraat 4',
+      city: '9000 Gent',
+      customerNumber: null,
+    })
+    ids.customer_ids = [legacyId]
+
+    const before = await testDb.select().from(customers)
+
+    const body = { ...molenhoeve(), customer: { id: legacyId } }
+    const first = await createWorkOrder(parseCreateWorkOrderBody(body))
+    const second = await createWorkOrder(parseCreateWorkOrderBody({ ...body, ticket_number: `${body.ticket_number}-B` }))
+    ids.work_order_ids?.push(first.id, second.id)
+
+    const after = await testDb.select().from(customers)
+    expect(after).toHaveLength(before.length)
+
+    const [wo1] = await testDb.select().from(workOrders).where(eq(workOrders.id, first.id))
+    const [wo2] = await testDb.select().from(workOrders).where(eq(workOrders.id, second.id))
+    expect(wo1?.customerId).toBe(legacyId)
+    expect(wo2?.customerId).toBe(legacyId)
+
+    // Referencing must not blank the row it points at.
+    const [row] = await testDb.select().from(customers).where(eq(customers.id, legacyId))
+    expect(row?.name).toBe('Legacy Klant zonder nummer')
+    expect(row?.address).toBe('Oudestraat 4')
+    expect(row?.phone).toBe('09 123 45 67')
+  })
+
+  it('adopts a customer number onto a legacy row when one is supplied alongside the id', async () => {
+    const legacyId = `customer-${randomUUID()}`
+    const number = `K-${randomUUID().slice(0, 6)}`
+    await testDb.insert(customers).values({
+      id: legacyId, name: 'Adopt Me', phone: '', address: 'Straat 1', city: '8000 Brugge', customerNumber: null,
+    })
+    ids.customer_ids = [legacyId]
+
+    const result = await createWorkOrder(parseCreateWorkOrderBody({
+      ...molenhoeve(),
+      customer: { id: legacyId, number },
+    }))
+    ids.work_order_ids?.push(result.id)
+
+    const [row] = await testDb.select().from(customers).where(eq(customers.id, legacyId))
+    expect(row?.customerNumber).toBe(number)
+  })
+
+  it('rejects an id that does not exist rather than silently creating one', async () => {
+    await expect(
+      createWorkOrder(parseCreateWorkOrderBody({ ...molenhoeve(), customer: { id: `customer-${randomUUID()}` } })),
+    ).rejects.toThrowError(ValidationError)
+  })
+
   it('creates assignments when technicianIds are given', async () => {
     const { createTestTechnician } = await import('./setup')
     const techId = await createTestTechnician()

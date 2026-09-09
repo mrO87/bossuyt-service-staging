@@ -37,9 +37,23 @@ customer number is null, adopt the incoming value so the row is indexed from
 then on. Verify with a test that picks a legacy customer twice and asserts the
 customer count does not grow.
 
-Also worth deciding: whether the wizard should send a `customer_id` outright
-when the customer already exists, rather than round-tripping through a number
-that may not exist. That is the cleaner shape, and slightly larger.
+**Decided: take the cleaner fix rather than Agy's patch.** Agy widens the
+lookup to match on id as well as number, which stops the cloning but leaves the
+odd shape where the wizard describes a customer it already has the id of. Instead:
+an existing record is referenced by **id**, and only a genuinely new one is
+described inline. That applies to customer, site and device alike.
+
+- `CreateWorkOrderInput` gains an optional `id` on `customer`, `site` and `device`.
+- When an `id` is supplied it is authoritative: verify the row exists and use
+  it. The descriptive fields (`number`, `name`, `address`, `city`) become
+  optional in that case, since we are not creating anything.
+- When an id is supplied *and* a real customer number comes with it, adopt the
+  number onto the row if it is currently null, so legacy rows become indexed.
+- The wizard sends ids for anything the user picked from a list, and the full
+  block only for records typed into a "nieuw" form.
+- The ERP route is unaffected: it has no ids and keeps matching on number.
+
+This removes the class of bug rather than the instance.
 
 ### 2. Fix the draft races — CRITICAL
 `components/WerkbonForm/index.tsx`
