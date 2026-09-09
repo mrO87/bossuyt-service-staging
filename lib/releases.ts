@@ -15,6 +15,51 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.53.2',
+    date: '9 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'Bestaande klant werd gedupliceerd bij het aanmaken van een werkbon',
+        body:
+          'Zestien van de zeventien klanten hebben nog geen klantnummer. De wizard stuurde dan het ' +
+          'interne id als nummer, de server vond niets en maakte een tweede kopie van dezelfde klant. ' +
+          'Een bestaande klant, locatie of toestel wordt nu op id gekozen, en enkel een echt nieuwe ' +
+          'wordt aangemaakt.',
+      },
+      {
+        label: 'Fix',
+        title: 'Ingevulde werkbon kon overschreven of teruggezet worden',
+        body:
+          'Drie problemen met het lokale concept: typen tijdens het laden werd overschreven, het concept ' +
+          'kwam terug na het afsluiten van de bon, en een onaangeraakt formulier bewaarde zichzelf al. ' +
+          'Wat de technieker typt wint nu altijd.',
+      },
+      {
+        label: 'Fix',
+        title: 'Foutmeldingen bij het aanmaken waren onzichtbaar',
+        body:
+          'Werd een klant- of locatieveld geweigerd, dan verscheen er niets en werd de knop gewoon ' +
+          'opnieuw actief. Elke foutmelding is nu zichtbaar, en "Ticket bestaat al" is nu een echte ' +
+          'link naar de bestaande werkbon.',
+      },
+      {
+        label: 'Fix',
+        title: 'Bon kon twee keer afgesloten worden',
+        body: 'Na het afsluiten bleef de knop actief; een tweede tik maakte stil een tweede bon (-02).',
+      },
+      {
+        label: 'Fix',
+        title: 'Lange onderdeelomschrijvingen vielen weg op de PDF',
+        body:
+          'Enkel de eerste regel werd afgedrukt, op precies de lijst die de klant tekent. Lange ' +
+          'omschrijvingen lopen nu door binnen de rij, de vervolgpagina heeft kolomtitels, en ' +
+          '"dringend" blijft staan.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.53.1',
     date: '9 september 2026',
     changes: [
@@ -1045,7 +1090,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.53.1'
+const CURRENT_RELEASE_VERSION = 'v1.53.2'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
