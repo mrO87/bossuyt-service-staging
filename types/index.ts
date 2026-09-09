@@ -253,7 +253,12 @@ export type DbTaskStatus =
   | 'blocked'
 
 export type DbTaskType =
+  /** Part must be bought from a supplier. Exported to the ERP as a pending purchase. */
   | 'order_part'
+  /** Part was taken from van or shelf stock and that stock needs topping up.
+   *  Deliberately NOT order_part: this must never reach the ERP as a purchase
+   *  order for something already fitted. */
+  | 'replenish_stock'
   | 'plan_revisit'
   | 'pick_parts'
   | 'load_parts'

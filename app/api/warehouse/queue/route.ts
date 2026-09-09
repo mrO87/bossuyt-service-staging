@@ -29,6 +29,9 @@ export type WarehouseQueueResponse = {
   doneToday:     WarehouseGroup[]
   total:         number
   pickingGroups: PickingGroup[]
+  /** Stock refills for parts already fitted. Kept apart from `groups` so the
+   *  warehouse does not read them as things to buy. */
+  refillGroups:  WarehouseGroup[]
 }
 
 // ── GET /api/warehouse/queue ──────────────────────────────────────────────────
@@ -41,12 +44,20 @@ export async function GET() {
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
 
-    // ── order_part tasks ──────────────────────────────────────────────────────
-    const orderRows = await db
+    // ── order_part and replenish_stock tasks ──────────────────────────────────
+    // Both are warehouse work and share a card layout, but they are different
+    // jobs: one is bought from a supplier, the other is topped up from stock.
+    const allPartRows = await db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.type, 'order_part'), eq(tasks.role, 'warehouse')))
+      .where(and(
+        inArray(tasks.type, ['order_part', 'replenish_stock']),
+        eq(tasks.role, 'warehouse'),
+      ))
       .orderBy(tasks.createdAt)
+
+    const orderRows  = allPartRows.filter(t => t.type === 'order_part')
+    const refillRows = allPartRows.filter(t => t.type === 'replenish_stock')
 
     const activeOrderRows    = orderRows.filter(t => t.status === 'ready' || t.status === 'in_progress')
     const doneTodayOrderRows = orderRows.filter(t =>
@@ -66,13 +77,13 @@ export async function GET() {
 
     // ── Collect all relevant work order IDs ───────────────────────────────────
     const allWorkOrderIds = [...new Set([
-      ...orderRows.map(t => t.workOrderId),
+      ...allPartRows.map(t => t.workOrderId),
       ...activePickRows.map(t => t.workOrderId),
     ])]
 
     if (allWorkOrderIds.length === 0) {
       return NextResponse.json({
-        groups: [], doneToday: [], total: 0, pickingGroups: [],
+        groups: [], doneToday: [], total: 0, pickingGroups: [], refillGroups: [],
       } satisfies WarehouseQueueResponse)
     }
 
@@ -153,11 +164,14 @@ export async function GET() {
       }
     })
 
+    const activeRefillRows = refillRows.filter(t => t.status === 'ready' || t.status === 'in_progress')
+
     return NextResponse.json({
       groups:        buildGroups(activeOrderRows),
       doneToday:     buildGroups(doneTodayOrderRows),
       total:         activeOrderRows.length,
       pickingGroups,
+      refillGroups:  buildGroups(activeRefillRows),
     } satisfies WarehouseQueueResponse)
   } catch (error) {
     console.error('[api/warehouse/queue GET]', error)

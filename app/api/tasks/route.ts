@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
 
     const VALID_TASK_TYPES: DbTaskType[] = [
-      'order_part', 'plan_revisit', 'pick_parts', 'load_parts',
+      'order_part', 'replenish_stock', 'plan_revisit', 'pick_parts', 'load_parts',
       'contact_customer', 'internal_note', 'quality_check', 'approval', 'other',
     ]
     if (!VALID_TASK_TYPES.includes(type)) {

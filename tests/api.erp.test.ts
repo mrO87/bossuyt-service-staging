@@ -257,6 +257,49 @@ describe('ERP API surface', () => {
     expect(body.parts_pending[0]?.payload).toEqual({ sku: 'PART-OPEN' })
   })
 
+  // A part taken from van or shelf stock is already fitted. The warehouse still
+  // has to top the shelf back up, but the ERP must never see that as a pending
+  // supplier purchase — it would order a second copy of a part already installed.
+  it('parts pending endpoint excludes replenish_stock tasks', async () => {
+    const workOrderId = await createTestWorkOrder()
+    ids.work_order_ids?.push(workOrderId)
+
+    const orderTaskId  = `task-${randomUUID()}`
+    const refillTaskId = `task-${randomUUID()}`
+    await insertTask({
+      id: orderTaskId,
+      workOrderId,
+      type: 'order_part',
+      role: 'warehouse',
+      status: 'ready',
+      title: 'Bestellen: pomp',
+      payload: { sku: 'PART-BUY' },
+      seq: 0,
+      createdBy: 'test',
+      updatedAt: new Date(),
+    })
+    await insertTask({
+      id: refillTaskId,
+      workOrderId,
+      type: 'replenish_stock',
+      role: 'warehouse',
+      status: 'ready',
+      title: 'Stock aanvullen: dichting',
+      payload: { sku: 'PART-REFILL' },
+      seq: 1,
+      createdBy: 'test',
+      updatedAt: new Date(),
+    })
+    ids.task_ids?.push(orderTaskId, refillTaskId)
+
+    const response = await getPartsPending(req('http://localhost/api/erp/parts-pending', undefined, { 'x-erp-key': erpKey }))
+    const body = await json<{ parts_pending: Array<{ id: string }> }>(response)
+
+    const returned = body.parts_pending.map(task => task.id)
+    expect(returned).toContain(orderTaskId)
+    expect(returned).not.toContain(refillTaskId)
+  })
+
   it('fulfil endpoint keeps ordered tasks in progress, completes received tasks, activates successors, and emits events', async () => {
     const workOrderId = await createTestWorkOrder()
     ids.work_order_ids?.push(workOrderId)

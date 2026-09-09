@@ -15,6 +15,7 @@ function getDbTaskTypeLabel(type: DbTaskType): string {
     load_parts:      'Onderdelen laden',
     plan_revisit:    'Opvolgbon inplannen',
     order_part:      'Onderdeel bestellen',
+    replenish_stock: 'Stock aanvullen',
     contact_customer:'Klant contacteren',
     internal_note:   'Interne nota',
     quality_check:   'Kwaliteitscontrole',

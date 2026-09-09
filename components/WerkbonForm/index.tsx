@@ -128,7 +128,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       .then(r => r.ok ? r.json() : { tasks: [] })
       .then((data: { tasks: DbTask[] }) => {
         const all = data.tasks ?? []
-        setOrderTasks(all.filter(t => t.type === 'order_part'))
+        setOrderTasks(all.filter(t => t.type === 'order_part' || t.type === 'replenish_stock'))
         setWorkflowTasks(all.filter(t => t.type === 'pick_parts' || t.type === 'load_parts' || t.type === 'plan_revisit'))
       })
       .catch(() => {})
@@ -260,7 +260,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         for (const part of form.parts) {
           await queueTaskCommand('/api/tasks', 'POST', {
             work_order_id: intervention.id,
-            type: 'order_part',
+            // A part taken from stock is a refill, not a purchase. Keeping both
+            // as order_part put refills in the warehouse's order queue and, worse,
+            // exported them to the ERP as pending supplier orders for parts that
+            // were already fitted.
+            type: part.toOrder ? 'order_part' : 'replenish_stock',
             role: 'warehouse',
             title: part.toOrder
               ? `Bestellen: ${part.description || part.code || 'onderdeel'}`

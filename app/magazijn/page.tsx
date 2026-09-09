@@ -19,27 +19,45 @@ function BossuytLogo() {
 }
 
 // ── Status badge for order_part tasks ─────────────────────────────────────────
-const STATUS: Record<string, { label: string; cls: string }> = {
-  ready:       { label: 'Te bestellen',  cls: 'bg-orange-100 text-orange-700' },
-  in_progress: { label: 'Besteld',       cls: 'bg-blue-100   text-blue-700'   },
-  done:        { label: 'Ontvangen',     cls: 'bg-green-100  text-green-700'  },
+// Two kinds of warehouse part work share this screen and this state machine,
+// but they mean different things, so they get different words:
+//   'order'  — order_part:      buy it from the supplier for a job still open
+//   'refill' — replenish_stock: the part is already fitted; top the shelf back up
+type PartVariant = 'order' | 'refill'
+
+const STATUS: Record<PartVariant, Record<string, { label: string; cls: string }>> = {
+  order: {
+    ready:       { label: 'Te bestellen',  cls: 'bg-orange-100 text-orange-700' },
+    in_progress: { label: 'Besteld',       cls: 'bg-blue-100   text-blue-700'   },
+    done:        { label: 'Ontvangen',     cls: 'bg-green-100  text-green-700'  },
+  },
+  refill: {
+    ready:       { label: 'Aan te vullen', cls: 'bg-purple-100 text-purple-700' },
+    in_progress: { label: 'Besteld',       cls: 'bg-blue-100   text-blue-700'   },
+    done:        { label: 'Aangevuld',     cls: 'bg-green-100  text-green-700'  },
+  },
 }
-function statusBadge(s: DbTaskStatus) {
-  return STATUS[s] ?? { label: s, cls: 'bg-surface text-ink-soft' }
+const ACTION_LABELS: Record<PartVariant, { start: string; complete: string }> = {
+  order:  { start: 'Besteld ✓', complete: 'Ontvangen ✓' },
+  refill: { start: 'Besteld ✓', complete: 'Aangevuld ✓' },
+}
+function statusBadge(s: DbTaskStatus, variant: PartVariant) {
+  return STATUS[variant][s] ?? { label: s, cls: 'bg-surface text-ink-soft' }
 }
 
 // ── Individual order_part row ─────────────────────────────────────────────────
 function PartRow({
-  task, onAction, busy, readOnly,
+  task, onAction, busy, readOnly, variant,
 }: {
   task: DbTask; onAction: (id: string, action: 'start' | 'complete') => void; busy: boolean; readOnly: boolean
+  variant: PartVariant
 }) {
   const p      = (task.payload ?? {}) as Record<string, unknown>
   const code   = String(p.part_number ?? '')
   const desc   = String(p.description ?? task.title ?? '—')
   const qty    = Number(p.quantity ?? 1)
   const urgent = p.urgency === 'urgent'
-  const badge  = statusBadge(task.status as DbTaskStatus)
+  const badge  = statusBadge(task.status as DbTaskStatus, variant)
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-stroke last:border-b-0">
@@ -60,13 +78,13 @@ function PartRow({
           {task.status === 'ready' && (
             <button type="button" disabled={busy} onClick={() => onAction(task.id, 'start')}
               className="min-h-[44px] min-w-[100px] px-4 rounded-xl bg-brand-orange text-white text-sm font-semibold shadow-sm disabled:opacity-40 active:scale-95 transition-transform">
-              {busy ? '…' : 'Besteld ✓'}
+              {busy ? '…' : ACTION_LABELS[variant].start}
             </button>
           )}
           {task.status === 'in_progress' && (
             <button type="button" disabled={busy} onClick={() => onAction(task.id, 'complete')}
               className="min-h-[44px] min-w-[100px] px-4 rounded-xl bg-brand-green text-white text-sm font-semibold shadow-sm disabled:opacity-40 active:scale-95 transition-transform">
-              {busy ? '…' : 'Ontvangen ✓'}
+              {busy ? '…' : ACTION_LABELS[variant].complete}
             </button>
           )}
         </div>
@@ -81,16 +99,19 @@ function PartRow({
 
 // ── Order_part work order group card ──────────────────────────────────────────
 function OrderCard({
-  group, onAction, busyIds, readOnly,
+  group, onAction, busyIds, readOnly, variant = 'order',
 }: {
   group: WarehouseGroup; onAction: (id: string, action: 'start' | 'complete') => void; busyIds: Set<string>; readOnly: boolean
+  variant?: PartVariant
 }) {
   const allOrdered  = !readOnly && group.tasks.every(t => t.status === 'in_progress')
   const borderColor = readOnly
     ? 'border-l-4 border-l-brand-green'
-    : group.isUrgent
-      ? 'border-l-4 border-l-brand-red'
-      : 'border-l-4 border-l-brand-orange'
+    : variant === 'refill'
+      ? 'border-l-4 border-l-purple-500'
+      : group.isUrgent
+        ? 'border-l-4 border-l-brand-red'
+        : 'border-l-4 border-l-brand-orange'
 
   return (
     <div className={`rounded-xl border border-stroke bg-white shadow-sm overflow-hidden ${borderColor}`}>
@@ -122,7 +143,7 @@ function OrderCard({
 
       <div>
         {group.tasks.map(task => (
-          <PartRow key={task.id} task={task} onAction={onAction} busy={busyIds.has(task.id)} readOnly={readOnly} />
+          <PartRow key={task.id} task={task} onAction={onAction} busy={busyIds.has(task.id)} readOnly={readOnly} variant={variant} />
         ))}
       </div>
     </div>
@@ -248,6 +269,7 @@ export default function MagazijnPage() {
   const [groups,        setGroups]        = useState<WarehouseGroup[]>([])
   const [doneToday,     setDoneToday]     = useState<WarehouseGroup[]>([])
   const [pickingGroups, setPickingGroups] = useState<PickingGroup[]>([])
+  const [refillGroups,  setRefillGroups]  = useState<WarehouseGroup[]>([])
   const [loading,       setLoading]       = useState(true)
   const [refreshing,    setRefreshing]    = useState(false)
   const [error,         setError]         = useState<string | null>(null)
@@ -265,6 +287,7 @@ export default function MagazijnPage() {
       setGroups(data.groups)
       setDoneToday(data.doneToday ?? [])
       setPickingGroups(data.pickingGroups ?? [])
+      setRefillGroups(data.refillGroups ?? [])
     } catch {
       setError('Kon wachtrij niet laden. Controleer je verbinding en probeer opnieuw.')
     } finally {
@@ -320,6 +343,30 @@ export default function MagazijnPage() {
     }
   }, [groups])
 
+  // ── Replenish_stock transition ──────────────────────────────────────────────
+  // Same state machine as an order, but the refill list is short and there is no
+  // "done today" panel for it, so we simply re-sync from the server afterwards
+  // rather than duplicating the optimistic-update bookkeeping above.
+  const handleRefillAction = useCallback(async (taskId: string, action: 'start' | 'complete') => {
+    setBusyIds(prev => new Set(prev).add(taskId))
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/transition`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action, changed_by: 'warehouse' }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error((json as { error?: string }).error ?? `HTTP ${res.status}`)
+      }
+      await loadQueue()
+    } catch (err) {
+      alert(`Fout: ${err instanceof Error ? err.message : 'Onbekende fout'}`)
+    } finally {
+      setBusyIds(prev => { const n = new Set(prev); n.delete(taskId); return n })
+    }
+  }, [loadQueue])
+
   // ── Pick_parts confirmation (ready → in_progress → done) ────────────────────
   //
   // Why two transitions instead of one? The state machine only allows
@@ -365,6 +412,7 @@ export default function MagazijnPage() {
   const toOrderCount   = groups.reduce((n, g) => n + g.tasks.filter(t => t.status === 'ready').length, 0)
   const orderedCount   = groups.reduce((n, g) => n + g.tasks.filter(t => t.status === 'in_progress').length, 0)
   const doneTodayCount = doneToday.reduce((n, g) => n + g.tasks.length, 0)
+  const refillCount    = refillGroups.reduce((n, g) => n + g.tasks.length, 0)
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -453,7 +501,24 @@ export default function MagazijnPage() {
               </section>
             )}
 
-            {groups.length === 0 && pickingGroups.length === 0 && (
+            {/* ── Stock refills (parts already fitted) ── */}
+            {refillGroups.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide px-1">
+                  Stock aanvullen ({refillCount})
+                </p>
+                <p className="text-xs text-ink-faint px-1 -mt-2">
+                  Deze onderdelen zijn al geplaatst. Ze horen niet bij een openstaande
+                  bestelling — enkel de voorraad moet terug aangevuld worden.
+                </p>
+                {refillGroups.map(group => (
+                  <OrderCard key={group.workOrderId} group={group} onAction={handleRefillAction}
+                    busyIds={busyIds} readOnly={false} variant="refill" />
+                ))}
+              </section>
+            )}
+
+            {groups.length === 0 && pickingGroups.length === 0 && refillGroups.length === 0 && (
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-8 shadow-sm text-center">
                 <p className="text-3xl mb-2">✓</p>
                 <p className="font-bold text-green-800">Niets meer te doen</p>
