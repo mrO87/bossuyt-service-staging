@@ -113,13 +113,16 @@ async function loadLogo(): Promise<string | null> {
 
 // ── Layout (A4 portrait, mm) ─────────────────────────────────────────────────
 
+// All figures measured off tests/fixtures/sauna-molenhoeve.pdf rendered at
+// 105 DPI (4.14 px/mm), so this block mirrors the printed form rather than
+// approximating it.
 const PAGE_W = 210
 const PAGE_H = 297
 const ML = 12                    // left margin
-const MR = 12
-const CW = PAGE_W - ML - MR      // 186
-const SPLIT = 118                // x where the header box splits into two columns
-const RIGHT_X = 124              // x where the right-hand blocks start
+const MR = 6                     // paper's rules run out to 204mm
+const CW = PAGE_W - ML - MR      // 192
+const SPLIT = 127                // header box divider
+const RIGHT_X = 121              // divider for the materialen/bezoek and opmerkingen/akkoord blocks
 
 export async function generateWerkbonPDF(
   data: ServiceBonPdfData,
@@ -162,100 +165,115 @@ export async function generateWerkbonPDF(
     } else {
       drawTextLogo()
     }
+    // On the paper the rule sits ABOVE the bank lines, not below them.
+    line(ML, 272, PAGE_W - MR, 272)
     doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...BLACK)
-    doc.text(BANK_LINES[0], ML, PAGE_H - 16)
-    doc.text(BANK_LINES[1], PAGE_W / 2, PAGE_H - 16, { align: 'center' })
-    doc.text(BANK_LINES[2], PAGE_W - MR, PAGE_H - 16, { align: 'right' })
-    line(ML, PAGE_H - 13.5, PAGE_W - MR, PAGE_H - 13.5)
+    doc.text(BANK_LINES[0], ML, 276)
+    doc.text(BANK_LINES[1], PAGE_W / 2, 276, { align: 'center' })
+    doc.text(BANK_LINES[2], PAGE_W - MR, 276, { align: 'right' })
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
-    doc.text(COMPANY_LINE, PAGE_W / 2, PAGE_H - 9.5, { align: 'center' })
+    doc.text(COMPANY_LINE, PAGE_W / 2, 282.5, { align: 'center' })
     doc.setFontSize(5.5)
-    doc.text(REGISTRATION_LINE, PAGE_W / 2, PAGE_H - 6, { align: 'center' })
+    doc.text(REGISTRATION_LINE, PAGE_W / 2, 286.5, { align: 'center' })
   }
 
   pageChrome()
 
-  // ── header box: y 26 → 96 ──────────────────────────────────────────────────
-  const HB_TOP = 26, HB_BOTTOM = 96
-  line(ML, HB_TOP, ML, HB_BOTTOM); line(PAGE_W - MR, HB_TOP, PAGE_W - MR, HB_BOTTOM)
+  // ── outer frame: one continuous rule down each edge, header through remarks,
+  // exactly as the printed form is ruled.
+  const HB_TOP = 31, HB_BOTTOM = 95.5
+  const FRAME_BOTTOM = 266
+  line(ML, HB_TOP, ML, FRAME_BOTTOM)
+  line(PAGE_W - MR, HB_TOP, PAGE_W - MR, FRAME_BOTTOM)
+
+  // ── header box: y 31 → 95.5 ────────────────────────────────────────────────
   line(SPLIT, HB_TOP, SPLIT, HB_BOTTOM); line(ML, HB_BOTTOM, PAGE_W - MR, HB_BOTTOM)
 
   // left column
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...BLACK)
-  doc.text('SERVICE BON | BON DE SERVICE', ML + 6, HB_TOP + 9)
-  label('TICKET N°', ML + 3, 66);                     value(data.ticketNumber, ML + 3, 70.5)
-  label('SERVICE BON N° BON DE SERVICE', ML + 3, 76); value(data.bonNumber, ML + 3, 80.5)
-  label('DATUM TICKET', ML + 3, 86);                  value(fmtDate(data.ticketDate), ML + 3, 90.5)
+  doc.text('SERVICE BON | BON DE SERVICE', ML + 8, HB_TOP + 6.5)
+  label('TICKET N°', ML + 3, 70);                     value(data.ticketNumber, ML + 3, 74.5)
+  label('SERVICE BON N° BON DE SERVICE', ML + 3, 79); value(data.bonNumber, ML + 3, 83.5)
+  label('DATUM TICKET', ML + 3, 88);                  value(fmtDate(data.ticketDate), ML + 3, 92.5)
 
-  // right column
+  // right column — every field is label on its own line, value directly beneath,
+  // which is how the printed form reads.
   const RX = SPLIT + 3
-  label('KLANT N° CLIENT', RX, HB_TOP + 6)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('L', RX, HB_TOP + 11)
-  value(data.customerNumber, RX + 4, HB_TOP + 11)
+  label('KLANT N° CLIENT', RX, 35.5)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('L', RX, 40)
+  value(data.customerNumber, RX + 4, 40)
   const fNumber = data.invoiceCustomerNumber || data.customerNumber
-  line(RX + 38, HB_TOP + 7.5, RX + 38, HB_TOP + 12)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('F', RX + 41, HB_TOP + 11)
-  value(fNumber, RX + 45, HB_TOP + 11)
+  line(RX + 39, 36.5, RX + 39, 41)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('F', RX + 42, 40)
+  value(fNumber, RX + 46, 40)
 
-  label('NAAM | NOM', RX, HB_TOP + 17);           value(data.customerName, RX, HB_TOP + 21.5)
-  label('ADRES | ADRESSE', RX, HB_TOP + 30)
-  value(data.siteAddress, RX, HB_TOP + 34.5)
-  value(data.siteCity, RX, HB_TOP + 39)
-  label('CONTACT', RX, HB_TOP + 44);              value(data.contactName, RX + 22, HB_TOP + 44)
-  label('Tel & GSM', RX, HB_TOP + 53);            value(data.phones.join(' / '), RX + 22, HB_TOP + 53)
-  label('SLUITINGSDAG | FERMÉ', RX, HB_TOP + 63); value(data.closingDay, RX + 42, HB_TOP + 63)
+  label('NAAM | NOM', RX, 44.5)
+  value(data.customerName, RX, 49)
 
-  // ── device row: y 96 → 118 ─────────────────────────────────────────────────
-  const DR_TOP = HB_BOTTOM, DR_BOTTOM = 118
-  const cols = [ML, ML + 28, ML + 118, ML + 152, PAGE_W - MR]
+  label('ADRES | ADRESSE', RX, 57)
+  value(data.siteAddress, RX, 61.5)
+  value(data.siteCity, RX, 65.5)
+
+  label('CONTACT', RX, 70)
+  value(data.contactName, RX, 74.5)
+
+  label('Tel & GSM', RX, 79)
+  value(data.phones.join(' / '), RX, 83.5)
+
+  label('SLUITINGSDAG | FERMÉ', RX, 89)
+  value(data.closingDay, RX, 93.5)
+
+  // ── device row: y 95.5 → 120 ───────────────────────────────────────────────
+  const DR_TOP = HB_BOTTOM, DR_BOTTOM = 120
+  const cols = [ML, ML + 24, SPLIT, ML + 148, PAGE_W - MR]
   for (const x of cols.slice(1, -1)) line(x, DR_TOP + 3, x, DR_BOTTOM)
-  label('UNIT N°', cols[0] + 2, DR_TOP + 6);                     value(data.deviceUnitNumber, cols[0] + 2, DR_TOP + 13)
-  label('OMSCHRIJVING | DÉSIGNATION', cols[1] + 2, DR_TOP + 6);  value(data.deviceDescription, cols[1] + 2, DR_TOP + 13)
-  label('LEVERDATUM', cols[2] + 2, DR_TOP + 6);                  value(fmtDate(data.deviceDeliveryDate), cols[2] + 2, DR_TOP + 13)
-  label('GARANTIE', cols[3] + 2, DR_TOP + 6);                    value(fmtDate(data.deviceWarrantyUntil), cols[3] + 2, DR_TOP + 13)
+  label('UNIT N°', cols[0] + 2, DR_TOP + 5);                     value(data.deviceUnitNumber, cols[0] + 2, DR_TOP + 12)
+  label('OMSCHRIJVING | DÉSIGNATION', cols[1] + 2, DR_TOP + 5);  value(data.deviceDescription, cols[1] + 2, DR_TOP + 12)
+  label('LEVERDATUM', cols[2] + 2, DR_TOP + 5);                  value(fmtDate(data.deviceDeliveryDate), cols[2] + 2, DR_TOP + 12)
+  label('GARANTIE', cols[3] + 2, DR_TOP + 5);                    value(fmtDate(data.deviceWarrantyUntil), cols[3] + 2, DR_TOP + 12)
 
-  // ── omschrijving klant: y 120 → 140 ────────────────────────────────────────
-  label('OMSCHRIJVING KLANT | OBSERVATIONS CLIENT', ML + 2, 124)
+  // ── omschrijving klant: y 123.5 → 138 ──────────────────────────────────────
+  label('OMSCHRIJVING KLANT | OBSERVATIONS CLIENT', ML + 2, 123.5)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
   const custLines = (doc.splitTextToSize(data.customerDescription || '', CW - 6) as string[]).slice(0, 3)
-  doc.text(custLines, ML + 2, 129)
+  doc.text(custLines, ML + 2, 128)
 
-  // ── technicus rapport: y 142 → 184 (5 ruled lines) ─────────────────────────
-  label('TECHNICUS RAPPORT TECHNICIEN', ML + 2, 146)
-  ruled(ML + 52, PAGE_W - MR, 146)
+  // ── technicus rapport: label rule at 143, then 3 full-width rules ──────────
+  label('TECHNICUS RAPPORT TECHNICIEN', ML + 2, 143)
+  ruled(ML + 54, PAGE_W - MR, 143)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
   const reportLines = doc.splitTextToSize(data.technicianReport || '', CW - 6) as string[]
-  const REPORT_ROWS = 5
+  const REPORT_ROWS = 3
   for (let i = 0; i < REPORT_ROWS; i++) {
-    const y = 153 + i * 6.5
+    const y = 150 + i * 6.7
     if (reportLines[i]) doc.text(reportLines[i], ML + 2, y - 1.2)
     ruled(ML, PAGE_W - MR, y)
   }
   const reportOverflow = reportLines.slice(REPORT_ROWS)
 
-  // ── materialen (left) + bezoek (right): y 186 → 240 ────────────────────────
-  const MB_TOP = 186, MB_BOTTOM = 240
+  // ── materialen (left) + bezoek (right): y 166 → 227 ────────────────────────
+  const MB_TOP = 166, MB_BOTTOM = 227
   line(ML, MB_TOP, PAGE_W - MR, MB_TOP)
-  line(RIGHT_X - 2, MB_TOP, RIGHT_X - 2, MB_BOTTOM)
+  line(RIGHT_X, MB_TOP, RIGHT_X, MB_BOTTOM)
 
-  label('MATERIALEN | MATÉRIAUX', ML + 2, MB_TOP + 5)
-  label('ART. N°', ML + 2, MB_TOP + 10, 7)
-  label('Omschrijving', ML + 24, MB_TOP + 10, 7)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
-  doc.text('AANTAL | NOMBRE', RIGHT_X - 5, MB_TOP + 10, { align: 'right' })
+  label('MATERIALEN | MATÉRIAUX', ML + 2, MB_TOP + 4)
+  label('ART. N°', ML + 2, MB_TOP + 9, 7.5)
+  label('Omschrijving', ML + 22, MB_TOP + 9, 7.5)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
+  doc.text('AANTAL | NOMBRE', RIGHT_X - 4, MB_TOP + 9, { align: 'right' })
 
-  const PART_ROWS = 6
+  const PART_ROWS = 7
   const partsToDraw = data.parts.slice(0, PART_ROWS)
   for (let i = 0; i < PART_ROWS; i++) {
-    const y = MB_TOP + 17 + i * 6
+    const y = MB_TOP + 14 + i * 6.7
     const p = partsToDraw[i]
     if (p) {
-      value(p.code, ML + 2, y - 1, 8.5)
+      value(p.code, ML + 2, y - 1.2, 8.5)
       const desc = p.toOrder ? `${p.description} (te bestellen${p.urgent ? ', dringend' : ''})` : p.description
-      value((doc.splitTextToSize(desc, 70) as string[])[0] ?? '', ML + 24, y - 1, 8.5)
-      value(String(p.quantity), RIGHT_X - 5, y - 1, 8.5, 'right')
+      value((doc.splitTextToSize(desc, 62) as string[])[0] ?? '', ML + 22, y - 1.2, 8.5)
+      value(String(p.quantity), RIGHT_X - 4, y - 1.2, 8.5, 'right')
     }
-    dotted(ML + 2, RIGHT_X - 5, y)
+    dotted(ML + 2, RIGHT_X - 4, y)
   }
   const partsOverflow = data.parts.slice(PART_ROWS)
 
@@ -269,45 +287,45 @@ export async function generateWerkbonPDF(
     ['AANTAL PERSONEN | NOMBRE DES PERS.', String(data.personCount)],
   ]
   visitRows.forEach(([lbl, val], i) => {
-    const y = MB_TOP + 8 + i * 7.3
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...BLACK)
-    doc.text(lbl, RIGHT_X, y)
+    const y = MB_TOP + 7 + i * 8.4
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...BLACK)
+    doc.text(lbl, RIGHT_X + 3, y)
     if (lbl.startsWith('INTERVENTIE')) {
       // WEEK | WEEKEND with the chosen one boxed
-      const wx = PAGE_W - MR - 30
-      doc.setFontSize(7.5)
+      const wx = PAGE_W - MR - 33
+      doc.setFontSize(8)
       doc.text('WEEK | WEEKEND', wx, y)
-      const chosen = data.interventionKind === 'week' ? { x: wx - 1, w: 9 } : { x: wx + 12, w: 17 }
-      doc.setDrawColor(...ORANGE); doc.setLineWidth(0.5); doc.rect(chosen.x, y - 3.2, chosen.w, 4.2)
+      const chosen = data.interventionKind === 'week' ? { x: wx - 1, w: 10 } : { x: wx + 13, w: 19 }
+      doc.setDrawColor(...ORANGE); doc.setLineWidth(0.5); doc.rect(chosen.x, y - 3.2, chosen.w, 4.4)
     } else {
-      value(val, PAGE_W - MR - 1, y, 8.5, 'right')
+      value(val, PAGE_W - MR - 2, y, 8.5, 'right')
     }
-    ruled(RIGHT_X, PAGE_W - MR, y + 2)
+    ruled(RIGHT_X + 3, PAGE_W - MR, y + 2.5)
   })
 
-  // ── opmerkingen (left) + akkoord (right): y 242 → 276 ──────────────────────
-  const OP_TOP = 242, OP_BOTTOM = 276
-  line(RIGHT_X - 2, OP_TOP, RIGHT_X - 2, OP_BOTTOM)
-  label('OPMERKINGEN | REMARQUES', ML + 2, OP_TOP + 5)
+  // ── opmerkingen (left) + akkoord (right): y 228 → 266 ──────────────────────
+  const OP_TOP = 228, OP_BOTTOM = 266
+  line(RIGHT_X, OP_TOP, RIGHT_X, OP_BOTTOM)
+  label('OPMERKINGEN | REMARQUES', ML + 2, OP_TOP + 3.5)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
-  const remarkLines = (doc.splitTextToSize(data.remarks || '', RIGHT_X - ML - 10) as string[]).slice(0, 4)
+  const remarkLines = (doc.splitTextToSize(data.remarks || '', RIGHT_X - ML - 12) as string[]).slice(0, 4)
   for (let i = 0; i < 4; i++) {
-    const y = OP_TOP + 12 + i * 6
+    const y = OP_TOP + 10 + i * 6.8
     if (remarkLines[i]) doc.text(remarkLines[i], ML + 2, y - 1.2)
-    ruled(ML + 2, RIGHT_X - 6, y)
+    ruled(ML + 2, RIGHT_X - 8, y)
   }
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...BLACK)
-  doc.text('AKKOORD VAN KLANT | ACCORD DU CLIENT', PAGE_W - MR - 1, OP_TOP + 5, { align: 'right' })
+  doc.text('AKKOORD VAN KLANT | ACCORD DU CLIENT', PAGE_W - MR - 2, OP_TOP + 3.5, { align: 'right' })
   if (data.signature) {
     try {
-      doc.addImage(data.signature, 'PNG', RIGHT_X + 2, OP_TOP + 8, 60, 24)
+      doc.addImage(data.signature, 'PNG', RIGHT_X + 6, OP_TOP + 7, 60, 24)
     } catch {
       /* unreadable signature: leave the box empty rather than failing the whole bon */
     }
   }
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...ORANGE)
-  doc.text('×', RIGHT_X + 1, OP_TOP + 14)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(...ORANGE)
+  doc.text('×', RIGHT_X + 7, OP_TOP + 16)
 
   // ── overflow page for long reports / many parts ─────────────────────────────
   if (reportOverflow.length > 0 || partsOverflow.length > 0) {
