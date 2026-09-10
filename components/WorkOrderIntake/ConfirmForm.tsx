@@ -96,8 +96,12 @@ export default function ConfirmForm({
   // offer — regardless of what the last request happened to return.
   const candidates = matched || !searchTerm ? [] : fetchedCandidates
 
-  const missing = (key: 'ticketNumber' | 'description') =>
-    touched && !draft[key].trim() ? 'Verplicht' : undefined
+  // Every field `valid` checks belongs here. It used to name only two, which is
+  // why an empty customer name left the button doing nothing and the form
+  // saying nothing — the check was there, the way to see it failing was not.
+  const missing = (
+    key: 'ticketNumber' | 'description' | 'customerNumber' | 'customerName' | 'address' | 'city',
+  ) => (touched && !draft[key].trim() ? 'Verplicht' : undefined)
   const fieldError = (wire: string) => (serverError?.field === wire ? serverError.message : undefined)
 
   const valid = useMemo(() => {
@@ -245,7 +249,7 @@ export default function ConfirmForm({
               </div>
             ) : (
               <>
-                <SourceField label="Klant nr" required source={sources.customerNumber} error={fieldError('customer.number')}>
+                <SourceField label="Klant nr" required source={sources.customerNumber} error={missing('customerNumber') ?? fieldError('customer.number')}>
                   <input
                     className={`${inputClass} font-mono`}
                     value={draft.customerNumber}
@@ -254,7 +258,7 @@ export default function ConfirmForm({
                   />
                 </SourceField>
 
-                <SourceField label="Naam" required source={sources.customerName} error={fieldError('customer.name')}>
+                <SourceField label="Naam" required source={sources.customerName} error={missing('customerName') ?? fieldError('customer.name')}>
                   <input
                     className={inputClass}
                     value={draft.customerName}
@@ -272,7 +276,7 @@ export default function ConfirmForm({
                 )}
                 {searching && <p className="text-sm text-ink-soft">Zoeken…</p>}
 
-                <SourceField label="Adres" required source={sources.address} error={fieldError('customer.address')}>
+                <SourceField label="Adres" required source={sources.address} error={missing('address') ?? fieldError('customer.address')}>
                   <input
                     className={inputClass}
                     value={draft.address}
@@ -289,7 +293,7 @@ export default function ConfirmForm({
                     />
                   </SourceField>
                   <div className="col-span-2">
-                    <SourceField label="Gemeente" required source={sources.address} error={fieldError('customer.city')}>
+                    <SourceField label="Gemeente" required source={sources.address} error={missing('city') ?? fieldError('customer.city')}>
                       <input
                         className={inputClass}
                         value={draft.city}
