@@ -416,6 +416,24 @@ const DATE_RE = /\b(\d{2})\/(\d{2})\/(\d{2}|\d{4})\b/
  */
 const CUSTOMER_NUMBER_RE = /([A-Z]\d{4,})\b/
 
+/**
+ * The two number columns are headed "L" and "F". When OCR keeps the space those
+ * letters are words of their own and no bother; when it loses the space they
+ * arrive welded to the number, and "L6950" is not customer 6950 — it is a
+ * customer who does not exist, joined to whichever record that string matches.
+ *
+ * Stripping is safe because the marker is the only thing that can be there: a
+ * real number either carries its own letter, as "K05883" does, or none at all.
+ * A number printed bare and read with its space intact is left to the caller —
+ * hunting four loose digits across a page of postal codes and dates would cost
+ * more than it found.
+ */
+export function readCustomerNumber(text: string): string | undefined {
+  const found = CUSTOMER_NUMBER_RE.exec(text)?.[1]
+  if (!found) return undefined
+  return /^[LF]\d{4,}$/.test(found) ? found.slice(1) : found
+}
+
 /** A Belgian postal code. */
 const POSTAL_CODE_RE = /\b(\d{4})\b/
 
@@ -648,8 +666,8 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
 
   const ticketNumber = readField(fragments, 'ticketNumber', byPattern(TICKET_RE), haystack)
   const ticketDate = readField(fragments, 'ticketDate', parsePrintedDate, haystack)
-  const customerNumber = readField(fragments, 'customerNumber', byPattern(CUSTOMER_NUMBER_RE), haystack)
-  const invoiceNumber = readField(fragments, 'invoiceNumber', byPattern(CUSTOMER_NUMBER_RE), haystack)
+  const customerNumber = readField(fragments, 'customerNumber', readCustomerNumber, haystack)
+  const invoiceNumber = readField(fragments, 'invoiceNumber', readCustomerNumber, haystack)
 
   const customerName = readZoneOnly(fragments, 'customerName')
   const contact = readZoneOnly(fragments, 'contact')
@@ -657,6 +675,13 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
   const closingDay = readZoneOnly(fragments, 'closingDay')
   const unitNumber = readZoneOnly(fragments, 'unitNumber')
   const deviceDescription = readZoneOnly(fragments, 'deviceDescription')
+  // The delivery date sits in the next column with no label between them, so a
+  // wide zone sweeps it up. An appliance is never named after a date, which
+  // makes a trailing one unambiguous — and it is already read properly as
+  // deliveryDate from its own box.
+  deviceDescription.value = deviceDescription.value
+    .replace(/\s*\b\d{2}\/\d{2}\/(?:\d{2}|\d{4})\b\s*$/, '')
+    .trim()
   const description = readZoneOnly(fragments, 'description')
 
   // Dates on the device row have no fallback: a stray date picked up from

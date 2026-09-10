@@ -288,3 +288,64 @@ describe('extractWerkbon when the value is printed above its label', () => {
     expect(result.fields.phone).toBe('0472/ 28 59 58')
   })
 })
+
+/**
+ * Two bons photographed rather than exported, and both of them French-speaking
+ * or bilingual: a Waterloo customer with no appliance filled in, and the Belgian
+ * parliament, whose customer numbers are printed without a letter.
+ */
+const ponchoDoc = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/poncho-waterloo-docling.json'), 'utf-8'),
+) as DoclingDocument
+const kamerDoc = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/kamer-brussel-docling.json'), 'utf-8'),
+) as DoclingDocument
+
+describe('extractWerkbon on the Poncho bon (photographed)', () => {
+  const result = extractWerkbon(ponchoDoc)
+
+  it('reads the ticket, its date and the customer', () => {
+    expect(result.fields.ticketNumber).toBe('TKT20/12625')
+    expect(result.fields.ticketDate).toBe('2026-08-17')
+    expect(result.fields.customerNumber).toBe('K05883')
+    expect(result.fields.customerName).toBe('PONCHO')
+  })
+
+  it('reads the town, and the description in full', () => {
+    expect(result.fields.postalCode).toBe('1410')
+    expect(result.fields.city).toBe('Waterloo')
+    expect(result.fields.description).toBe('Vervangen van ventilator van plancha Scholl')
+  })
+
+  it('leaves the appliance row empty, because the bon does', () => {
+    expect(result.fields.unitNumber).toBe('')
+    expect(result.fields.deviceDescription).toBe('')
+  })
+})
+
+describe('extractWerkbon on the parliament bon (photographed)', () => {
+  const result = extractWerkbon(kamerDoc)
+
+  it('does not mistake the column marker for part of the number', () => {
+    // Printed "L 6950 | F 5890". OCR loses the space and hands back "L6950",
+    // which is a customer who does not exist.
+    expect(result.fields.customerNumber).toBe('6950')
+    expect(result.fields.customerNumber).not.toMatch(/^[LF]/)
+  })
+
+  it('reads the ticket, the address and the unit', () => {
+    expect(result.fields.ticketNumber).toBe('TKT20/12773')
+    expect(result.fields.ticketDate).toBe('2026-09-09')
+    expect(result.fields.address).toBe('WETSTRAAT 10')
+    expect(result.fields.postalCode).toBe('1000')
+    expect(result.fields.unitNumber).toBe('U172537')
+  })
+
+  it('keeps the delivery date out of the appliance description', () => {
+    // The two columns have no label between them, so a wide zone sweeps the
+    // date up. An appliance is never named after one.
+    expect(result.fields.deviceDescription).not.toMatch(/\d{2}\/\d{2}\/\d{2}/)
+    expect(result.fields.deviceDescription).toContain('AFWASMACHINE')
+    expect(result.fields.deliveryDate).toBe('2014-09-05')
+  })
+})
