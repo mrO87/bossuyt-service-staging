@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
 import CalendarSheet from '@/components/CalendarSheet'
+import NewWorkOrderMenu from '@/components/WorkOrderIntake/NewWorkOrderMenu'
 import { useSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
 import type { InterventionStatus, InterventionType } from '@/types'
@@ -116,6 +117,7 @@ export default function DayView() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [newWorkOrderOpen, setNewWorkOrderOpen] = useState(false)
   const [showOpenPool, setShowOpenPool] = useState(true)
 
   function navigate(delta: number) {
@@ -162,7 +164,7 @@ export default function DayView() {
           </div>
           <button
             type="button"
-            onClick={() => router.push('/werkbon/nieuw')}
+            onClick={() => setNewWorkOrderOpen(true)}
             className="w-10 h-10 rounded-full flex items-center justify-center bg-brand-mid text-white text-xl font-bold active:opacity-80"
             aria-label="Nieuwe werkbon"
           >
@@ -347,6 +349,7 @@ export default function DayView() {
       </main>
 
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <NewWorkOrderMenu open={newWorkOrderOpen} onClose={() => setNewWorkOrderOpen(false)} />
       <CalendarSheet
         open={calendarOpen}
         onClose={() => setCalendarOpen(false)}

@@ -31,6 +31,12 @@ services:
       NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
       ORS_API_KEY: ${ORS_API_KEY}
       NODE_ENV: production
+      # Docling leest geüploade werkbonnen uit (/werkbon/upload). De container
+      # draait apart en publiceert poort 5001 alleen op 127.0.0.1 van de host,
+      # dus via de host is hij van hieruit NIET bereikbaar — de servicenaam op
+      # het gedeelde `traefik`-netwerk wel. Daarom staat die URL hier expliciet
+      # in plaats van als stille standaardwaarde in de code.
+      DOCLING_URL: ${DOCLING_URL:-http://docling:5001}
     ports:
       - "3000:3000"
     labels:

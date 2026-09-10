@@ -12,7 +12,20 @@ import {
 } from '@/lib/db/schema'
 
 export const MAX_PLANNED_ITEMS = 10
-export const MAX_OPEN_ITEMS = 4
+
+/**
+ * How many open pool items the technician's day view shows.
+ *
+ * Temporarily raised from 4 to 10 for testing. With paper bons now arriving
+ * through /werkbon/upload the pool fills faster than it used to, and at four a
+ * newly uploaded bon could stay invisible behind older ones — the list is sorted
+ * urgent-first and then simply cut off.
+ *
+ * This is a stopgap, not the answer. The real fix is for the office to see the
+ * whole pool and decide which work orders a technician gets to see; once that
+ * exists this cap goes away rather than growing again.
+ */
+export const MAX_OPEN_ITEMS = 10
 
 type InterventionCoreRow = {
   id: string

@@ -24,6 +24,7 @@ import type {
   ReasonCode,
   TaskRole,
   User,
+  WorkOrderIntakeStatus,
   WorkOrderLinkType,
 } from '@/types'
 import type { PdfFollowUp, PdfPart } from '@/lib/pdf'
@@ -284,6 +285,47 @@ export const workOrderPhotos = pgTable('work_order_photos', {
 export const workOrderPhotosRelations = relations(workOrderPhotos, ({ one }) => ({
   workOrder: one(workOrders, {
     fields: [workOrderPhotos.workOrderId],
+    references: [workOrders.id],
+  }),
+}))
+
+// ── Uploaded paper bons ───────────────────────────────────────────────────────
+// A work order that arrives on paper or as a PDF is parked here first: the file
+// is stored, docling reads the fields out of it, and a human confirms them
+// before it becomes a real work order. Until that confirmation happens there is
+// no work order to hang the file on, which is why this is its own table rather
+// than a row in work_order_photos.
+export const workOrderIntakes = pgTable('work_order_intakes', {
+  id: text('id').primaryKey(),
+  // The id the phone generated before it had a network connection. Re-sending
+  // the same upload finds this row instead of creating a second one.
+  clientId: text('client_id').notNull().unique(),
+
+  originalPath: text('original_path').notNull(),
+  // The deskewed A4 the browser produced from a photo. Null for a PDF, which
+  // needs no straightening.
+  normalizedPath: text('normalized_path'),
+  mimeType: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+
+  status: text('status').$type<WorkOrderIntakeStatus>().notNull().default('nieuw'),
+  // The proposed field values, and per field where each one came from.
+  extracted: jsonb('extracted').$type<Record<string, string>>(),
+  fieldSources: jsonb('field_sources').$type<Record<string, string>>(),
+  // docling's own grade of the conversion — worth showing when it says 'poor'.
+  ocrGrade: text('ocr_grade'),
+  errorMessage: text('error_message'),
+
+  // Set when the human confirms; null while the intake is still a proposal.
+  workOrderId: text('work_order_id').references(() => workOrders.id, { onDelete: 'set null' }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  changedBy: text('changed_by'),
+})
+
+export const workOrderIntakesRelations = relations(workOrderIntakes, ({ one }) => ({
+  workOrder: one(workOrders, {
+    fields: [workOrderIntakes.workOrderId],
     references: [workOrders.id],
   }),
 }))

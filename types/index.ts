@@ -13,6 +13,16 @@ export type InterventionSource = 'planned' | 'reactive'
 
 export type InterventionKind = 'week' | 'weekend'
 
+/**
+ * Where an uploaded paper bon is in its journey.
+ *
+ * - 'nieuw'      — the file is stored, docling has not read it yet
+ * - 'gelezen'    — fields proposed, waiting for a human to confirm them
+ * - 'mislukt'    — reading failed; the file is safe and can be retried
+ * - 'bevestigd'  — confirmed, and workOrderId points at the work order it became
+ */
+export type WorkOrderIntakeStatus = 'nieuw' | 'gelezen' | 'mislukt' | 'bevestigd'
+
 /** Everything the technician fills in on the werkbon. Persisted as a draft in IndexedDB. */
 export interface WerkbonFormState {
   status: InterventionStatus | string

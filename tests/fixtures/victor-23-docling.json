@@ -1,0 +1,553 @@
+{
+ "pages": {
+  "1": {
+   "size": {
+    "width": 1654,
+    "height": 2339
+   },
+   "page_no": 1
+  }
+ },
+ "texts": [
+  {
+   "text": "BOSSUYT",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 286.63067626953125,
+      "t": 2251.759073893229,
+      "r": 745.944580078125,
+      "b": 2137.4027099609375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "GROOTKEUKENS",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 281.93182373046875,
+      "t": 2176.3074544270835,
+      "r": 751.8181966145834,
+      "b": 2091.4243977864585,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "SERVICE BON| BON DE SERVICE",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 166.80966186523438,
+      "t": 2090.2454630533853,
+      "r": 717.75146484375,
+      "b": 2011.257059733073,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "TICKETN TKT20/12719 SERVICE BON N°BON DE SERVICE TKT20/12719-01 DATUM TICKET 01/09/26",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 92.8025614420573,
+      "t": 1833.2384033203125,
+      "r": 548.5923258463541,
+      "b": 1642.25146484375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "UNITN",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 93.97727457682292,
+      "t": 1608.0625,
+      "r": 202.0511474609375,
+      "b": 1571.515625,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "OMSCHRIJVING | DESIGNATION",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 300.72727457682294,
+      "t": 1604.5257161458335,
+      "r": 696.6065266927084,
+      "b": 1559.726318359375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "OMSCHRIJVING KLANT OBSERVATIONS CLIENT Nazicht herstel warmhoudkast- toestel warmt niet meer op",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 91.62783813476562,
+      "t": 1430.0438639322915,
+      "r": 785.8849283854166,
+      "b": 1360.4868977864585,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "mouzichl-wounlglaneukaeMlaNseya TECHNICUS RAPPORT TECHNICIEN xolorourgoll-orta luilig opelalen eeiouge+2x oinyy",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 89.27841186523438,
+      "t": 1309.7928059895833,
+      "r": 1536.5284830729167,
+      "b": 1157.710693359375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "MATERIALENI MATERIAUX ART.N° Omschrijving",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 77.53125,
+      "t": 1083.43798828125,
+      "r": 448.7414957682292,
+      "b": 1019.7757161458333,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "AANTALI NOMBRE",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 714.227294921875,
+      "t": 1065.7539876302083,
+      "r": 947.9957682291666,
+      "b": 1043.3543294270833,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "TECHNICUSI TECHNICIEN 88",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 975.0142415364584,
+      "t": 1075.1854654947917,
+      "r": 1442.5511067708333,
+      "b": 1050.4278971354167,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "01/09/26",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1437.8522135416667,
+      "t": 1029.2071126302083,
+      "r": 1541.2272135416667,
+      "b": 1002.0917154947917,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "L.F.34.44.0.18..tgrma>te lorrn.gee. A.000.642",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 84.57954406738281,
+      "t": 999.7338053385417,
+      "r": 788.234375,
+      "b": 861.798828125,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "BEZOEKDATUMIDATEDELAVISITE",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 979.7130533854166,
+      "t": 1007.986328125,
+      "r": 1388.51416015625,
+      "b": 996.197021484375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "X",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 830.524169921875,
+      "t": 971.439453125,
+      "r": 892.7840983072916,
+      "b": 947.86083984375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "AANKOMSTUUR| HEURE D'ARRIVEE 74S",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 977.3636067708334,
+      "t": 950.21875,
+      "r": 1497.7628580729167,
+      "b": 937.25048828125,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "oryn.atcuge",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 489.8565266927083,
+      "t": 924.2822265625,
+      "r": 777.6619466145834,
+      "b": 877.125,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "人X",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 838.7471516927084,
+      "t": 930.1769205729167,
+      "r": 893.9588216145834,
+      "b": 905.4192708333333,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "VERTREKUUR| HEURE DE DEPART S",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 979.7130533854166,
+      "t": 893.6300455729167,
+      "r": 1497.7628580729167,
+      "b": 878.3038736979167,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "WEEKWEEKEND INTERVENTIE|INTERVENTION",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 985.586669921875,
+      "t": 846.4728190104167,
+      "r": 1564.7216796875,
+      "b": 813.4627278645833,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "AANTAL RITTENI NOMBRE DE TRAJETS",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 986.7613932291666,
+      "t": 760.4108072916667,
+      "r": 1442.5511067708333,
+      "b": 758.0528971354167,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "AANTALPERSONENI NOMBRE DESPERS.",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 990.2854817708334,
+      "t": 705.0009765625,
+      "r": 1473.09375,
+      "b": 701.4641927083333,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "AKKOORD VAN KLANTI ACCORD DU CLIENT",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1063.117919921875,
+      "t": 648.4122721354167,
+      "r": 1581.1676432291667,
+      "b": 643.6966145833333,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "OPMERKINGEN| REMARQUES",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 91.62783813476562,
+      "t": 571.78173828125,
+      "r": 507.477294921875,
+      "b": 569.423828125,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "ING IBAN BE29 3860 1870 1764 BIC BBRU BEBB",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1213.4815266927083,
+      "t": 321.84830729166674,
+      "r": 1589.390625,
+      "b": 317.13248697916674,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "BNP PARIBAS FORTIS IBAN BE20 0014 9856 8356 BIC GEBA BE BB KBCIBAN BE3546432838 2237 BIC KRED BEBB Bossuyt Grootkeuken NV |Noordlaan 19|8520 KUURNE |T 056/357012| F 056/370016| |BE 0476.185.470",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 52.86221822102865,
+      "t": 286.4803059895835,
+      "r": 1494.2386067708333,
+      "b": 163.87141927083348,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "X",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 830.524169921875,
+      "t": 971.439453125,
+      "r": 892.7840983072916,
+      "b": 947.86083984375,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "oryn.atcuge",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 489.8565266927083,
+      "t": 924.2822265625,
+      "r": 777.6619466145834,
+      "b": 877.125,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "人X",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 838.7471516927084,
+      "t": 930.1769205729167,
+      "r": 893.9588216145834,
+      "b": 905.4192708333333,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "KLANT NCLIENT LK02997 NAAMINOM VICTOR23",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 990.2854817708334,
+      "t": 2034.835673014323,
+      "r": 1188.8125,
+      "b": 1912.226806640625,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "FK02997",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1236.975830078125,
+      "t": 1991.2152099609375,
+      "r": 1342.7002766927083,
+      "b": 1955.8472900390625,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "ADRES| ADRESSE RAVENSTEINSTRAAT23 B-1000-BRUSSEL CONTACT",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 996.1590983072916,
+      "t": 1888.648193359375,
+      "r": 1261.6448567708333,
+      "b": 1770.7550455729165,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "Tel&GSM 0477/931570",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 997.3338216145834,
+      "t": 1744.8185221354165,
+      "r": 1182.93896484375,
+      "b": 1682.335164388021,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "SLUITINGSDAG|FERME",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1000.8579915364584,
+      "t": 1658.756551106771,
+      "r": 1274.5667317708333,
+      "b": 1624.5675455729165,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "LEVERDATUM",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 992.6349283854166,
+      "t": 1582.1259765625,
+      "r": 1157.09521484375,
+      "b": 1549.1158854166665,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  },
+  {
+   "text": "GARANTIE",
+   "prov": [
+    {
+     "page_no": 1,
+     "bbox": {
+      "l": 1238.1505533854167,
+      "t": 1578.5891927083335,
+      "r": 1361.4957682291667,
+      "b": 1551.4737955729165,
+      "coord_origin": "BOTTOMLEFT"
+     }
+    }
+   ]
+  }
+ ]
+}

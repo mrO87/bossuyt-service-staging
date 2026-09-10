@@ -15,6 +15,58 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.55',
+    date: '10 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'TODO — invullen na deploy',
+        body: 'TODO — beschrijving invullen.',
+      },
+    ],
+  },
+
+  {
+    version: 'v1.54.0',
+    date: '10 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Werkbon uploaden als foto of PDF',
+        body:
+          'Een werkbon die op papier of als PDF binnenkomt kan nu geüpload worden via de cameraknop ' +
+          'in de dagweergave. Bij een foto zet je de vier hoeken van het blad; de bon wordt ' +
+          'rechtgetrokken en uitgelezen. Je krijgt de velden naast de bon te zien en corrigeert ze ' +
+          'voor de werkorder in de open pool komt. Uitlezen gebeurt op onze eigen server — er gaat ' +
+          'geen klantgegeven naar een externe dienst.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Elk uitgelezen veld toont hoe zeker het is',
+        body:
+          'Een veld dat uit zijn eigen vak van de bon komt is stil; een veld dat elders teruggevonden ' +
+          'is krijgt "nakijken" en een veld dat nergens stond "niet gevonden". OCR verwisselt een 0 ' +
+          'en een O zonder te twijfelen, en juist bij een klantnummer als K04647 is dat stil en duur.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De open pool toont tien bonnen in plaats van vier',
+        body:
+          'Nu er papieren bonnen bij komen, vulde de pool sneller dan hij getoond werd en kon een ' +
+          'nieuwe bon onzichtbaar blijven achter oudere. Tijdelijk verhoogd tot tien, tot kantoor de ' +
+          'volledige pool kan zien en zelf kan bepalen welke werkorders een technieker te zien krijgt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een geüploade bon kan niet dubbel aangemaakt worden',
+        body:
+          'Verstuurt de telefoon dezelfde upload twee keer, of tik je twee keer op bevestigen, dan ' +
+          'komt er één werkorder. Zonder verbinding blijft de bon lokaal bewaard tot je weer online ' +
+          'bent, en een bestaand ticketnummer verwijst naar de bestaande werkbon.',
+      },
+    ],
+  },
+  {
     version: 'v1.53.2',
     date: '9 september 2026',
     changes: [
@@ -1090,7 +1142,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.53.2'
+const CURRENT_RELEASE_VERSION = 'v1.55'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

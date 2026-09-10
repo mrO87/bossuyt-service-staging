@@ -43,3 +43,6 @@ next-env.d.ts
 
 # omc tool state
 .omc/
+
+# Runtime uploads (werkbon-PDFs, foto's, geüploade bonnen)
+/public/uploads/

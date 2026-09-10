@@ -61,6 +61,29 @@ interface BossuytDB extends DBSchema {
     key: string                 // clientId (UUID)
     value: TaskCommand
   }
+  intakeUploads: {
+    key: string                 // clientId (UUID)
+    value: IntakeUploadDraft
+  }
+}
+
+/**
+ * A photographed or scanned work order waiting to reach the server.
+ *
+ * Reading a bon needs docling, so an upload cannot be completed offline — but
+ * it can be *kept*. The technician photographs a bon in a machine room with no
+ * signal; this holds the file until there is one. `clientId` travels with it, so
+ * a retry after a half-finished request finds the existing upload on the server
+ * instead of creating a second one.
+ */
+export interface IntakeUploadDraft {
+  clientId: string
+  fileName: string
+  mimeType: string
+  size: number
+  file: Blob
+  createdAt: string
+  lastError?: string
 }
 
 export interface WerkbonDraft {
@@ -128,7 +151,7 @@ function normalizeIntervention(item: Intervention): Intervention {
 
 export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<BossuytDB>('bossuyt-service', 3, {
+    dbPromise = openDB<BossuytDB>('bossuyt-service', 4, {
       upgrade(db, oldVersion) {
         // "interventions" store
         if (!db.objectStoreNames.contains('interventions')) {
@@ -173,6 +196,13 @@ export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
         // "task_commands" — offline task queue
         if (!db.objectStoreNames.contains('task_commands')) {
           db.createObjectStore('task_commands', { keyPath: 'clientId' })
+        }
+
+        // "intakeUploads" — v4. Uploaded bons that have not reached the server
+        // yet. Added, never migrated: every store above is created only when it
+        // is missing, so an existing database keeps all of its data.
+        if (!db.objectStoreNames.contains('intakeUploads')) {
+          db.createObjectStore('intakeUploads', { keyPath: 'clientId' })
         }
       },
     })
@@ -478,4 +508,46 @@ export async function markTaskCommandFailed(clientId: string, error: string): Pr
   const db = await getDB()
   const cmd = await db.get('task_commands', clientId)
   if (cmd) await db.put('task_commands', { ...cmd, error })
+}
+
+// ---------- Uploaded work order bons ----------
+
+/**
+ * Keep an uploaded bon locally before it goes to the server.
+ *
+ * Project rule: every write lands in IndexedDB first. Here that is not
+ * ceremony — the file is a photograph of a piece of paper that may already be
+ * back in a drawer, and it must survive a dropped connection, a closed tab and
+ * a reloaded page.
+ */
+export async function queueIntakeUpload(draft: IntakeUploadDraft): Promise<void> {
+  const db = await getDB()
+  await db.put('intakeUploads', draft)
+}
+
+/** Everything still waiting to be sent, oldest first. */
+export async function getQueuedIntakeUploads(): Promise<IntakeUploadDraft[]> {
+  const db = await getDB()
+  const all = await db.getAll('intakeUploads')
+  return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+/** Drop an upload once the server has confirmed it holds the file. */
+export async function removeIntakeUpload(clientId: string): Promise<void> {
+  const db = await getDB()
+  await db.delete('intakeUploads', clientId)
+}
+
+/** Record why the last attempt failed, so the queue can show it. */
+export async function markIntakeUploadFailed(clientId: string, error: string): Promise<void> {
+  const db = await getDB()
+  const existing = await db.get('intakeUploads', clientId)
+  if (!existing) return
+  await db.put('intakeUploads', { ...existing, lastError: error })
+}
+
+/** One queued upload by the id the phone gave it, or undefined when it is gone. */
+export async function getIntakeUpload(clientId: string): Promise<IntakeUploadDraft | undefined> {
+  const db = await getDB()
+  return db.get('intakeUploads', clientId)
 }

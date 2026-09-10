@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto'
 import { and, eq, type SQL } from 'drizzle-orm'
 import { customers, contacts, devices, sites, workOrderAssignments, workOrders } from '@/lib/db/schema'
 import { withAudit, type Tx } from '@/lib/db/with-audit'
-import type { InterventionType } from '@/types'
+import type { InterventionSource, InterventionStatus, InterventionType } from '@/types'
 
 // ── Errors ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +86,14 @@ export interface CreateWorkOrderInput {
   device?: CreateWorkOrderDevice | null
   technicianIds?: string[]     // first one becomes lead
   createdBy?: string
+
+  // Where the work order came from, and therefore where it shows up. The
+  // defaults ('planned' / 'gepland') are what the ERP route and the wizard have
+  // always produced. An uploaded paper bon passes 'reactive' / 'aangemaakt'
+  // instead, because that pair is what getDayInterventions looks for when it
+  // fills the open pool — see lib/server/interventions.ts.
+  source?: InterventionSource  // default 'planned'
+  status?: InterventionStatus  // default 'gepland'
 }
 
 // ── Parsing the snake_case wire format ───────────────────────────────────────
@@ -462,9 +470,9 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       ticketNumber: input.ticketNumber,
       ticketDate: input.ticketDate ? new Date(input.ticketDate) : null,
       plannedDate: new Date(input.plannedDate),
-      status: 'gepland',
+      status: input.status ?? 'gepland',
       type: input.type ?? 'warm',
-      source: 'planned',
+      source: input.source ?? 'planned',
       description: input.description,
       isUrgent: input.isUrgent ?? false,
       createdBy: input.createdBy ?? null,
@@ -509,10 +517,21 @@ export type CreateWorkOrderHttpResult =
   | { status: 409; body: { error: string; id: string } }
   | { status: 500; body: { error: string } }
 
-export async function handleCreateWorkOrderRequest(rawBody: unknown, createdBy?: string): Promise<CreateWorkOrderHttpResult> {
+export async function handleCreateWorkOrderRequest(
+  rawBody: unknown,
+  createdBy?: string,
+  /**
+   * Fields the caller decides rather than the body. The upload flow uses this
+   * to force a bon into the open pool; the ERP route and the wizard pass
+   * nothing and keep the defaults. Kept out of the wire format on purpose —
+   * where a work order shows up is not something a request should be able to
+   * choose for itself.
+   */
+  overrides?: Pick<CreateWorkOrderInput, 'source' | 'status'>,
+): Promise<CreateWorkOrderHttpResult> {
   try {
     const input = parseCreateWorkOrderBody(rawBody)
-    const result = await createWorkOrder({ ...input, createdBy: input.createdBy ?? createdBy })
+    const result = await createWorkOrder({ ...input, ...overrides, createdBy: input.createdBy ?? createdBy })
     return { status: 201, body: { id: result.id, ticket_number: result.ticketNumber } }
   } catch (err) {
     if (err instanceof ValidationError)      return { status: 400, body: { error: err.message, field: err.field } }
