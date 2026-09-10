@@ -10,6 +10,8 @@ export interface TicketDraft {
   description: string
   isUrgent: boolean
   technicianIds: string[]
+  /** Warning for whoever picks this up. Never printed on the bon. */
+  alertNote: string
 }
 
 interface TechnicianOption { id: string; name: string; initials: string; role: string }
@@ -24,7 +26,7 @@ function today(): string { return new Date().toISOString().slice(0, 10) }
 
 export default function TicketForm({ submitting, serverError, onSubmit }: Props) {
   const [draft, setDraft] = useState<TicketDraft>({
-    ticketNumber: '', ticketDate: today(), plannedDate: today(), description: '', isUrgent: false, technicianIds: [],
+    ticketNumber: '', ticketDate: today(), plannedDate: today(), description: '', isUrgent: false, technicianIds: [], alertNote: '',
   })
   const [touched, setTouched] = useState(false)
   const [technicians, setTechnicians] = useState<TechnicianOption[]>([])
@@ -67,6 +69,19 @@ export default function TicketForm({ submitting, serverError, onSubmit }: Props)
       <Field label="Omschrijving klant" required error={missing('description') ?? fieldError('description')}>
         <textarea rows={4} className={`${inputClass} resize-none`} value={draft.description} onChange={e => setDraft(p => ({ ...p, description: e.target.value }))} placeholder="Nazicht / herstel ..." />
       </Field>
+      <Field label="Melding (optioneel)">
+        <textarea
+          rows={2}
+          className={`${inputClass} resize-none`}
+          value={draft.alertNote}
+          onChange={e => setDraft(p => ({ ...p, alertNote: e.target.value }))}
+          placeholder="Klant eerst bellen op 0477/93 15 70"
+        />
+        <span className="block mt-1 text-xs text-ink-soft">
+          Verschijnt als rood uitroepteken in de lijst en bovenaan de werkbon. Komt niet op de PDF.
+        </span>
+      </Field>
+
       <button
         type="button"
         onClick={() => setDraft(p => ({ ...p, isUrgent: !p.isUrgent }))}

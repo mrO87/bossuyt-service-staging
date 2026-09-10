@@ -15,6 +15,38 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.55',
+    date: '10 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Meerdere techniekers op één werkbon',
+        body:
+          'Open je een bon, dan sta jij er al in. Daarnaast kan je collega\'s aantikken die ' +
+          'meegewerkt hebben — ook wie niet vooraf toegewezen was, want wie meegaat om een ' +
+          'friteuse te lichten moet je kunnen noteren zonder eerst de planning aan te passen. ' +
+          'Alle namen komen op de TECHNICUS-regel van de PDF en het aantal personen volgt vanzelf.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Melding bij een werkbon',
+        body:
+          'Bij het aanmaken van een werkbon kan je een melding meegeven, zoals "klant eerst ' +
+          'bellen op 0477/93 15 70" of "kan enkel op voormiddag". Ze verschijnt als een rood ' +
+          'uitroepteken in de lijst — tik erop voor de tekst — en staat bovenaan de werkbon, ' +
+          'als eerste wat je ziet. Ze komt bewust niet op de PDF: dat is het document dat de ' +
+          'klant tekent.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een melding aanpassen kan enkel wie ze schreef',
+        body:
+          'Wie de melding schreef ziet de knoppen om ze aan te passen of te verwijderen; ' +
+          'iemand anders leest ze alleen. De server controleert dat ook zelf, niet enkel de knop.',
+      },
+    ],
+  },
+  {
     version: 'v1.54.0',
     date: '10 september 2026',
     changes: [
@@ -1130,7 +1162,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.54.0'
+const CURRENT_RELEASE_VERSION = 'v1.55'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

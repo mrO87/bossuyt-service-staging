@@ -27,7 +27,10 @@ export type WorkOrderIntakeStatus = 'nieuw' | 'gelezen' | 'mislukt' | 'bevestigd
 export interface WerkbonFormState {
   status: InterventionStatus | string
   deviceId: string | null
+  /** The lead technician — always the first entry of technicianIds. */
   technicianId: string | null
+  /** Everyone who worked this visit, in the order they were added. */
+  technicianIds: string[]
   visitDate: string            // yyyy-mm-dd
   arrivalTime: string          // ISO datetime or ''
   departureTime: string        // ISO datetime or ''
@@ -153,6 +156,19 @@ export interface Intervention {
   createdBy?: string
   planningVersion?: number
   visibleInPool?: boolean
+
+  /**
+   * A warning the technician must read before setting off — "klant eerst bellen
+   * op 0477/93 15 70", "kan enkel op voormiddag".
+   *
+   * Shown as a red exclamation mark in the list and as the first card on the
+   * werkbon. Deliberately absent from ServiceBonPdfData: the PDF is what the
+   * customer signs, and an internal instruction has no business on it.
+   */
+  alertNote?: string
+  /** Who wrote the note — the only one allowed to change or remove it. */
+  alertNoteBy?: string
+  alertNoteAt?: string
 }
 
 export interface User {

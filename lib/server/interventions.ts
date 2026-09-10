@@ -65,6 +65,9 @@ type InterventionCoreRow = {
   statusOnderwegBy: string | null
   createdBy: string | null
   visibleInPool: boolean
+  alertNote: string | null
+  alertNoteBy: string | null
+  alertNoteAt: Date | null
 }
 
 type AssignmentRow = {
@@ -139,6 +142,9 @@ function toIntervention(
     statusOnderwegBy: row.statusOnderwegBy ?? undefined,
     createdBy: row.createdBy ?? undefined,
     visibleInPool: row.visibleInPool,
+    alertNote: row.alertNote ?? undefined,
+    alertNoteBy: row.alertNoteBy ?? undefined,
+    alertNoteAt: row.alertNoteAt?.toISOString(),
   }
 }
 
@@ -247,6 +253,9 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
       statusOnderwegBy: workOrders.statusOnderwegBy,
       createdBy: workOrders.createdBy,
       visibleInPool: workOrders.visibleInPool,
+      alertNote: workOrders.alertNote,
+      alertNoteBy: workOrders.alertNoteBy,
+      alertNoteAt: workOrders.alertNoteAt,
     })
     .from(workOrders)
     .innerJoin(customers, eq(workOrders.customerId, customers.id))

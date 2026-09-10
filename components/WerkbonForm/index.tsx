@@ -14,8 +14,9 @@ import PhotoUploadSection from './PhotoUploadSection'
 import TaskManager from './TaskManager'
 import Section from './Section'
 import BonHeaderCard from './BonHeaderCard'
-import VisitSection from './VisitSection'
+import VisitSection, { type TechnicianOption } from './VisitSection'
 import DevicePicker from './DevicePicker'
+import AlertNoteCard from './AlertNoteCard'
 
 const STATUS_OPTIONS = [
   { value: 'gepland',          label: 'Gepland',               activeClass: 'bg-stroke text-ink-soft border-stroke',           inactiveClass: 'bg-surface text-ink-soft border-stroke' },
@@ -34,15 +35,31 @@ function isWeekend(isoDate: string): boolean {
   return day === 0 || day === 6
 }
 
-function initialForm(intervention: Intervention): WerkbonFormState {
+/**
+ * The technicians a fresh bon starts with: whoever is filling it in, then the
+ * ones planning assigned.
+ *
+ * The logged-in technician comes first because they are almost always the one
+ * standing at the machine, and because being first makes them the lead — the
+ * name that signs. Duplicates are dropped so being both logged in and assigned
+ * does not list you twice.
+ */
+function initialTechnicianIds(intervention: Intervention, currentUserId?: string): string[] {
+  const assigned = [...intervention.technicians]
+    .sort((a, b) => Number(b.isLead) - Number(a.isLead))
+    .map(t => t.technicianId)
+
+  return [...new Set([currentUserId, ...assigned].filter((id): id is string => Boolean(id)))]
+}
+
+function initialForm(intervention: Intervention, currentUserId?: string): WerkbonFormState {
   const today = todayISODate()
+  const technicianIds = initialTechnicianIds(intervention, currentUserId)
   return {
     status: intervention.status,
     deviceId: intervention.deviceId,
-    technicianId:
-      intervention.technicians.find(t => t.isLead)?.technicianId ??
-      intervention.technicians[0]?.technicianId ??
-      null,
+    technicianIds,
+    technicianId: technicianIds[0] ?? null,
     visitDate: today,
     arrivalTime: '',
     departureTime: '',
@@ -50,7 +67,8 @@ function initialForm(intervention: Intervention): WerkbonFormState {
     workEnd: '',
     interventionKind: isWeekend(today) ? 'weekend' : 'week',
     tripCount: 1,
-    personCount: Math.max(1, intervention.technicians.length),
+    // AANTAL PERSONEN follows who is on the bon, not who was planned.
+    personCount: Math.max(1, technicianIds.length),
     notes: '',
     remarks: '',
     parts: [],
@@ -64,10 +82,14 @@ interface Props {
 }
 
 export default function WerkbonForm({ intervention, initialActivityId }: Props) {
-  const { tasks } = useTasks()
+  const { tasks, currentUser } = useTasks()
   const werkbonId = `wb-${intervention.id}`
 
-  const [form, setForm] = useState<WerkbonFormState>(() => initialForm(intervention))
+  const [form, setForm] = useState<WerkbonFormState>(() => initialForm(intervention, currentUser?.id))
+  // All active technicians, so a colleague who came along can be added without
+  // being assigned to the work order first.
+  const [fetchedTechnicians, setFetchedTechnicians] = useState<TechnicianOption[]>([])
+  const [alertNote, setAlertNote] = useState(intervention.alertNote ?? '')
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [pickedDevice, setPickedDevice] = useState<Device | null>(null)
   const [saving, setSaving] = useState(false)
@@ -83,6 +105,30 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   // Set the moment the technician changes anything. Guards three separate races
   // around the IndexedDB draft — see the two effects below and handleSubmit.
   const isDirty = useRef(false)
+
+  // Everyone who could go on this bon.
+  useEffect(() => {
+    let cancelled = false
+
+    fetch('/api/technicians')
+      .then(r => (r.ok ? r.json() : { technicians: [] }))
+      .then((data: { technicians: Array<TechnicianOption & { role?: string }> }) => {
+        // The route returns every active user, office staff included. Only
+        // technicians go on a bon — the same filter the wizard's picker uses.
+        if (!cancelled) setFetchedTechnicians(data.technicians.filter(t => t.role === 'technician'))
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [])
+
+  // Offline, or while that request is still out, fall back to the technicians
+  // planning assigned — a bon must always be signable. Derived at render rather
+  // than copied into state: one source of truth, and no second render pass.
+  const allTechnicians: TechnicianOption[] =
+    fetchedTechnicians.length > 0
+      ? fetchedTechnicians
+      : intervention.technicians.map(t => ({ id: t.technicianId, name: t.name }))
 
   // ── Draft: load once, then autosave (debounced 500 ms) ──────────────────────
   useEffect(() => {
@@ -173,7 +219,18 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
 
   const bonNumberPreview =
     bonNumber ?? `${intervention.ticketNumber ?? intervention.id}-${String(existingCount + 1).padStart(2, '0')}`
-  const technicianName = intervention.technicians.find(t => t.technicianId === form.technicianId)?.name ?? ''
+  // The TECHNICUS line of the paper bon holds one line of text, so everyone who
+  // worked the visit goes on it, separated by commas, in the order they were
+  // added. Names come from the full technician list because someone can be on
+  // the bon without ever having been assigned to the work order.
+  const technicianName = form.technicianIds
+    .map(id =>
+      allTechnicians.find(t => t.id === id)?.name ??
+      intervention.technicians.find(t => t.technicianId === id)?.name ??
+      '',
+    )
+    .filter(Boolean)
+    .join(', ')
 
   /** Single place that maps form + intervention to the Service Bon PDF input. */
   function buildPdfData(): ServiceBonPdfData {
@@ -232,6 +289,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       const fd = new FormData()
       fd.append('changedBy', form.technicianId ?? intervention.technicians[0]?.technicianId ?? '')
       if (form.technicianId) fd.append('technicianId', form.technicianId)
+      fd.append('technicianIds', JSON.stringify(form.technicianIds))
       if (form.deviceId) fd.append('deviceId', form.deviceId)
       fd.append('completionNotes', form.notes)
       fd.append('remarks', form.remarks)
@@ -299,6 +357,18 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
 
   return (
     <div className="flex flex-col gap-4 pb-10">
+      {/* First thing on the bon, above the header: this is what changes what the
+          technician does next, and reading it after driving out is too late. */}
+      {alertNote && (
+        <AlertNoteCard
+          note={alertNote}
+          noteBy={intervention.alertNoteBy}
+          currentUserId={currentUser?.id ?? ''}
+          workOrderId={intervention.id}
+          onChange={next => setAlertNote(next ?? '')}
+        />
+      )}
+
       <BonHeaderCard intervention={intervention} bonNumberPreview={bonNumberPreview} />
 
       <div className="flex flex-wrap gap-2 px-1">
@@ -349,7 +419,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         queuedPartIds={queuedPartIds}
       />
 
-      <VisitSection form={form} technicians={intervention.technicians} onChange={update} />
+      <VisitSection form={form} technicians={allTechnicians} onChange={update} />
 
       <Section title="OPMERKINGEN | REMARQUES">
         <textarea

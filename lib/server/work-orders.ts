@@ -86,6 +86,12 @@ export interface CreateWorkOrderInput {
   device?: CreateWorkOrderDevice | null
   technicianIds?: string[]     // first one becomes lead
   createdBy?: string
+  /**
+   * A warning for whoever picks this up: "klant eerst bellen op ...". Written
+   * once, when the work order is created; changing it afterwards goes through
+   * PATCH /api/work-orders/[id]/alert-note, which only its author may call.
+   */
+  alertNote?: string
 
   // Where the work order came from, and therefore where it shows up. The
   // defaults ('planned' / 'gepland') are what the ERP route and the wizard have
@@ -206,6 +212,7 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
     device,
     technicianIds,
     createdBy: optionalString(json, 'created_by'),
+    alertNote: optionalString(json, 'alert_note'),
   }
 }
 
@@ -477,6 +484,11 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       isUrgent: input.isUrgent ?? false,
       createdBy: input.createdBy ?? null,
       visibleInPool: true,
+      // The note's author is whoever created the work order — that is the only
+      // person the edit route will later let change it.
+      alertNote: input.alertNote ?? null,
+      alertNoteBy: input.alertNote ? input.createdBy ?? null : null,
+      alertNoteAt: input.alertNote ? new Date() : null,
     }))
     if (!inserted) {
       // A concurrent request committed the same ticket number between our SELECT

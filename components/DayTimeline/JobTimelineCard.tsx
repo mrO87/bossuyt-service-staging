@@ -10,6 +10,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Intervention, InterventionStatus, InterventionType } from '@/types'
 import { TimelineRail, RailLine } from './TimelineRail'
+import AlertNoteBadge from '@/components/AlertNoteBadge'
 
 // ---------- small presentation helpers ----------
 
@@ -134,11 +135,14 @@ export function JobTimelineCard({
             className="flex-1 p-3 cursor-pointer active:opacity-70"
           >
             <div className="flex items-start justify-between mb-1">
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm leading-tight text-ink">
-                  {intervention.customerName}
-                </p>
-                <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
+              <div className="flex-1 min-w-0 flex items-start gap-2">
+                {intervention.alertNote && <AlertNoteBadge note={intervention.alertNote} />}
+                <div className="min-w-0">
+                  <p className="font-bold text-sm leading-tight text-ink">
+                    {intervention.customerName}
+                  </p>
+                  <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
+                </div>
               </div>
               <div className="flex -space-x-2 ml-2 shrink-0">
                 {intervention.technicians.map((tech, i) => (

@@ -134,6 +134,18 @@ export const workOrders = pgTable(
     externalRef:       text('external_ref'),    // stamped back by Navision/Odoo via ERP API
     prefillParts:      jsonb('prefill_parts').$type<PdfPart[]>(),
     visibleInPool:     boolean('visible_in_pool').notNull().default(true),
+
+    // ── Alert note ───────────────────────────────────────────────────────────
+    // Something the technician has to know before setting off: "klant eerst
+    // bellen op 0477/93 15 70", "kan enkel op voormiddag". Shown as a red
+    // exclamation mark in the list and at the top of the werkbon — never on the
+    // printed PDF, which is a document the customer signs.
+    //
+    // alertNoteBy is who wrote it, and is the only person allowed to change or
+    // remove it.
+    alertNote:   text('alert_note'),
+    alertNoteBy: text('alert_note_by'),
+    alertNoteAt: timestamp('alert_note_at', { withTimezone: true }),
   },
   (tbl) => ({
     byTicketNumber: uniqueIndex('work_orders_ticket_number_unique').on(tbl.ticketNumber),
@@ -239,8 +251,14 @@ export const werkbonnen = pgTable('werkbonnen', {
     .notNull()
     .references(() => workOrders.id, { onDelete: 'cascade' }),
   bonNumber:   text('bon_number'),                         // SERVICE BON N°: `${ticket}-NN`
+  // Everyone who worked this visit. `technicianId` stays as the lead — the one
+  // whose name signs the bon and who counts as its author — and is always set
+  // to the first entry of technicianIds when the bon is saved. One writer keeps
+  // the two from drifting apart, and bons written before this column existed
+  // keep working unchanged.
   technicianId: text('technician_id')
     .references(() => technicians.id, { onDelete: 'set null' }),
+  technicianIds: jsonb('technician_ids').$type<string[]>(),
   deviceId:    text('device_id')
     .references(() => devices.id, { onDelete: 'set null' }),
   visitDate:     timestamp('visit_date',     { withTimezone: true }), // BEZOEKDATUM

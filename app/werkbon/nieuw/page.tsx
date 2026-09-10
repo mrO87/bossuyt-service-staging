@@ -160,6 +160,7 @@ export default function NieuwWerkbon() {
       planned_date: ticket.plannedDate,
       description: ticket.description,
       is_urgent: ticket.isUrgent,
+      alert_note: ticket.alertNote.trim() || undefined,
       customer: customerBody,
       site: siteBody,
       device: deviceBody,

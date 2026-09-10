@@ -51,6 +51,31 @@ async function seed() {
       role: 'technician',
       active: true,
     },
+    // Extra technicians so a werkbon can name more than one person on a visit.
+    {
+      id: 'u3',
+      name: 'Sam',
+      initials: 'SA',
+      email: 'sam@fixassistant.com',
+      role: 'technician',
+      active: true,
+    },
+    {
+      id: 'u4',
+      name: 'Bob',
+      initials: 'BO',
+      email: 'bob@fixassistant.com',
+      role: 'technician',
+      active: true,
+    },
+    {
+      id: 'u5',
+      name: 'Gunther',
+      initials: 'GU',
+      email: 'gunther@fixassistant.com',
+      role: 'technician',
+      active: true,
+    },
   ])
 
   await db.insert(customers).values(mockCustomers)

@@ -55,6 +55,8 @@ export default function ConfirmForm({
     phone: extracted.phone ?? '',
     closingDay: extracted.closingDay ?? '',
     isUrgent: false,
+    // Never read off the bon — this is an internal instruction someone types.
+    alertNote: '',
   }))
 
   // Either an existing customer picked from the list, or null meaning "create a
@@ -130,6 +132,7 @@ export default function ConfirmForm({
       ticket_date: draft.ticketDate || undefined,
       description: draft.description.trim(),
       is_urgent: draft.isUrgent,
+      alert_note: draft.alertNote.trim() || undefined,
       customer,
       device: null,
     })
@@ -197,6 +200,19 @@ export default function ConfirmForm({
                 value={draft.description}
                 onChange={e => set('description', e.target.value)}
               />
+            </SourceField>
+
+            <SourceField label="Melding (optioneel)">
+              <textarea
+                rows={2}
+                className={`${inputClass} resize-none`}
+                value={draft.alertNote}
+                onChange={e => set('alertNote', e.target.value)}
+                placeholder="Klant eerst bellen op 0477/93 15 70"
+              />
+              <span className="block mt-1 text-xs text-ink-soft">
+                Verschijnt als rood uitroepteken in de lijst en bovenaan de werkbon. Komt niet op de PDF.
+              </span>
             </SourceField>
 
             <label className="flex items-center gap-3 py-2">

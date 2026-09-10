@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
 import CalendarSheet from '@/components/CalendarSheet'
 import NewWorkOrderMenu from '@/components/WorkOrderIntake/NewWorkOrderMenu'
+import AlertNoteBadge from '@/components/AlertNoteBadge'
 import { useSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
 import type { InterventionStatus, InterventionType } from '@/types'
@@ -315,9 +316,12 @@ export default function DayView() {
             >
               <div className={`w-1 shrink-0 ${typeBorderClass(intervention.type, intervention.isUrgent)}`} />
               <div className="flex-1 p-3">
-                <div className="mb-1">
-                  <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
-                  <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
+                <div className="mb-1 flex items-start gap-2">
+                  {intervention.alertNote && <AlertNoteBadge note={intervention.alertNote} />}
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
+                    <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
+                  </div>
                 </div>
                 {intervention.deviceBrand && (
                   <p className="text-xs font-medium mt-1 text-ink">

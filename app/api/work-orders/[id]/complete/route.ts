@@ -57,6 +57,16 @@ export async function POST(
   const followUpResult = jsonList<PdfFollowUp>(fd, 'followUp')
   if ('error' in followUpResult) return NextResponse.json({ error: 'Ongeldige opvolglijst' }, { status: 400 })
 
+  // Everyone who worked this visit. Rejected rather than silently dropped: a
+  // bon that loses a name has the wrong people on the invoice.
+  const technicianIdsResult = jsonList<string>(fd, 'technicianIds')
+  if ('error' in technicianIdsResult) {
+    return NextResponse.json({ error: 'Ongeldige techniekerlijst' }, { status: 400 })
+  }
+  if (technicianIdsResult.value?.some(entry => typeof entry !== 'string')) {
+    return NextResponse.json({ error: 'Ongeldige techniekerlijst' }, { status: 400 })
+  }
+
   const kindRaw = str(fd, 'interventionKind')
   if (kindRaw && kindRaw !== 'week' && kindRaw !== 'weekend') {
     return NextResponse.json({ error: 'interventionKind moet week of weekend zijn' }, { status: 400 })
@@ -99,7 +109,10 @@ export async function POST(
       id:               werkbonId,
       workOrderId:      id,
       bonNumber:        number,
-      technicianId:     str(fd, 'technicianId'),
+      // The lead is always the first of the list, so the column the PDF and the
+      // audit trail read can never disagree with the list beside it.
+      technicianId:     technicianIdsResult.value?.[0] ?? str(fd, 'technicianId'),
+      technicianIds:    technicianIdsResult.value,
       deviceId:         deviceId ?? wo!.deviceId,
       visitDate:        date(fd, 'visitDate'),
       arrivalTime:      date(fd, 'arrivalTime'),

@@ -1,9 +1,20 @@
-import type { InterventionKind, InterventionTechnician, WerkbonFormState } from '@/types'
+import type { InterventionKind, WerkbonFormState } from '@/types'
 import Section from './Section'
+
+/** A technician who can be put on this visit, as /api/technicians returns them. */
+export interface TechnicianOption {
+  id: string
+  name: string
+}
 
 interface Props {
   form: WerkbonFormState
-  technicians: InterventionTechnician[]
+  /**
+   * Everyone who could have worked this visit — all active technicians, not
+   * only the ones planning assigned. A colleague who came along to lift a
+   * fryer has to be nameable without being re-planned first.
+   */
+  technicians: TechnicianOption[]
   onChange: <K extends keyof WerkbonFormState>(field: K, value: WerkbonFormState[K]) => void
 }
 
@@ -53,21 +64,50 @@ export default function VisitSection({ form, technicians, onChange }: Props) {
   return (
     <Section title="BEZOEK">
       <div className="flex flex-col gap-3">
-        <label className="block">
+        <div>
           <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-soft mb-1">
             Technicus | Technicien
           </span>
-          <select
-            value={form.technicianId ?? ''}
-            onChange={e => onChange('technicianId', e.target.value || null)}
-            className="w-full rounded-xl px-3 py-3 text-base bg-surface border border-stroke text-ink outline-none"
-          >
-            <option value="">—</option>
-            {technicians.map(t => (
-              <option key={t.technicianId} value={t.technicianId}>{t.name}</option>
-            ))}
-          </select>
-        </label>
+          {/*
+            Chips rather than a dropdown, because more than one person can work
+            a visit and a <select> only holds one. The first one tapped stays
+            first: that is the lead, whose name signs the bon.
+          */}
+          <div className="flex flex-wrap gap-2">
+            {technicians.map(technician => {
+              const picked = form.technicianIds.includes(technician.id)
+              return (
+                <button
+                  key={technician.id}
+                  type="button"
+                  aria-pressed={picked}
+                  onClick={() => {
+                    const next = picked
+                      ? form.technicianIds.filter(id => id !== technician.id)
+                      : [...form.technicianIds, technician.id]
+                    onChange('technicianIds', next)
+                    // The lead is always the first of the list, so the two can
+                    // never disagree about who signed.
+                    onChange('technicianId', next[0] ?? null)
+                  }}
+                  className={`px-3 py-2.5 rounded-full text-sm font-semibold border ${
+                    picked
+                      ? 'bg-brand-orange text-white border-brand-orange'
+                      : 'bg-surface text-ink border-stroke'
+                  }`}
+                >
+                  {technician.name}
+                  {picked && <span className="ml-1.5 font-bold">×</span>}
+                </button>
+              )
+            })}
+          </div>
+          {form.technicianIds.length === 0 && (
+            <span className="block mt-1 text-xs text-brand-red font-semibold">
+              Kies minstens één technicus
+            </span>
+          )}
+        </div>
 
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-soft mb-1">
