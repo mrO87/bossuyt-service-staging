@@ -231,7 +231,10 @@ function UploadWerkbon() {
       const json = (await response.json()) as { id?: string; error?: string; field?: string }
 
       if ((response.status === 201 || response.status === 200) && json.id) {
-        router.push(`/interventions/${json.id}`)
+        // The pool, not the work order. The person just typed this bon in and
+        // has no reason to read it back; what they want to see is that it
+        // arrived where the technicians will find it.
+        router.push('/#open-pool')
         return
       }
 

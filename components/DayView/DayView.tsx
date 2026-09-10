@@ -271,7 +271,9 @@ export default function DayView() {
           <DayTimeline plannedInterventions={planned} settings={settings} />
 
         {/* ---------- Open pool ---------- */}
-        <div className="flex items-center justify-between mt-8 mb-2">
+        {/* Anchored so adding a bon can land here rather than at the top of the
+            day: the pool is where the new work order actually turns up. */}
+        <div id="open-pool" className="flex items-center justify-between mt-8 mb-2 scroll-mt-4">
           <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
             Open pool
           </h2>
