@@ -15,6 +15,69 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.56',
+    date: '10 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'Het adres wordt weer gelezen',
+        body:
+          'Op bonnen waar het adres bóven zijn eigen opschrift staat, bleef het veld leeg en ' +
+          'kwam de straat in het contactvak terecht. Dat is rechtgezet — en de gemeente wordt ' +
+          'nu ook herkend als de bon zowel de straat als de plaats in hoofdletters drukt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De knop zegt wat er ontbreekt',
+        body:
+          'Klikken op "Zet in de open pool" met een leeg verplicht veld deed niets, zonder ' +
+          'uit te leggen waarom. Klantnummer, naam, adres en gemeente zeggen nu zelf dat ze ' +
+          'ingevuld moeten worden, zoals ticketnummer en omschrijving dat al deden.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Een verkeerd gelezen straat wordt opgezocht',
+        body:
+          'De scan las "NAPELSTRAAT" waar "Napelsstraat" stond — een straat die niet bestaat ' +
+          'en die geen kaart terugvindt. De straat wordt nu opgezocht bij de postcode die op ' +
+          'de bon staat, en enkel overgenomen als die postcode klopt. Een aangepaste straat ' +
+          'krijgt het label "aangepast", zodat je ze altijd zelf kan nakijken.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De klantnaam wordt voorgesteld',
+        body:
+          'Kon de scan de naam niet lezen, dan wordt gekeken welk bedrijf op dat adres ' +
+          'gekend is. Straat, huisnummer én postcode moeten alle drie kloppen voor er iets ' +
+          'wordt voorgesteld — de buurman invullen is erger dan het veld leeg laten. Zo\'n ' +
+          'naam krijgt het label "voorstel": ze stond niet op de bon.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Een nieuwe locatie komt meteen op de kaart',
+        body:
+          'De coördinaten van een locatie werden pas opgezocht wanneer je een dagroute ' +
+          'berekende. Dat gebeurt nu bij het aanmaken, één keer in plaats van telkens ' +
+          'opnieuw. Lukt het niet, dan verandert er niets: de route zoekt ze alsnog op.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Na het toevoegen van een bon zie je de pool',
+        body:
+          'Je belandde op de werkbon die je net zelf had ingevuld en moest terug om te zien ' +
+          'of ze goed aangekomen was. Nu spring je meteen naar de open pool.',
+      },
+      {
+        label: 'Fix',
+        title: 'Twee leesfouten op gefotografeerde bonnen',
+        body:
+          'Het letterje van de kolom plakte aan het klantnummer wanneer de spatie wegviel: ' +
+          '"L 6950" werd "L6950", een klant die niet bestaat. En de leverdatum uit het vakje ' +
+          'ernaast belandde achter de toestelomschrijving. Beide zijn opgelost.',
+      },
+    ],
+  },
+  {
     version: 'v1.55',
     date: '10 september 2026',
     changes: [
