@@ -140,3 +140,23 @@ describe('nameAtAddress', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('correctStreet en tweetalige namen', () => {
+  it('laat een Brusselse straat staan die OSM in twee talen kent', async () => {
+    // Wetstraat is right. Rue de la Loi is the same street in French, and
+    // handing that back would relabel a correct field as needing review.
+    vi.stubGlobal('fetch', respond([
+      { name: 'Rue de la Loi - Wetstraat', type: 'street', postcode: '1000', city: 'Brussel' },
+    ]))
+    await expect(correctStreet('WETSTRAAT 10', '1000')).resolves.toBeNull()
+  })
+
+  it('corrigeert nog steeds een straat die er echt naast zit', async () => {
+    vi.stubGlobal('fetch', respond([
+      { name: 'Napelsstraat', type: 'street', postcode: '2000', city: 'Antwerpen' },
+    ]))
+    await expect(correctStreet('Napelstraat 42', '2000')).resolves.toEqual({
+      street: 'Napelsstraat', city: 'Antwerpen', caseOnly: false,
+    })
+  })
+})

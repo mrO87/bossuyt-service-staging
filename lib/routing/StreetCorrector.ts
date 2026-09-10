@@ -105,11 +105,19 @@ export async function correctStreet(
     // Identical: nothing to say, and saying it would badge a field that is right.
     if (match.name === bare) return null
 
-    return {
-      street: match.name,
-      city: match.city,
-      caseOnly: match.name.toLowerCase() === bare.toLowerCase(),
-    }
+    const loose = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const read = loose(bare)
+    const found = loose(match.name)
+
+    // Same name, different capitals. Worth taking, not worth a badge.
+    if (found === read) return { street: match.name, city: match.city, caseOnly: true }
+
+    // A Brussels street answers in both languages: "Wetstraat" comes back as
+    // "Rue de la Loi - Wetstraat". The bon was right; OSM is just wordier.
+    // Swapping one in for the other would relabel a correct field as suspect.
+    if (found.includes(read)) return null
+
+    return { street: match.name, city: match.city, caseOnly: false }
   } catch {
     return null
   }
