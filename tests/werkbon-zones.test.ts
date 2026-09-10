@@ -251,3 +251,40 @@ describe('extractWerkbon on a photographed bon', () => {
     }
   })
 })
+
+/**
+ * The Upton bon, where the ERP prints the value above its own label and docling
+ * emits it that way: "B-2000 - ANTWERPEN" arrives before "ADRES | ADRESSE", and
+ * the street sits after the CONTACT label that follows it.
+ */
+const uptonDoc = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/upton-antwerpen-docling.json'), 'utf-8'),
+) as DoclingDocument
+
+describe('extractWerkbon when the value is printed above its label', () => {
+  const result = extractWerkbon(uptonDoc)
+
+  it('still reads the address', () => {
+    // The zone holds "B-2000 - ANTWERPEN ADRES ADRESSE CONTACT NAPELSTRAAT 42".
+    // Nothing follows this field's own label, so the value has to come from the
+    // words no other label claims.
+    expect(result.fields.address).toBe('NAPELSTRAAT 42')
+    expect(result.fields.postalCode).toBe('2000')
+    expect(result.fields.city).toBe('Antwerpen')
+  })
+
+  it('leaves the customer name for the person to fill in', () => {
+    // Its zone holds "K02343 UPTON GIANFRANCO NAAM NOM ... B-2000 - ANTWERPEN",
+    // and a name has no shape to recognise it by. Taking the leftovers here
+    // would put the customer number and the town into the name; the address
+    // gets away with it only because parseAddressBlock can reject what it reads.
+    expect(result.fields.customerName).toBe('')
+    expect(result.sources.customerName).toBe('empty')
+  })
+
+  it('reads the fields that were never in doubt', () => {
+    expect(result.fields.ticketNumber).toBe('TKT20/12774')
+    expect(result.fields.closingDay).toBe('ZONDAG & MAANDAG')
+    expect(result.fields.phone).toBe('0472/ 28 59 58')
+  })
+})

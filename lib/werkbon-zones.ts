@@ -499,8 +499,24 @@ export function parseAddressBlock(text: string): {
     return { address: '', postalCode, city: after, merged: true }
   }
 
+  const street = words.filter(w => !cityWords.includes(w)).join(' ')
+
+  // Capitals separate a town from a street only while the bon prints them
+  // differently. This one shouts both — "ANTWERPEN NAPELSTRAAT 42" — and the
+  // rule then hands every word to the town and leaves the street as a bare
+  // house number. A street with no letters in it is the tell, and the house
+  // number is the better signal: the word in front of it is the street.
+  if (street && !/[A-Za-zÀ-ÿ]/.test(street) && cityWords.length > 1) {
+    return {
+      address: splitHouseNumber(`${cityWords[cityWords.length - 1]} ${street}`),
+      postalCode,
+      city: titleCase(cityWords.slice(0, -1).join(' ')),
+      merged: true,
+    }
+  }
+
   return {
-    address: splitHouseNumber(words.filter(w => !cityWords.includes(w)).join(' ')),
+    address: splitHouseNumber(street),
     postalCode,
     city: titleCase(cityWords.join(' ')),
     merged: true,
@@ -648,7 +664,13 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
   const deliveryDate = readZoneOnly(fragments, 'deliveryDate')
   const warrantyUntil = readZoneOnly(fragments, 'warrantyUntil')
 
-  const addressBlock = zoneText(fragments, ZONES.address, 'address', true)
+  // Not strict, unlike every other field. On a bon that prints the value above
+  // its label there is nothing after ADRES to read, and the street sits past the
+  // CONTACT label that follows — so the words no label claims are the only place
+  // the address can come from. Safe here and nowhere else, because this is the
+  // one field with a shape reader behind it: parseAddressBlock has to recognise
+  // a postal code and a house number, and rejects what it cannot.
+  const addressBlock = zoneText(fragments, ZONES.address, 'address', false)
   const parsedAddress = parseAddressBlock(addressBlock)
 
   return {
