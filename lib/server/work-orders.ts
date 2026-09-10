@@ -7,8 +7,10 @@
  */
 import { randomUUID } from 'crypto'
 import { and, eq, type SQL } from 'drizzle-orm'
+import { db } from '@/lib/db/client'
 import { customers, contacts, devices, sites, workOrderAssignments, workOrders } from '@/lib/db/schema'
 import { withAudit, type Tx } from '@/lib/db/with-audit'
+import { geocodeAddress } from '@/lib/routing/NominatimGeocoder'
 import type { InterventionSource, InterventionStatus, InterventionType } from '@/types'
 
 // ── Errors ────────────────────────────────────────────────────────────────────
@@ -395,6 +397,45 @@ async function findOrCreateSite(
   return id
 }
 
+/**
+ * Give a site its coordinates, once.
+ *
+ * Runs outside the transaction on purpose: Nominatim allows one request per
+ * second and can be slow or absent, and neither is a reason to hold a lock or to
+ * refuse a work order. A site that stays unlocated is not broken — the daily
+ * route geocodes on the fly as it always did, so this is a head start rather
+ * than a dependency.
+ */
+async function locateSite(siteId: string): Promise<void> {
+  // Off in the test env, where creating a work order is routine and the
+  // addresses are invented. Also the switch to reach for if the service starts
+  // costing more than the pin is worth.
+  // VITEST is set by the runner itself, so the tests never reach the network
+  // however anybody's local env files happen to be configured — .env.test is
+  // git-ignored, so a switch there protects only the machine it sits on.
+  if (process.env.VITEST || process.env.GEOCODE_ON_CREATE === 'false') return
+
+  try {
+    const [site] = await db
+      .select({ address: sites.address, city: sites.city, lat: sites.lat })
+      .from(sites)
+      .where(eq(sites.id, siteId))
+
+    // Already located, or nothing to go on. Re-asking would spend a request to
+    // learn what we know, and an address we cannot read will not improve by
+    // being sent anyway.
+    if (!site || site.lat !== null || !site.address || !site.city) return
+
+    const at = await geocodeAddress(site.address, site.city)
+    if (!at) return
+
+    await db.update(sites).set({ lat: at.lat, lon: at.lon }).where(eq(sites.id, siteId))
+  } catch {
+    // Deliberately silent. The work order is already committed and correct; a
+    // missing pin is a smaller problem than an error the person cannot act on.
+  }
+}
+
 async function ensureContact(tx: Tx, siteId: string, customer: CreateWorkOrderCustomer): Promise<void> {
   if (!customer.contact) return
   const [existing] = await tx
@@ -456,7 +497,9 @@ async function findOrCreateDevice(tx: Tx, siteId: string, device: CreateWorkOrde
 // ── Public entry point ───────────────────────────────────────────────────────
 
 export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id: string; ticketNumber: string }> {
-  return withAudit(input.createdBy ?? null, async (tx) => {
+  let createdSiteId: string | null = null
+
+  const created = await withAudit(input.createdBy ?? null, async (tx) => {
     const [duplicate] = await tx
       .select({ id: workOrders.id })
       .from(workOrders)
@@ -465,6 +508,7 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
 
     const customerId = await findOrCreateCustomer(tx, input.customer)
     const siteId     = await findOrCreateSite(tx, customerId, input.customer, input.site)
+    createdSiteId = siteId
     await ensureContact(tx, siteId, input.customer)
     const deviceId   = input.device ? await findOrCreateDevice(tx, siteId, input.device) : null
 
@@ -518,6 +562,12 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
 
     return { id, ticketNumber: input.ticketNumber }
   })
+
+  // After the commit, never during it. The work order is already safe; giving
+  // its site a place on the map is a courtesy that must not be able to undo it.
+  if (createdSiteId) await locateSite(createdSiteId)
+
+  return created
 }
 
 // ── HTTP glue shared by both POST routes ─────────────────────────────────────
