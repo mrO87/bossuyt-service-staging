@@ -1,6 +1,6 @@
 import Field from '@/components/NewWorkOrder/Field'
 
-export type FieldSource = 'zone' | 'label' | 'empty'
+export type FieldSource = 'zone' | 'label' | 'empty' | 'corrected'
 
 interface Props {
   label: string
@@ -27,6 +27,13 @@ const BADGES: Record<FieldSource, { text: string; className: string } | null> = 
   empty: {
     text: 'niet gevonden',
     className: 'bg-brand-red/10 text-brand-red border-brand-red/40',
+  },
+  // The street was read as something that does not exist and swapped for the
+  // one OpenStreetMap knows at this postal code. Almost always right, and never
+  // to be taken on trust: a street is where a technician drives.
+  corrected: {
+    text: 'aangepast',
+    className: 'bg-brand-orange/15 text-brand-orange border-brand-orange/40',
   },
 }
 

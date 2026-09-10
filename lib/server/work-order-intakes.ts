@@ -16,6 +16,7 @@ import { workOrderIntakes, workOrderPhotos } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import { convertDocument, DoclingFailedError, DoclingUnavailableError } from '@/lib/server/docling'
 import { handleCreateWorkOrderRequest, type CreateWorkOrderHttpResult } from '@/lib/server/work-orders'
+import { correctStreet } from '@/lib/routing/StreetCorrector'
 import { extractWerkbon } from '@/lib/werkbon-zones'
 
 export type IntakeRow = typeof workOrderIntakes.$inferSelect
@@ -220,15 +221,31 @@ export async function extractIntakeFields(
     const converted = await convertDocument(blob, `werkbon${extname(intake.originalPath) || '.pdf'}`)
     const extracted = extractWerkbon(converted.document)
 
-    const readAnything = Object.values(extracted.fields).some(value => value !== '')
+    // A street OCR read wrong is a street nobody can drive to and no map can
+    // find. The postal code came off the same scan intact — digits survive
+    // where letters do not — so it can vouch for the correction.
+    const fields = { ...extracted.fields }
+    const sources: Record<string, string> = { ...extracted.sources }
+    if (fields.address && fields.postalCode) {
+      const better = await correctStreet(fields.address, fields.postalCode)
+      if (better) {
+        // Keep the house number: only the name was ever in question.
+        const houseNumber = fields.address.match(/\s(\d+\s*[A-Za-z]?)$/)?.[1] ?? ''
+        fields.address = houseNumber ? `${better.street} ${houseNumber}` : better.street
+        // A moved capital is not worth anybody's attention; a moved letter is.
+        if (!better.caseOnly) sources.address = 'corrected'
+      }
+    }
+
+    const readAnything = Object.values(fields).some(value => value !== '')
 
     await withAudit(changedBy, async (tx) => {
       await tx
         .update(workOrderIntakes)
         .set({
           status: readAnything ? 'gelezen' : 'mislukt',
-          extracted: extracted.fields,
-          fieldSources: extracted.sources,
+          extracted: fields,
+          fieldSources: sources,
           ocrGrade: converted.grade,
           errorMessage: readAnything
             ? null
