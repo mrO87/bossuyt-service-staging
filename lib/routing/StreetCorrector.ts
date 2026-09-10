@@ -43,6 +43,8 @@ type PhotonProperties = {
   type?: string
   postcode?: string
   city?: string
+  street?: string
+  housenumber?: string
 }
 
 export type StreetCorrection = {
@@ -108,6 +110,59 @@ export async function correctStreet(
       city: match.city,
       caseOnly: match.name.toLowerCase() === bare.toLowerCase(),
     }
+  } catch {
+    return null
+  }
+}
+
+/** Loose comparison for a street name: OSM capitalises "Van Den Nestlaan". */
+function sameStreet(a: string, b: string): boolean {
+  const strip = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return strip(a) === strip(b)
+}
+
+/**
+ * The business registered at this exact address, if OpenStreetMap knows one.
+ *
+ * A proposal, never an answer. The bon says who the customer is; this only helps
+ * when OCR could not read the name, and it can be wrong in a way that is hard to
+ * notice — which is why the caller marks the field rather than filling it
+ * quietly.
+ *
+ * Every part of the address has to agree before a name is offered. Photon
+ * answers a query for "Meir 1" with businesses on two neighbouring streets, and
+ * any of them would be a plausible-looking wrong customer.
+ */
+export async function nameAtAddress(
+  street: string,
+  houseNumber: string,
+  postalCode: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!street.trim() || !houseNumber.trim() || !/^\d{4}$/.test(postalCode)) return null
+
+  try {
+    const url = new URL('https://photon.komoot.io/api/')
+    url.searchParams.set('q', `${street} ${houseNumber}, ${postalCode}`)
+    url.searchParams.set('limit', '6')
+
+    const res = await fetch(url.toString(), {
+      headers: { 'User-Agent': 'BossuytServiceApp/1.0' },
+      signal: signal ?? AbortSignal.timeout(6000),
+    })
+    if (!res.ok) return null
+
+    const json = (await res.json()) as { features?: { properties: PhotonProperties }[] }
+    const hit = (json.features ?? [])
+      .map(f => f.properties)
+      .find(p =>
+        Boolean(p.name) &&
+        p.postcode === postalCode &&
+        Boolean(p.street) && sameStreet(p.street!, street) &&
+        p.housenumber === houseNumber,
+      )
+
+    return hit?.name ?? null
   } catch {
     return null
   }

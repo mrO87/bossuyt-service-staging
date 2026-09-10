@@ -1,6 +1,6 @@
 import Field from '@/components/NewWorkOrder/Field'
 
-export type FieldSource = 'zone' | 'label' | 'empty' | 'corrected'
+export type FieldSource = 'zone' | 'label' | 'empty' | 'corrected' | 'suggested'
 
 interface Props {
   label: string
@@ -33,6 +33,13 @@ const BADGES: Record<FieldSource, { text: string; className: string } | null> = 
   // to be taken on trust: a street is where a technician drives.
   corrected: {
     text: 'aangepast',
+    className: 'bg-brand-orange/15 text-brand-orange border-brand-orange/40',
+  },
+  // Nothing on the bon said this. It is the business OpenStreetMap has at that
+  // address, which is usually the customer and occasionally the shop next door
+  // — so it arrives as a proposal and says so.
+  suggested: {
+    text: 'voorstel',
     className: 'bg-brand-orange/15 text-brand-orange border-brand-orange/40',
   },
 }

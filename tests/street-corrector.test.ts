@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { correctStreet } from '@/lib/routing/StreetCorrector'
+import { correctStreet, nameAtAddress } from '@/lib/routing/StreetCorrector'
 
 /**
  * The shapes below are what Photon actually returned for these streets on
@@ -7,7 +7,16 @@ import { correctStreet } from '@/lib/routing/StreetCorrector'
  * the suite stays offline and deterministic: what is under test is the rule that
  * decides which hit to trust, not whether a free service is up.
  */
-function respond(features: { name: string; type: string; postcode?: string; city?: string }[]) {
+function respond(
+  features: {
+    name?: string
+    type: string
+    postcode?: string
+    city?: string
+    street?: string
+    housenumber?: string
+  }[],
+) {
   return vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({ features: features.map(properties => ({ properties })) }),
@@ -82,5 +91,52 @@ describe('correctStreet', () => {
   it('swallows a failing service rather than failing the upload', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
     await expect(correctStreet('Napelstraat 42', '2000')).resolves.toBeNull()
+  })
+})
+
+describe('nameAtAddress', () => {
+  it('offers the business registered at exactly this address', async () => {
+    vi.stubGlobal('fetch', respond([
+      { name: 'Upton', type: 'house', postcode: '2000', city: 'Antwerpen', street: 'Napelsstraat', housenumber: '42' },
+    ]))
+    await expect(nameAtAddress('Napelsstraat', '42', '2000')).resolves.toBe('Upton')
+  })
+
+  it('does not mind how OpenStreetMap capitalises the street', async () => {
+    vi.stubGlobal('fetch', respond([
+      { name: 'Sauna Molenhoeve', type: 'locality', postcode: '2520', city: 'Broechem', street: 'Van Den Nestlaan', housenumber: '132' },
+    ]))
+    await expect(nameAtAddress('Van den Nestlaan', '132', '2520')).resolves.toBe('Sauna Molenhoeve')
+  })
+
+  it('refuses a business on a neighbouring street', async () => {
+    // A real answer to "Meir 1": two of these are a short walk away and both
+    // would look entirely plausible in the customer name field.
+    vi.stubGlobal('fetch', respond([
+      { name: 'Q-Park Shopping Meir', type: 'house', postcode: '2000', street: 'Korte Klarenstraat', housenumber: '10' },
+      { name: 'Kringwinkel Antwerpen', type: 'house', postcode: '2000', street: 'Otto Veniusstraat', housenumber: '11' },
+    ]))
+    await expect(nameAtAddress('Meir', '1', '2000')).resolves.toBeNull()
+  })
+
+  it('refuses a different house number in the right street', async () => {
+    vi.stubGlobal('fetch', respond([
+      { name: 'Iemand anders', type: 'house', postcode: '2000', street: 'Napelsstraat', housenumber: '8' },
+    ]))
+    await expect(nameAtAddress('Napelsstraat', '42', '2000')).resolves.toBeNull()
+  })
+
+  it('stays silent when the address has no business on it', async () => {
+    vi.stubGlobal('fetch', respond([
+      { type: 'house', postcode: '2000', street: 'Napelsstraat', housenumber: '8' },
+    ]))
+    await expect(nameAtAddress('Napelsstraat', '8', '2000')).resolves.toBeNull()
+  })
+
+  it('never asks without a house number', async () => {
+    const fetchMock = respond([])
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(nameAtAddress('Napelsstraat', '', '2000')).resolves.toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

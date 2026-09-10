@@ -16,7 +16,7 @@ import { workOrderIntakes, workOrderPhotos } from '@/lib/db/schema'
 import { withAudit } from '@/lib/db/with-audit'
 import { convertDocument, DoclingFailedError, DoclingUnavailableError } from '@/lib/server/docling'
 import { handleCreateWorkOrderRequest, type CreateWorkOrderHttpResult } from '@/lib/server/work-orders'
-import { correctStreet } from '@/lib/routing/StreetCorrector'
+import { correctStreet, nameAtAddress } from '@/lib/routing/StreetCorrector'
 import { extractWerkbon } from '@/lib/werkbon-zones'
 
 export type IntakeRow = typeof workOrderIntakes.$inferSelect
@@ -234,6 +234,20 @@ export async function extractIntakeFields(
         fields.address = houseNumber ? `${better.street} ${houseNumber}` : better.street
         // A moved capital is not worth anybody's attention; a moved letter is.
         if (!better.caseOnly) sources.address = 'corrected'
+      }
+    }
+
+    // The name is the one field with no shape to recognise it by, so OCR either
+    // reads it or it does not. When it does not, the map often knows who sits at
+    // that address — offered, never assumed, because the business at a door is
+    // usually the customer and sometimes the neighbour.
+    if (!fields.customerName && fields.address && fields.postalCode) {
+      const houseNumber = fields.address.match(/\s(\d+\s*[A-Za-z]?)$/)?.[1]?.trim() ?? ''
+      const street = houseNumber ? fields.address.slice(0, -houseNumber.length).trim() : fields.address
+      const proposed = await nameAtAddress(street, houseNumber, fields.postalCode)
+      if (proposed) {
+        fields.customerName = proposed
+        sources.customerName = 'suggested'
       }
     }
 
