@@ -29,10 +29,19 @@ export const DEFAULT_HOME_ADDRESS: HomeAddress = {
 const DEFAULTS: Settings = {
   startLocation: 'atelier',
   homeAddress: DEFAULT_HOME_ADDRESS,
-  startTime: '07:30',
+  // Matches the roster start in lib/planning/workSchedule.ts.
+  startTime: '07:00',
 }
 
-const STORAGE_KEY = 'bossuyt.settings'
+export const SETTINGS_STORAGE_KEY = 'bossuyt.settings'
+
+/**
+ * The slice of localStorage the read/write helpers need. Narrowing it this far
+ * is what lets them be tested without a browser, and lets a server render pass
+ * `null` instead of pretending storage exists.
+ */
+export type SettingsStore = Pick<Storage, 'getItem' | 'setItem'>
+
 const listeners = new Set<(settings: Settings) => void>()
 let currentSettings: Settings | null = null
 
@@ -60,51 +69,93 @@ export function formatAddressLabel(displayName: string): string {
   return second ? `${first}, ${second}` : first
 }
 
-function readSettingsFromStorage(): Settings {
-  if (typeof window === 'undefined') return DEFAULTS
+function parseHomeAddress(value: unknown): HomeAddress | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<HomeAddress>
+
+  const usable =
+    typeof candidate.display === 'string' &&
+    typeof candidate.lat === 'number' &&
+    typeof candidate.lon === 'number' &&
+    isFinite(candidate.lat) &&
+    isFinite(candidate.lon)
+
+  return usable ? (candidate as HomeAddress) : null
+}
+
+/**
+ * Read settings out of `store`, replacing per field whatever it cannot trust.
+ * Pass `null` when there is no store — during a server render, for instance.
+ *
+ * Deliberately never deletes what it failed to read. Unreadable text is left
+ * where it is: the next successful write overwrites it anyway, and throwing it
+ * away would turn a parsing hiccup into permanent loss.
+ */
+export function readSettingsFrom(store: SettingsStore | null): Settings {
+  if (!store) return DEFAULTS
+
+  let parsed: Record<string, unknown>
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      return {
-        startLocation: parsed.startLocation === 'thuis' ? 'thuis' : DEFAULTS.startLocation,
-        homeAddress:
-          parsed.homeAddress &&
-          typeof parsed.homeAddress.display === 'string' &&
-          typeof parsed.homeAddress.lat === 'number' &&
-          typeof parsed.homeAddress.lon === 'number' &&
-          isFinite(parsed.homeAddress.lat) &&
-          isFinite(parsed.homeAddress.lon)
-            ? parsed.homeAddress
-            : DEFAULTS.homeAddress,
-        startTime: typeof parsed.startTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.startTime)
-          ? parsed.startTime
-          : DEFAULTS.startTime,
-      }
-    }
+    const stored = store.getItem(SETTINGS_STORAGE_KEY)
+    if (!stored) return DEFAULTS
+    parsed = JSON.parse(stored) as Record<string, unknown>
   } catch {
-    localStorage.removeItem(STORAGE_KEY)
+    return DEFAULTS
   }
-  return DEFAULTS
+
+  return {
+    startLocation: parsed.startLocation === 'thuis' ? 'thuis' : DEFAULTS.startLocation,
+    homeAddress: parseHomeAddress(parsed.homeAddress) ?? DEFAULTS.homeAddress,
+    startTime:
+      typeof parsed.startTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.startTime)
+        ? parsed.startTime
+        : DEFAULTS.startTime,
+  }
+}
+
+/**
+ * Write settings to `store`. Returns whether they actually landed.
+ *
+ * A refused write — storage full, or a browser blocking site data — loses only
+ * this one change. It must never remove what was stored before. An earlier
+ * version called `removeItem` here, so a single failure wiped the technician's
+ * start time and start location; see tests/settings-storage.test.ts.
+ */
+export function writeSettingsTo(store: SettingsStore | null, next: Settings): boolean {
+  if (!store) return false
+
+  try {
+    store.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** localStorage, or null when it is missing or refuses to be touched. */
+function browserStore(): SettingsStore | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    // Some browsers throw on the property access itself when site data is off.
+    return null
+  }
 }
 
 function ensureSettings(): Settings {
   if (!currentSettings) {
-    currentSettings = readSettingsFromStorage()
+    currentSettings = readSettingsFrom(browserStore())
   }
 
   return currentSettings
 }
 
 function persistSettings(next: Settings) {
+  // The in-memory value updates either way, so the rest of the session stays
+  // consistent even when the write below cannot land.
   currentSettings = next
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-  } catch {
-    localStorage.removeItem(STORAGE_KEY)
-  }
-
+  writeSettingsTo(browserStore(), next)
   listeners.forEach(listener => listener(next))
 }
 
@@ -136,9 +187,9 @@ export function useSettings() {
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key !== STORAGE_KEY) return
+      if (event.key !== SETTINGS_STORAGE_KEY) return
 
-      const next = readSettingsFromStorage()
+      const next = readSettingsFrom(browserStore())
       currentSettings = next
       listeners.forEach(listener => listener(next))
     }
