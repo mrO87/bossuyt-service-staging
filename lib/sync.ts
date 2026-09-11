@@ -197,6 +197,29 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         continue
       }
 
+      if (write.type === 'update_estimate') {
+        // Its own endpoint rather than the planning door: changing how long a
+        // job takes says nothing about which day it is on, and coupling the two
+        // would make a corrected estimate able to trip a planning conflict.
+        const { workOrderId, estimatedMinutes } = write.payload as {
+          workOrderId: string
+          estimatedMinutes: number | null
+        }
+        const res = await fetch(`/api/work-orders/${workOrderId}/estimate`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estimatedMinutes }),
+        })
+        if (res.ok || res.status === 404) {
+          // A 404 means the work order is gone; replaying forever helps nobody.
+          await removePendingWrite(write.id!)
+          synced++
+        } else {
+          failed++
+        }
+        continue
+      }
+
       if (write.type === 'delete_work_order_photo') {
         const deleted = await deleteServerWorkOrderPhoto(write)
         if (deleted) {
@@ -224,8 +247,14 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         }
         await removePendingWrite(write.id!)
         synced++
-      } else if (res.status === 409 && write.type === 'update_sequence') {
+      } else if (
+        res.status === 409 &&
+        (write.type === 'update_planning' || write.type === 'update_sequence')
+      ) {
+        // The server holds the truth. Take its version of the day, drop our
+        // write — retrying it would only lose again — and say what happened.
         const data = await res.json() as {
+          code?: 'PLANNING_CONFLICT' | 'WORK_ORDER_LOCKED'
           planned: Intervention[]
           open: Intervention[]
         }
@@ -233,7 +262,10 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         await removePendingWrite(write.id!)
         synced++
         conflict = true
-        notice = 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
+        notice =
+          data.code === 'WORK_ORDER_LOCKED'
+            ? 'Een werkbon was al gestart en blijft op de dag staan'
+            : 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
       } else {
         failed++
         break  // stop on first failure — maintain order

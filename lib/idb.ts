@@ -94,11 +94,36 @@ export interface WerkbonDraft {
 
 export interface PendingWrite {
   id?: number
-  type: 'patch_status' | 'remove_intervention' | 'submit_werkbon' | 'update_sequence' | 'upload_work_order_photo' | 'delete_work_order_photo'
+  /**
+   * 'update_planning' states a technician's whole day — which work orders and
+   * in what order. Anything left out goes back to the open pool. Because it is
+   * a result rather than a change, a newer one can simply replace an older one:
+   * see PLANNING_WRITE_TYPES.
+   *
+   * 'update_sequence' is what that write was called when it could only reorder.
+   * The payload shape never changed, so writes queued on a phone before the
+   * update still replay; nothing new is ever enqueued under that name.
+   */
+  type:
+    | 'patch_status'
+    | 'remove_intervention'
+    | 'submit_werkbon'
+    | 'update_planning'
+    | 'update_sequence'
+    | 'update_estimate'
+    | 'upload_work_order_photo'
+    | 'delete_work_order_photo'
   payload: Record<string, unknown>
   createdAt: string
   attempts: number
 }
+
+/**
+ * Every name a pending planning write can carry. Only one such write is ever
+ * queued at a time: dragging twenty times offline has to arrive as one call,
+ * not twenty that each carry a version number the previous one invalidated.
+ */
+export const PLANNING_WRITE_TYPES = ['update_planning', 'update_sequence'] as const
 
 export interface PendingWriteResult {
   synced: number
@@ -433,18 +458,41 @@ export async function enqueuePendingWrite(write: Omit<PendingWrite, 'id' | 'atte
   await db.add('pendingWrites', { ...write, attempts: 0 })
 }
 
-export async function removePendingWritesByType(type: PendingWrite['type']): Promise<void> {
+export async function removePendingWritesByType(
+  type: PendingWrite['type'] | readonly PendingWrite['type'][],
+): Promise<void> {
+  const wanted = Array.isArray(type) ? type : [type]
+
   const db = await getDB()
   const tx = db.transaction('pendingWrites', 'readwrite')
   const items = await tx.store.getAll()
 
   await Promise.all(
     items
-      .filter(item => item.type === type && typeof item.id === 'number')
+      .filter(item => wanted.includes(item.type) && typeof item.id === 'number')
       .map(item => tx.store.delete(item.id!)),
   )
 
   await tx.done
+}
+
+/**
+ * Queue one planning write, replacing whatever planning write was waiting.
+ *
+ * The payload describes the resulting day, so an older one carries no
+ * information the newer one lacks — and keeping both would be worse than
+ * useless: the first would bump the planning version the second still claims,
+ * turning a second drag into a phantom conflict.
+ */
+export async function enqueuePlanningWrite(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await removePendingWritesByType(PLANNING_WRITE_TYPES)
+  await enqueuePendingWrite({
+    type: 'update_planning',
+    createdAt: new Date().toISOString(),
+    payload,
+  })
 }
 
 /** Get all pending writes (to process when back online) */
