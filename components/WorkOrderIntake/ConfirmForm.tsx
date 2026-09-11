@@ -104,12 +104,23 @@ export default function ConfirmForm({
   ) => (touched && !draft[key].trim() ? 'Verplicht' : undefined)
   const fieldError = (wire: string) => (serverError?.field === wire ? serverError.message : undefined)
 
-  const valid = useMemo(() => {
-    if (!draft.ticketNumber.trim() || !draft.description.trim()) return false
+  // Which fields are missing, not merely whether any are: the button has to be
+  // able to name them, and a boolean cannot.
+  const missingFields = useMemo(() => {
+    const out: string[] = []
+    if (!draft.ticketNumber.trim()) out.push('Ticket nr')
+    if (!draft.description.trim()) out.push('Omschrijving')
     // A brand-new customer has to describe itself; an existing one is an id.
-    if (matched) return true
-    return Boolean(draft.customerNumber.trim() && draft.customerName.trim() && draft.address.trim() && draft.city.trim())
+    if (!matched) {
+      if (!draft.customerNumber.trim()) out.push('Klant nr')
+      if (!draft.customerName.trim()) out.push('Naam')
+      if (!draft.address.trim()) out.push('Adres')
+      if (!draft.city.trim()) out.push('Gemeente')
+    }
+    return out
   }, [draft, matched])
+
+  const valid = missingFields.length === 0
 
   function submit() {
     setTouched(true)
@@ -325,6 +336,17 @@ export default function ConfirmForm({
           {serverError && !serverError.field && (
             <p className="rounded-xl bg-brand-red/10 border border-brand-red px-3 py-3 text-sm font-semibold text-brand-red">
               {serverError.message}
+            </p>
+          )}
+
+          {/* The fields are marked too, but they scroll off the top and the
+              button is at the bottom — so pressing it read as nothing at all
+              happening. Say it here, where the person is already looking. */}
+          {touched && missingFields.length > 0 && (
+            <p className="rounded-xl bg-brand-red/10 border border-brand-red px-3 py-3 text-sm font-semibold text-brand-red">
+              {missingFields.length === 1
+                ? `Vul ${missingFields[0]} nog in.`
+                : `Vul deze velden nog in: ${missingFields.join(', ')}.`}
             </p>
           )}
 
