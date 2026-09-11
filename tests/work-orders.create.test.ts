@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  DEFAULT_ESTIMATED_MINUTES,
   DuplicateTicketError,
   ValidationError,
   createWorkOrder,
@@ -77,6 +78,25 @@ describe('parseCreateWorkOrderBody', () => {
     expect(() => parseCreateWorkOrderBody({ ...fixture, planned_date: 'not-a-date' })).toThrowError(ValidationError)
     expect(() => parseCreateWorkOrderBody('nope')).toThrowError(ValidationError)
   })
+
+  it('reads an estimate off the body and leaves it absent when nobody said', () => {
+    expect(parseCreateWorkOrderBody({ ...fixture, estimated_minutes: 45 }).estimatedMinutes).toBe(45)
+    // A form posts strings; the planning needs a number.
+    expect(parseCreateWorkOrderBody({ ...fixture, estimated_minutes: '45' }).estimatedMinutes).toBe(45)
+    // Absent stays absent here — the default is applied on write, not on parse,
+    // so every creation path gets it and not just the ones that parse a body.
+    expect(parseCreateWorkOrderBody(fixture).estimatedMinutes).toBeUndefined()
+    expect(parseCreateWorkOrderBody({ ...fixture, estimated_minutes: '' }).estimatedMinutes).toBeUndefined()
+  })
+
+  it('refuses an estimate that would corrupt the day total', () => {
+    // Zero and negatives would make a job free or give time back; a fraction of
+    // a minute is a typo. Rejecting beats rounding, which hides the mistake.
+    for (const bad of [0, -30, 1.5, 'lang', true]) {
+      expect(() => parseCreateWorkOrderBody({ ...fixture, estimated_minutes: bad }))
+        .toThrowError(ValidationError)
+    }
+  })
 })
 
 describe('createWorkOrder', () => {
@@ -110,6 +130,25 @@ describe('createWorkOrder', () => {
     expect(site?.address).toBe('Van den nestlaan 132')
     expect(site?.city).toBe('2520 Broechem')
     expect(site?.name).toBe('Molenhoeve group bvba')
+  })
+
+  it('gives a work order the default estimate so it occupies time on the planning', async () => {
+    // The timeline sums estimates. Without one a job reads as instant, and a day
+    // of uploaded bons looks empty — the exact day you need to see filling up.
+    const result = await createWorkOrder(parseCreateWorkOrderBody(molenhoeve()))
+    ids.work_order_ids?.push(result.id)
+
+    const [wo] = await testDb.select().from(workOrders).where(eq(workOrders.id, result.id))
+    expect(wo?.estimatedMinutes).toBe(DEFAULT_ESTIMATED_MINUTES)
+    expect(DEFAULT_ESTIMATED_MINUTES).toBe(90)
+  })
+
+  it('keeps an estimate the caller supplied instead of overwriting it with the default', async () => {
+    const result = await createWorkOrder(parseCreateWorkOrderBody(molenhoeve({ estimated_minutes: 240 })))
+    ids.work_order_ids?.push(result.id)
+
+    const [wo] = await testDb.select().from(workOrders).where(eq(workOrders.id, result.id))
+    expect(wo?.estimatedMinutes).toBe(240)
   })
 
   it('reuses an existing customer by customer number and an existing site by address', async () => {

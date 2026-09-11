@@ -15,6 +15,80 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.57',
+    date: '11 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Elke nieuwe werkbon krijgt 1u30',
+        body:
+          'Een werkbon had geen geschatte duur, en de dagplanning telt die duurtijden op. '
+          + 'Een bon zonder schatting telde dus voor niets mee: zet er vijf in een dag en de '
+          + 'planning beweert dat je dag leeg is. Nieuwe werkbonnen krijgen nu standaard 1u30 — '
+          + 'niet juist voor elke job, maar zichtbaar op de planning in plaats van onzichtbaar. '
+          + 'Bestaande werkbonnen houden hun lege schatting.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Geen enkel veld is nog verplicht',
+        body:
+          'In v1.56 werden klantnummer, naam, adres en gemeente verplicht gemaakt. Dat is '
+          + 'teruggedraaid: een bon die maar half leesbaar is, moet je toch kwijt kunnen. '
+          + 'De knop blijft gedempt zolang er iets ontbreekt, zodat je het ziet, maar hij '
+          + 'houdt je niet meer tegen. Elk veld blijft altijd zelf aanpasbaar.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De originele bon hangt aan de werkbon',
+        body:
+          'Bovenaan de werkbon staat nu "Originele bon bekijken". Elk veld eronder is een '
+          + 'lezing van dat blad, dus als een straat of een naam verkeerd staat, is dat de '
+          + 'plek waar het antwoord staat.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Rijden met Waze',
+        body:
+          'Eén knop op de werkbon opent Waze. Er wordt gezocht op de naam van de locatie mét '
+          + 'het adres erbij, en de coördinaten gaan mee als vangnet. Kent Waze het bedrijf, '
+          + 'dan land je aan de ingang die het bedrijf gebruikt; kent hij het niet, dan blijft '
+          + 'de kaartspeld over. Is er niets om op te varen, dan verschijnt de knop niet.',
+      },
+      {
+        label: 'Fix',
+        title: 'Het adres stopte bij de gemeente',
+        body:
+          'Op bonnen waar boven het adres al een gemeente stond, hield de lezer daar op en '
+          + 'bleef de straat leeg — "Prins Boudewijnlaan 20" ontbrak terwijl ze op de bon '
+          + 'stond. Er wordt nu doorgelezen tot de straat gevonden is.',
+      },
+      {
+        label: 'Fix',
+        title: 'Je nieuwe bon stond niet in de pool',
+        body:
+          'Na het toevoegen sprong de app naar de open pool, maar de bon stond er niet. De '
+          + 'app bewaarde de daggegevens vijf minuten en toonde die oude lijst. Na het '
+          + 'toevoegen wordt ze nu ververst.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Foto of bestand, niet allebei tegelijk',
+        body:
+          'Koos je "pdf opladen", dan vroeg de telefoon alsnog camera óf foto. Er zijn nu '
+          + 'drie aparte knoppen — foto maken, foto kiezen, pdf kiezen — die elk meteen het '
+          + 'juiste scherm van je toestel openen.',
+      },
+      {
+        label: 'Fix',
+        title: 'Elke foutmelding komt aan bij de knop',
+        body:
+          'Weigerde de server de bon, dan bleef die uitleg soms bij een veld hangen dat je '
+          + 'niet in beeld had, en leek de knop simpelweg niets te doen. Alle meldingen '
+          + 'verschijnen nu bij de knop waar je op duwt.',
+      },
+    ],
+  },
+  {
     version: 'v1.56',
     date: '10 september 2026',
     changes: [

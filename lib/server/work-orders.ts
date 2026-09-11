@@ -82,6 +82,7 @@ export interface CreateWorkOrderInput {
   plannedDate: string          // ISO date or datetime
   description: string
   isUrgent?: boolean
+  estimatedMinutes?: number    // default DEFAULT_ESTIMATED_MINUTES
   type?: InterventionType      // default 'warm'
   customer: CreateWorkOrderCustomer
   site?: CreateWorkOrderSite   // defaults to the customer address
@@ -135,6 +136,38 @@ function optionalDate(obj: Json, key: string): string | undefined {
 }
 
 const INTERVENTION_TYPES: InterventionType[] = ['warm', 'montage', 'preventief']
+
+/**
+ * How long a service call is assumed to take when nobody said.
+ *
+ * Ninety minutes is the house average. It is wrong for a five-minute reset and
+ * wrong for a compressor swap, but it is wrong *visibly* — it shows up on the
+ * planning as time that has to fit somewhere, where a missing estimate shows up
+ * as nothing at all and quietly makes a full day look free.
+ */
+export const DEFAULT_ESTIMATED_MINUTES = 90
+
+/** Minutes, or undefined to take the default. Rejects nonsense rather than rounding it. */
+function parseEstimatedMinutes(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined
+  // Only a number or a numeric string is an estimate. Anything else coerces
+  // silently and wrongly — Number(true) is 1, Number([]) is 0 — and a job that
+  // claims to take a minute does more damage than one that refuses to be made.
+  if (typeof raw !== 'number' && typeof raw !== 'string') {
+    throw new ValidationError(
+      'estimated_minutes',
+      'estimated_minutes moet een positief aantal minuten zijn',
+    )
+  }
+  const minutes = Number(raw)
+  if (!Number.isInteger(minutes) || minutes <= 0) {
+    throw new ValidationError(
+      'estimated_minutes',
+      'estimated_minutes moet een positief aantal minuten zijn',
+    )
+  }
+  return minutes
+}
 
 export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
   if (!isObject(json)) throw new ValidationError('body', 'Body moet een JSON-object zijn')
@@ -208,6 +241,9 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
     plannedDate,
     description,
     isUrgent: json.is_urgent === true,
+    estimatedMinutes: parseEstimatedMinutes(
+      (json as Record<string, unknown>).estimated_minutes,
+    ),
     type: (typeRaw as InterventionType | undefined) ?? 'warm',
     customer,
     site,
@@ -526,6 +562,7 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       source: input.source ?? 'planned',
       description: input.description,
       isUrgent: input.isUrgent ?? false,
+      estimatedMinutes: input.estimatedMinutes ?? DEFAULT_ESTIMATED_MINUTES,
       createdBy: input.createdBy ?? null,
       visibleInPool: true,
       // The note's author is whoever created the work order — that is the only
