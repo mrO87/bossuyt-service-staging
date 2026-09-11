@@ -9,10 +9,13 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ## Stand van zaken
 
-**v1.57 draait op https://staging.bossuyt.fixassistant.com.** De code in `main`
-loopt daarop voor: v1.58 is gebouwd en groen, maar **nog niet uitgerold**.
+**v1.58 draait op https://staging.bossuyt.fixassistant.com** en is nagemeten in
+een echte browser: slepen werkt beide richtingen en overleeft een herlaadbeurt.
 
-- 278 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
+- 292 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
+- Gepusht naar `feature/service-bon-v1.53`. `main` staat nog op v1.53.1 en is
+  bewust niet aangeraakt; staging bouwt met `context: .` uit de werkmap, niet
+  uit een branch — daarom draaide v1.57 al terwijl `main` achterbleef.
 - Ontwerp: `docs/superpowers/specs/2026-09-11-slepen-pool-planning-design.md`
 
 ### Wat v1.58 bevat
@@ -116,14 +119,34 @@ vraagt gewerkte tijd, en niets schrijft naar `workStart` / `workEnd` /
 
 ## Openstaande punten
 
-### 1. v1.58 staat nog niet op staging — te beslissen
+### 1. De dagplanning toont mock-data zodra de dag leeg is — het ergste punt
 
-De code is klaar en groen. Uitrollen breekt de open tab van de gebruiker, dus
-eerst vragen. Volgorde: **eerst bumpen** (`scripts/pre-staging.sh` doet dat zelf
-en schuift een placeholder in `lib/releases.ts`), **dan de notes schrijven**.
+`app/api/sync/today/route.ts` heeft een terugvalpad: staan er geen geplande
+bonnen in de database, dan vult hij de planning met bonnen uit `lib/mock-data.ts`
+en geeft die de datum van **nu** mee. Op het scherm zie je dan drie jobs die er
+niet zijn, en elke poging ze te verplaatsen eindigt in een 409 — de server kent
+ze niet als werk van die dag.
 
-Na het uitrollen nog met de hand te testen op de telefoon: het slepen zelf. Dat
-is de enige eerlijke test voor aanraking.
+Dit bestond al vóór v1.58 (herordenen van een mock-dag werd net zo goed
+geweigerd), maar het valt nu pas op omdat er iets te slepen valt. Het is
+gevonden doordat u1 geen enkele bon op vandaag had: zijn 17 bonnen liggen tussen
+15/09/2025 en 18/04/2026.
+
+**Voorlopig ondervangen** door twee echte bonnen op vandaag te zetten, zodat de
+terugval niet aanslaat. Dat is een pleister. De vraag die beantwoord moet worden:
+moet dat terugvalpad weg, of alleen op een demo-vlag draaien?
+
+### 1b. Nog met de hand te testen op de telefoon
+
+Het slepen met een echte vinger. Alles is met een muis nagemeten in Chromium;
+de aanraakgreep (250 ms ingedrukt houden, `touch-none` op de greep) is ongewijzigd
+overgenomen van de bestaande code, maar een echte vinger op een echt scherm is
+er nog niet overheen gegaan.
+
+Ook nog niet nagemeten: of het **terugslepen** naar de pool de herlaadbeurt
+overleeft. Het scherm doet het goed en de serverkant is met integratietests
+afgedekt, maar de schrijfactie vertrekt pas bij de volgende synchronisatie en de
+testbrowser sloot daarvoor af.
 
 ### 2. Rekbare tijdlijn — regel vastgelegd, niets schrijft de kolommen
 
@@ -169,18 +192,26 @@ geheugen**, zonder koppeling naar een gebruiker. `/api/push/send` stuurt dus naa
 iedereen en verliest alles bij een herstart. Vereist een `push_subscriptions`-
 tabel met `user_id` voor punt 3 kan.
 
-### 5. `/api/route/daily` geeft 422 op staging
+### 5. `/api/route/daily` faalt op staging — 422 en nu ook 502
 
 Zichtbaar bij elke paginalading. Komt uit `resolveEndpoint`: het geocoderen van
 het startadres mislukt terwijl er geen terugvalcoördinaat meegestuurd is —
 `startFallback` is `undefined` in het venster vlak na het wisselen van
 startlocatie (`useRouteTimeline.ts:196`).
 
-**Waarom het telt:** bij een 422 blijft `travelOverrides` op `null` en valt de
-tijdlijn terug op `mockTravel`. De overloop-waarschuwing zou dan op verzonnen
-rijtijden steunen. Voorlopig ondervangen: `travelIsEstimated` staat in
-`useRouteTimeline`, en `DaySummary` zegt "ongeveer" in plaats van een hard getal.
-De 422 zelf is nog niet opgelost.
+Daarbovenop geeft hij sinds de verificatieronde **502**: `getRouteMatrix` krijgt
+een antwoord van ORS terug in een vorm die hij niet verwacht en valt over
+`Cannot read properties of undefined (reading 'map')`. Vrijwel zeker het
+dagquotum van ORS, opgebruikt door herhaald herladen tijdens het testen. De 502
+zelf is bedoeld gedrag (`route.ts:83`).
+
+**Waarom het telt:** bij een 422 of 502 blijft `travelOverrides` op `null` en
+valt de tijdlijn terug op `mockTravel`. De overloop-waarschuwing zou dan op
+verzonnen rijtijden steunen. Ondervangen: `travelIsEstimated` staat in
+`useRouteTimeline`, en `DaySummary` zegt dan "ongeveer 3u37 te veel" met
+"rijtijden nog geschat" erbij, in plaats van een hard getal. Nagemeten op
+staging. De oorzaak zelf is niet opgelost — en `getRouteMatrix` hoort een
+ORS-foutantwoord netjes af te handelen in plaats van erover te struikelen.
 
 ### 6. Wat na een onderbroken job? — te beslissen
 
@@ -199,7 +230,23 @@ ontwerp. Verdient een eigen brainstorm.
 
 Lesitems voor v1.56, v1.57 en v1.58 staan open. Genoteerd in `STAGING-TODO.md`.
 
-### 9. Testgat: offline samenvouwen
+### 9. De splitsing stond op twee plaatsen — opgelost, maar let op
+
+Bij het nameten op staging bleek: de server splitste de twee lijsten op
+`plannedDate` (zoals bedoeld), maar de browsercache deed het nog op `source`,
+via de IndexedDB-index `by-source`. Een gesleepte bon werd correct bewaard,
+kwam correct terug van de server, stond correct in IndexedDB — en het scherm
+zette hem terug in de pool.
+
+**Geen enkele unittest ving dit**, omdat beide kanten op zich consistent waren.
+Alleen slepen op de draaiende site en herladen maakte het zichtbaar.
+
+De regel staat nu in `lib/planning/listPlacement.ts` (`isOnADay` / `isInThePool`)
+met tests. De SQL in `getTodayInterventions` moet daarmee blijven overeenstemmen
+— een index is nu eenmaal niet via een TypeScript-functie te bevragen, dus die
+twee kopieën blijven bestaan en horen samen gelezen te worden.
+
+### 10. Testgat: offline samenvouwen
 
 `enqueuePlanningWrite` vouwt de wachtrij samen tot één planningsschrijfactie.
 Dat is **niet** met een test afgedekt: er is geen in-memory IndexedDB in de
