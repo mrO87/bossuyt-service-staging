@@ -62,6 +62,11 @@ export const sites = pgTable('sites', {
     .references(() => customers.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   address: text('address').notNull(),
+  // What the scan actually said, kept only when `address` was corrected against
+  // OpenStreetMap. A street read wrong by OCR is repaired so a technician can be
+  // routed there, but the paper is still the record — and somebody comparing the
+  // two has to be able to see what was changed, and undo it.
+  addressScanned: text('address_scanned'),
   city: text('city').notNull(),
   phonePrimary: text('phone_primary'),
   phoneSecondary: text('phone_secondary'),

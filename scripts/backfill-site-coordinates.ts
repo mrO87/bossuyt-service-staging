@@ -7,6 +7,12 @@
  * lat/lon — and a work order at such a site now shows "? min · adres ontbreekt"
  * on the timeline, because the travel estimate has nowhere to measure from.
  *
+ * It may also correct the stored street, but only when all three hold: the
+ * proposal sits in the same postal code (StreetCorrector refuses otherwise), it
+ * is at least 90%% the same text, and the address as stored could not be found
+ * at all. The scan is kept in `address_scanned` so the change is checkable and
+ * reversible.
+ *
  * Dry run by default: it prints what it would write and changes nothing. This
  * touches real customer records, so seeing the answer before storing it is the
  * point, not a formality.
@@ -23,6 +29,7 @@ import { customers, sites } from '@/lib/db/schema'
 import { geocodeAddress, geocodeSearchQuery } from '@/lib/routing/NominatimGeocoder'
 import { correctStreet } from '@/lib/routing/StreetCorrector'
 import { houseNumber, splitCity } from '@/lib/routing/addressParts'
+import { isCloseEnoughToCorrect, similarity } from '@/lib/routing/similarity'
 
 const NOMINATIM_GAP_MS = 1100
 
@@ -58,6 +65,7 @@ async function main(): Promise<void> {
 
   let located = 0
   let failed = 0
+  let corrected = 0
 
   for (const [index, site] of rows.entries()) {
     if (index > 0) await sleep(NOMINATIM_GAP_MS)
@@ -74,6 +82,8 @@ async function main(): Promise<void> {
     const { postalCode, city } = splitCity(site.city)
     let via = 'adres zoals opgeslagen'
     let correction: string | null = null
+    /** Set only when the repair cleared every condition below. */
+    let repairedAddress: string | null = null
 
     // 1. Exactly what the create path does.
     let at = await geocodeAddress(site.address, site.city)
@@ -93,14 +103,29 @@ async function main(): Promise<void> {
     //    typo where Nominatim does not, and the postal code keeps the answer
     //    honest.
     if (!at && postalCode) {
-      const corrected = await correctStreet(site.address, postalCode)
-      if (corrected) {
-        const repaired = `${corrected.street} ${houseNumber(site.address)}`.trim()
-        correction = `${site.address} → ${repaired}`
+      const streetMatch = await correctStreet(site.address, postalCode)
+      if (streetMatch) {
+        const repaired = `${streetMatch.street} ${houseNumber(site.address)}`.trim()
+        const score = similarity(site.address, repaired)
+        correction = `${site.address} → ${repaired}  (${Math.round(score * 100)}% gelijk)`
 
         await sleep(NOMINATIM_GAP_MS)
         at = await geocodeAddress(repaired, city)
-        if (at) via = 'straat gecorrigeerd'
+        if (at) {
+          via = 'straat gecorrigeerd'
+          // Three conditions before the stored address may be overwritten:
+          //
+          //   same town   — correctStreet already refuses a match whose postal
+          //                 code differs, which is what keeps a Kapelstraat in
+          //                 2000 from becoming the one in 2070
+          //   near enough — below nine tenths this is more likely a different
+          //                 street than a misread one
+          //   actually wrong — we only got here because the address as stored
+          //                 could not be found at all
+          if (isCloseEnoughToCorrect(site.address, repaired)) {
+            repairedAddress = repaired
+          }
+        }
       }
     }
 
@@ -121,22 +146,31 @@ async function main(): Promise<void> {
     console.log(`  GEVONDEN      ${label}`)
     console.log(`                ${at.lat.toFixed(6)}, ${at.lon.toFixed(6)}  (${via})`)
     if (correction) {
-      // Reported, never written. Rewriting a customer's street is a decision
-      // about their record, not a side effect of looking up a pin.
-      console.log(`                LET OP, straatnaam wijkt af: ${correction}`)
+      console.log(
+        `                ${repairedAddress ? 'ADRES RECHTGEZET' : 'straat wijkt af, NIET aangepast'}: ${correction}`,
+      )
     }
     located++
+    if (repairedAddress) corrected++
 
     if (write) {
       await db
         .update(sites)
-        .set({ lat: at.lat, lon: at.lon })
+        .set({
+          lat: at.lat,
+          lon: at.lon,
+          // The scan is the record of what the paper said; keep it before
+          // overwriting, so this is checkable and reversible.
+          ...(repairedAddress
+            ? { address: repairedAddress, addressScanned: site.address }
+            : {}),
+        })
         .where(and(eq(sites.id, site.id), isNull(sites.lat)))
     }
   }
 
   console.log('')
-  console.log(`Gevonden: ${located} · niet gevonden: ${failed}`)
+  console.log(`Gevonden: ${located} · niet gevonden: ${failed} · adres rechtgezet: ${corrected}`)
   if (!write && located > 0) {
     console.log('Draai opnieuw met --write om deze coördinaten te bewaren.')
   }
