@@ -13,6 +13,7 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
+import { isInThePool, isOnADay } from '@/lib/planning/listPlacement'
 import type {
   Intervention,
   WerkbonFormState,
@@ -247,17 +248,27 @@ export async function cacheInterventions(items: Intervention[]): Promise<void> {
   await tx.done
 }
 
-/** Get all planned interventions (dispatcher-assigned, has executeBeforeDate) */
+/**
+ * The work orders on the day, and the ones still in the open pool.
+ *
+ * Both scan the cache rather than using the `by-source` index. The index splits
+ * on provenance, which is not what separates the two lists — having a day is —
+ * and IndexedDB cannot index the absence of a field anyway. The cache holds a
+ * single day, so the scan is over a handful of records.
+ *
+ * The index itself is left in place: dropping it would mean a schema version
+ * bump and an upgrade path on every technician's phone, for no gain.
+ */
 export async function getPlannedInterventions(): Promise<Intervention[]> {
   const db = await getDB()
-  // Use the index we created — much faster than scanning all records
-  return (await db.getAllFromIndex('interventions', 'by-source', 'planned')).map(normalizeIntervention)
+  const all = await db.getAll('interventions')
+  return all.filter(isOnADay).map(normalizeIntervention)
 }
 
-/** Get all open pool interventions (technician picks from these) */
 export async function getOpenInterventions(): Promise<Intervention[]> {
   const db = await getDB()
-  return (await db.getAllFromIndex('interventions', 'by-source', 'reactive')).map(normalizeIntervention)
+  const all = await db.getAll('interventions')
+  return all.filter(isInThePool).map(normalizeIntervention)
 }
 
 /** Get a single intervention by id */
