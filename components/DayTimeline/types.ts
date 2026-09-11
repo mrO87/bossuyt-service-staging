@@ -19,8 +19,11 @@ export interface TravelItem {
   id: string          // `travel:<fromId>:<toId>`
   fromId: string
   toId: string
-  minutes: number
-  km: number
+  /** Null when neither the routing service nor an estimate could answer —
+   *  typically a work order whose address never geocoded. */
+  minutes: number | null
+  km: number | null
+  provider: 'ors' | 'estimate' | 'unknown'
 }
 
 /** Items that can be dragged to reorder the day (jobs and the break). */
@@ -43,4 +46,8 @@ export interface RouteTotals {
   /** Break time on the timeline. Counted separately because the roster already
    *  subtracts the unpaid break from the day's capacity. */
   breakMinutes: number
+  /** Legs nobody could measure, because an address is missing. They add zero to
+   *  the total, so the day summary has to say how many are unaccounted for
+   *  rather than quietly reporting a day that looks shorter than it is. */
+  unknownLegs: number
 }

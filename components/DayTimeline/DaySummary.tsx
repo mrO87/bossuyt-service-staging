@@ -5,9 +5,10 @@
  * warns and never blocks: overbooking a day is sometimes the right call, and
  * the screen's job is to stop that happening by accident, not to forbid it.
  *
- * The one thing it must not do is assert a precise overrun built on invented
- * travel times. When the routing service has not answered, the numbers come
- * from mockTravel, and the warning says so rather than pretending.
+ * The one thing it must not do is assert a precise overrun built on numbers it
+ * cannot stand behind. When the routing service has not answered, the travel
+ * times are estimates worked out from coordinates, and the warning says
+ * "ongeveer" rather than pretending to a figure.
  */
 'use client'
 
@@ -20,6 +21,7 @@ export function DaySummary({
   workMinutes,
   travelMinutes,
   breakMinutes,
+  unknownLegs = 0,
   routeLoading,
   travelIsEstimated,
 }: {
@@ -28,6 +30,7 @@ export function DaySummary({
   workMinutes: number
   travelMinutes: number
   breakMinutes: number
+  unknownLegs?: number
   routeLoading?: boolean
   travelIsEstimated?: boolean
 }) {
@@ -63,6 +66,16 @@ export function DaySummary({
       {overrun === 0 && capacity !== null && travelIsEstimated && loadMinutes > capacity * 0.9 && (
         <p className="text-[11px] text-ink-soft px-1">
           Rijtijden nog geschat — de dag zit dicht bij vol.
+        </p>
+      )}
+
+      {unknownLegs > 0 && (
+        // These legs count as zero, so the day looks shorter than it is. Saying
+        // so beats a total that is quietly too low.
+        <p className="text-[11px] text-brand-orange px-1">
+          {unknownLegs === 1
+            ? 'Van één rit is de duur onbekend — er ontbreekt een adres.'
+            : `Van ${unknownLegs} ritten is de duur onbekend — er ontbreken adressen.`}
         </p>
       )}
     </div>

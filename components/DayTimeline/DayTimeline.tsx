@@ -56,6 +56,7 @@ export function DayTimeline({
         workMinutes={totals.workMinutes}
         travelMinutes={totals.travelMinutes}
         breakMinutes={totals.breakMinutes}
+        unknownLegs={totals.unknownLegs}
         routeLoading={routeLoading}
         travelIsEstimated={travelIsEstimated}
       />
@@ -89,7 +90,14 @@ export function DayTimeline({
                     <TimelineNode key={item.id} position="end" label="Einde" address={item.address} />
                   )
                 case 'travel':
-                  return <TravelSegment key={item.id} minutes={item.minutes} km={item.km} />
+                  return (
+                    <TravelSegment
+                      key={item.id}
+                      minutes={item.minutes}
+                      km={item.km}
+                      provider={item.provider}
+                    />
+                  )
                 case 'job':
                   return (
                     <JobTimelineCard
