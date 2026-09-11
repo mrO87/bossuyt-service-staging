@@ -39,7 +39,21 @@ export class OrsRoutingService implements IRoutingService {
         metrics: ['duration', 'distance'],
       }),
     })
+
+    // getETA has always checked this; the matrix never did. So a 403 "Quota
+    // exceeded" arrived below as `data.durations === undefined` and surfaced as
+    // "Cannot read properties of undefined (reading 'map')" — a stack trace
+    // where the log should simply have said the quota was spent.
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`ORS matrix ${res.status}: ${body.slice(0, 200)}`)
+    }
+
     const data = await res.json()
+    if (!Array.isArray(data?.durations)) {
+      throw new Error('ORS matrix: antwoord zonder durations')
+    }
+
     return data.durations.map((row: number[], i: number) =>
       row.map((sec: number, j: number) => applyTravelMargin({
         distanceKm: Math.round(data.distances[i][j] / 100) / 10,
