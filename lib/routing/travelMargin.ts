@@ -20,6 +20,11 @@ export function getTravelMarginRatio(travelMinutes: number, distanceKm: number):
 }
 
 export function applyTravelMargin(result: RouteResult): RouteResult {
+  // Two jobs at one address are not a drive, so there is nothing to pad. The
+  // `+ 1` below would otherwise turn every same-site pair into a minute of
+  // travel that never happens.
+  if (result.travelMinutes <= 0 && result.distanceKm <= 0) return result
+
   const ratio = getTravelMarginRatio(result.travelMinutes, result.distanceKm)
   const adjustedMinutes = Math.max(
     result.travelMinutes + 1,
