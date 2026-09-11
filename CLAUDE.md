@@ -2,6 +2,8 @@
 
 ## Read First
 Before working on this project, read:
+- `OVERDRACHT.md` — where the last session left off: open work, decisions
+  still owed by the user, and findings that cost real time to establish
 - `ARCHITECTURE.md` — data model, sync strategy, project structure
 - `PLANNING.md` — feature list and build phases
 

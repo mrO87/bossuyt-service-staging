@@ -1,3 +1,18 @@
+## v1.57 — Deploy 2026-09-11 08:07  (sha: 4ee178c)
+
+Handmatig uitgerold: `pre-staging.sh` overgeslagen omdat die v1.55 naar v1.56
+zou bumpen terwijl er al een v1.56-blok in lib/releases.ts stond. Versie en
+changenotes zijn met de hand gezet; CURRENT_RELEASE_VERSION stond nog op v1.55.
+
+### Changenotes — lib/releases.ts
+- [x] v1.56 en v1.57 beschreven, beide gaan in deze deploy mee
+- [x] CURRENT_RELEASE_VERSION op v1.57 gezet
+
+### Lessen toevoegen — lib/lessons.ts
+- [ ] Lesson-items schrijven voor v1.56 en v1.57
+
+---
+
 ## v1.53 — Service Bon werkorders  (sha: b611153)
 
 ### Changenotes — lib/releases.ts

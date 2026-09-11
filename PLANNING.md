@@ -1,6 +1,6 @@
 # Bossuyt Service — Planning
 
-## Current State (v1.53)
+## Current State (v1.57)
 
 The app is a mobile-first field service PWA for Bossuyt technicians.
 Staging: https://staging.bossuyt.fixassistant.com
@@ -26,6 +26,12 @@ Staging: https://staging.bossuyt.fixassistant.com
 - [x] Device optional on a work order; the technician picks or adds it on-site
 - [x] PDF is a one-to-one replica of the paper Service Bon (logo, bilingual labels, bank footer)
 - [x] Werkbon draft autosaved to IndexedDB, restored after a refresh
+- [x] Paper bon intake: photo/PDF upload → docling OCR → zone extraction → confirm form
+- [x] Street correction and customer-name proposal via Photon, validated on postcode
+- [x] Sites geocoded once at creation instead of on every route calculation
+- [x] Original bon linked to the work order it was read from
+- [x] Waze link on the work order (name + address searched, coordinates as the net)
+- [x] Every new work order gets a default estimate of 90 minutes
 
 ---
 
@@ -125,3 +131,7 @@ DATABASE_URL_HOST="postgresql://bossuyt:<password>@localhost:5433/bossuyt_stagin
 | 6 | Old historical seed data (pre-v1.13) has no `werkbonnen` records → won't show in history | Low |
 | 7 | No error boundaries or loading states in most components | Low |
 | 8 | GDPR: no data retention policy, no right-to-erasure | Legal |
+| 9 | Work orders created before v1.57 have `estimated_minutes = NULL` and count as zero minutes on the day total | Medium |
+| 10 | The estimate is shown but editable nowhere — conflicts with the rule that every field stays manually adjustable | Medium |
+| 11 | `handleDragEnd` in `DayTimeline.tsx` hardcodes `technicianId: 'u1'` instead of `currentUser.id` | Medium |
+| 12 | `statusArrivedAt`, `workStart` and `workEnd` exist in the schema but nothing ever writes them — blocks the elastic timeline | Medium |
