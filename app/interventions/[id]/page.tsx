@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import AvatarMenu from '@/components/AvatarMenu'
 import WerkbonForm from '@/components/WerkbonForm'
 import { wazeLink } from '@/lib/routing/wazeLink'
+import { WazeIcon } from '@/components/icons/WazeIcon'
 import type { Intervention } from '@/types'
 import { getIntervention, upsertIntervention } from '@/lib/idb'
 
@@ -164,9 +165,7 @@ export default function InterventionPage() {
             className="mb-3 flex items-center justify-between rounded-xl border border-stroke bg-white px-3 py-3 text-sm font-semibold text-ink"
           >
             <span className="flex items-center gap-2">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M3 11l19-9-9 19-2-8-8-2z" />
-              </svg>
+              <WazeIcon size={20} />
               Rijden met Waze
             </span>
             <span className="text-xs font-normal text-ink-soft">
