@@ -349,3 +349,40 @@ describe('extractWerkbon on the parliament bon (photographed)', () => {
     expect(result.fields.deliveryDate).toBe('2014-09-05')
   })
 })
+
+/**
+ * The Decan bon, where the street is printed past the CONTACT label that
+ * follows the address label. Reading from one label to the next stops at the
+ * town and leaves the street behind — which emptied the address, invalidated
+ * the form, and made the confirm button do nothing at all.
+ */
+const decanDoc = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/decan-berchem-docling.json'), 'utf-8'),
+) as DoclingDocument
+
+describe('extractWerkbon when the street sits past the next label', () => {
+  const result = extractWerkbon(decanDoc)
+
+  it('finds the street anyway', () => {
+    // The zone reads "ADRES ADRESSE 2600 - BERCHEM (ANTWERPEN) CONTACT Prins
+    // Boudewijnlaan 20": everything after CONTACT is cut off by the label rule.
+    expect(result.fields.address).toBe('Prins Boudewijnlaan 20')
+    expect(result.fields.postalCode).toBe('2600')
+  })
+
+  it('capitalises a town that carries a bracket', () => {
+    expect(result.fields.city).toBe('Berchem (Antwerpen)')
+  })
+
+  it('keeps the visit date out of the unit number', () => {
+    // The zone reaches the row below on this bon. A unit number is never a date.
+    expect(result.fields.unitNumber).toBe('')
+  })
+
+  it('reads the rest of the bon', () => {
+    expect(result.fields.ticketNumber).toBe('TKT20/12776')
+    expect(result.fields.customerNumber).toBe('K04233')
+    expect(result.fields.phone).toBe('0473/89 76 78')
+    expect(result.fields.description).toBe('Vervangen van sensorplaat op plancha Scholl')
+  })
+})

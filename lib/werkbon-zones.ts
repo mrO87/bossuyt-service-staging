@@ -556,7 +556,7 @@ function splitHouseNumber(street: string): string {
 function titleCase(text: string): string {
   return text
     .toLowerCase()
-    .replace(/(^|[\s-])([a-zà-ÿ])/g, (_, sep: string, letter: string) => sep + letter.toUpperCase())
+    .replace(/(^|[\s\-(\/])([a-zà-ÿ])/g, (_, sep: string, letter: string) => sep + letter.toUpperCase())
 }
 
 // ── Step 5: reading the whole bon ────────────────────────────────────────────
@@ -674,6 +674,12 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
   const phone = readZoneOnly(fragments, 'phone')
   const closingDay = readZoneOnly(fragments, 'closingDay')
   const unitNumber = readZoneOnly(fragments, 'unitNumber')
+  // The visit date sits under this column on some bons and the zone reaches it.
+  // A unit number is never a date, so one that is a date is the other column's.
+  if (/^\d{2}\/\d{2}\/(?:\d{2}|\d{4})$/.test(unitNumber.value.trim())) {
+    unitNumber.value = ''
+    unitNumber.source = 'empty'
+  }
   const deviceDescription = readZoneOnly(fragments, 'deviceDescription')
   // The delivery date sits in the next column with no label between them, so a
   // wide zone sweeps it up. An appliance is never named after a date, which
@@ -696,7 +702,15 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
   // one field with a shape reader behind it: parseAddressBlock has to recognise
   // a postal code and a house number, and rejects what it cannot.
   const addressBlock = zoneText(fragments, ZONES.address, 'address', false)
-  const parsedAddress = parseAddressBlock(addressBlock)
+  let parsedAddress = parseAddressBlock(addressBlock)
+
+  // A town and no street means the reading stopped at the next label with the
+  // street still behind it. Try again on every word in the zone that no label
+  // claims, and keep that only if a street actually comes out of it.
+  if (!parsedAddress.address) {
+    const wholeZone = parseAddressBlock(zoneText(fragments, ZONES.address, undefined, false))
+    if (wholeZone.address) parsedAddress = wholeZone
+  }
 
   return {
     fields: {
