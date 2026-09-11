@@ -251,10 +251,24 @@ Drie van de 21 vestigingen hadden geen `lat`/`lon`, waardoor hun ritten
 2. De straat is fout gescand: het is **Prins Boudewijnlaan**. `correctStreet()`
    (Photon) vond dat wel; Nominatim niet, want die verdraagt geen typfouten.
 
-Het script rapporteert zo'n straatcorrectie maar **schrijft ze niet weg** — een
-klantadres herschrijven is een beslissing over dat dossier, geen bijwerking van
-een coördinaat opzoeken. `sites.address` staat dus nog op de gescande versie.
-**Nog te beslissen:** of die adressen rechtgezet moeten worden.
+**Het adres is rechtgezet** (goedgekeurd door de gebruiker), onder drie
+voorwaarden die alle drie moeten gelden:
+
+1. **zelfde gemeente** — `correctStreet` weigert al een match met een andere
+   postcode; dat is wat een Kapelstraat in 2000 belet een Kapelstraat in 2070 te
+   worden
+2. **minstens 90% gelijk** — `lib/routing/similarity.ts`. Onder die drempel is
+   het eerder een ándere straat dan een verkeerd gelezen straat. Berchem haalde
+   95%.
+3. **het opgeslagen adres was niet vindbaar** — anders komt de code er niet eens
+
+Spaties tellen niet mee bij het vergelijken: OCR plakt woorden even makkelijk aan
+elkaar als het letters weglaat.
+
+Het gescande origineel gaat naar **`sites.address_scanned`** vóór het
+overschreven wordt. `Prinsbouwdewijnlaan 20` staat daar nu. De papieren bon
+blijft het dossier; wie de twee naast elkaar legt moet kunnen zien wat er
+gewijzigd is en het kunnen terugdraaien.
 
 Het script draait standaard als proefdraai en is herbruikbaar: nieuwe
 vestigingen kunnen opnieuw ongelokaliseerd binnenkomen wanneer Nominatim traag
