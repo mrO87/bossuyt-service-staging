@@ -93,6 +93,32 @@ function resolveLeg(cache: TravelCache, from?: Coordinates, to?: Coordinates): R
   return UNKNOWN_LEG
 }
 
+/**
+ * A fingerprint of the day as the server sees it: which work orders, in which
+ * order. Used to notice that the day changed from outside — a sync, or a drag
+ * that has been written — and take the new list.
+ */
+export function externalJobSignature(interventions: Intervention[]): string {
+  return interventions
+    .map(intervention =>
+      `${intervention.id}:${intervention.technicians.find(t => t.isLead)?.plannedOrder ?? 0}`)
+    .join('|')
+}
+
+/**
+ * Whether to replace the working order with what arrived from outside.
+ *
+ * `null` means nothing has arrived yet. An **empty string** does not: it is a
+ * day with no work orders on it, which is a real state and the one this got
+ * wrong. The guard used to be `if (!nextSignature) return`, so emptying a day
+ * was ignored — drag the last job to the pool and it was released on the server
+ * and in the pool list, while the timeline went on drawing it. It could not be
+ * moved again, because as far as the day was concerned it had never left.
+ */
+export function shouldTakeExternalOrder(previous: string | null, next: string): boolean {
+  return previous !== next
+}
+
 /** Insert a 30-minute midday break in the middle of the job list. */
 function insertMiddayBreak(jobs: JobItem[]): MovableItem[] {
   if (jobs.length < 2) return [...jobs]
@@ -147,7 +173,9 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
   }>({})
 
   const fetchIdRef = useRef(0)
-  const lastExternalJobSignatureRef = useRef('')
+  // null, not '': an empty day has an empty signature, and the two must not be
+  // confused — see shouldTakeExternalOrder.
+  const lastExternalJobSignatureRef = useRef<string | null>(null)
   const { movableItems, startAddress, endAddress, sameAsStart } = state
 
   const usingConfiguredStart = startAddress === configuredStartAddress
@@ -180,12 +208,8 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
 
   // Reset the working order when the day's jobs change from outside (a sync).
   useEffect(() => {
-    const nextSignature = plannedInterventions
-      .map(intervention =>
-        `${intervention.id}:${intervention.technicians.find(t => t.isLead)?.plannedOrder ?? 0}`)
-      .join('|')
-
-    if (!nextSignature || nextSignature === lastExternalJobSignatureRef.current) return
+    const nextSignature = externalJobSignature(plannedInterventions)
+    if (!shouldTakeExternalOrder(lastExternalJobSignatureRef.current, nextSignature)) return
 
     lastExternalJobSignatureRef.current = nextSignature
     setState(current => ({ ...current, movableItems: initialState.movableItems }))
