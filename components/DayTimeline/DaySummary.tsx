@@ -15,6 +15,19 @@
 import { formatHours } from '@/components/planning/interventionLabels'
 import { dayCapacityMinutes, overrunMinutes } from '@/lib/planning/workSchedule'
 
+/**
+ * The overrun warning is switched off for now, at the user's request.
+ *
+ * Deliberately a flag rather than deleted code: the calculation is right and
+ * covered by tests, and what is uncertain is whether the warning is useful
+ * before the timeline can stretch a running job past its estimate. Once
+ * statusOnderwegAt / workStart are actually written, a day's remaining time
+ * means something it does not mean yet.
+ *
+ * Flip to true to bring it back. Nothing else needs changing.
+ */
+const SHOW_OVERRUN_WARNING = false
+
 export function DaySummary({
   date,
   jobCount,
@@ -48,7 +61,7 @@ export function DaySummary({
         <Stat label="Rijden" value={formatHours(travelMinutes)} loading={routeLoading} />
       </div>
 
-      {overrun > 0 && (
+      {SHOW_OVERRUN_WARNING && overrun > 0 && (
         <div className="rounded-xl border border-brand-red/40 bg-brand-red/10 px-3 py-2">
           <p className="text-xs font-bold text-brand-red">
             {travelIsEstimated
@@ -63,7 +76,7 @@ export function DaySummary({
         </div>
       )}
 
-      {overrun === 0 && capacity !== null && travelIsEstimated && loadMinutes > capacity * 0.9 && (
+      {SHOW_OVERRUN_WARNING && overrun === 0 && capacity !== null && travelIsEstimated && loadMinutes > capacity * 0.9 && (
         <p className="text-[11px] text-ink-soft px-1">
           Rijtijden nog geschat — de dag zit dicht bij vol.
         </p>
