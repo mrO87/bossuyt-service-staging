@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import AvatarMenu from '@/components/AvatarMenu'
 import WerkbonForm from '@/components/WerkbonForm'
+import { wazeLink } from '@/lib/routing/wazeLink'
 import type { Intervention } from '@/types'
 import { getIntervention, upsertIntervention } from '@/lib/idb'
 
@@ -107,6 +108,17 @@ export default function InterventionPage() {
     )
   }
 
+  // Null when there is nothing to navigate by, and then no button: one that
+  // opens Waze at nowhere looks like it worked.
+  const waze = wazeLink({
+    siteName: intervention.siteName,
+    customerName: intervention.customerName,
+    address: intervention.siteAddress,
+    city: intervention.siteCity,
+    lat: intervention.siteLat,
+    lon: intervention.siteLon,
+  })
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F4F6F8' }}>
 
@@ -142,6 +154,27 @@ export default function InterventionPage() {
         {/* The sheet this was read from. Every field below is an interpretation
             of it, so the original has to stay within reach — it is the only way
             to settle whether a street or a name was read right. */}
+        {/* Waze first: it is what gets reached for before the van moves, while
+            the bon is what gets checked once it stops. */}
+        {waze && (
+          <a
+            href={waze}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-3 flex items-center justify-between rounded-xl border border-stroke bg-white px-3 py-3 text-sm font-semibold text-ink"
+          >
+            <span className="flex items-center gap-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 11l19-9-9 19-2-8-8-2z" />
+              </svg>
+              Rijden met Waze
+            </span>
+            <span className="text-xs font-normal text-ink-soft">
+              {intervention.siteName || intervention.siteAddress}
+            </span>
+          </a>
+        )}
+
         {intervention.scanPath && (
           <a
             href={intervention.scanPath}
