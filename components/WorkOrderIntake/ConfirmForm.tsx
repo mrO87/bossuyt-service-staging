@@ -333,28 +333,36 @@ export default function ConfirmForm({
             )}
           </div>
 
-          {serverError && !serverError.field && (
+          {/* Every refusal shows here, including the ones that also mark a
+              field. A server error naming "ticket_number" used to appear only
+              beside that field, at the top of a form whose button is at the
+              bottom — which from the button looked like nothing happening. */}
+          {serverError && (
             <p className="rounded-xl bg-brand-red/10 border border-brand-red px-3 py-3 text-sm font-semibold text-brand-red">
               {serverError.message}
             </p>
           )}
 
-          {/* The fields are marked too, but they scroll off the top and the
-              button is at the bottom — so pressing it read as nothing at all
-              happening. Say it here, where the person is already looking. */}
-          {touched && missingFields.length > 0 && (
-            <p className="rounded-xl bg-brand-red/10 border border-brand-red px-3 py-3 text-sm font-semibold text-brand-red">
+          {/* Not waiting for a press: needing the button to learn why the button
+              does nothing is the trap this is here to close. */}
+          {missingFields.length > 0 && (
+            <p className="rounded-xl bg-brand-orange/10 border border-brand-orange px-3 py-3 text-sm font-semibold text-brand-orange">
               {missingFields.length === 1
                 ? `Vul ${missingFields[0]} nog in.`
                 : `Vul deze velden nog in: ${missingFields.join(', ')}.`}
             </p>
           )}
 
+          {/* Muted rather than disabled. A disabled button cannot be pressed,
+              and pressing is what marks the fields for somebody who wants to
+              know exactly which one is holding things up. */}
           <button
             type="button"
             onClick={submit}
             disabled={submitting}
-            className="w-full py-4 rounded-xl font-bold text-base bg-brand-orange text-white disabled:opacity-50"
+            className={`w-full py-4 rounded-xl font-bold text-base text-white disabled:opacity-50 ${
+              valid ? 'bg-brand-orange' : 'bg-brand-orange/40'
+            }`}
           >
             {submitting ? 'Bezig…' : 'Zet in de open pool'}
           </button>
