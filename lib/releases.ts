@@ -15,6 +15,71 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.58',
+    date: '11 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Sleep werkbonnen tussen de pool en je dag',
+        body:
+          'Een job uit de open pool kan je nu in je dagplanning slepen, en een job uit je '
+          + 'planning terug naar de pool als de dag niet meer volstaat. Terugleggen maakt de '
+          + 'toewijzing niet ongedaan — de bon blijft van jou, hij heeft alleen geen dag meer. '
+          + 'Slepen werkt ook zonder bereik: alles gaat eerst naar het toestel en vertrekt '
+          + 'zodra je weer online bent, hoe vaak je ondertussen ook geschoven hebt.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De planning zegt het wanneer je dag overloopt',
+        body:
+          'Werk en rijtijd worden opgeteld en vergeleken met je uurrooster: 8u30 van maandag '
+          + 'tot donderdag, 6u00 op vrijdag, telkens met een halfuur onbetaalde pauze eraf. '
+          + 'Loopt de dag over, dan verschijnt er een rode regel met hoeveel te veel. Ze houdt '
+          + 'je niet tegen — soms moet een dag gewoon vol — ze zorgt er alleen voor dat het '
+          + 'niet per ongeluk gebeurt. Zolang de rijtijden nog berekend worden staat er '
+          + '"ongeveer", want dan is het een schatting en geen zekerheid.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De geschatte duur is aanpasbaar geworden',
+        body:
+          'De duurtijd op een werkbon stond vast vanaf het aanmaken. Nu tik je erop en vul je '
+          + 'zelf in hoelang je denkt bezig te zijn. Leeg laten mag ook. Dat is nodig geworden '
+          + 'nu de planning waarschuwt dat je dag overloopt: een getal waar je op afgerekend '
+          + 'wordt, moet je ook kunnen rechtzetten.',
+      },
+      {
+        label: 'Fix',
+        title: 'Je instellingen blijven nu echt bewaard',
+        body:
+          'Startlocatie en startuur sprongen soms terug naar de standaardwaarde. De oorzaak '
+          + 'lag niet bij het bewaren zelf maar bij wat er gebeurde als het één keer mislukte: '
+          + 'dan werden álle instellingen gewist in plaats van alleen de mislukte wijziging. '
+          + 'Op een toestel waarvan de opslag volloopt met bonfoto\'s gebeurt dat vroeg of laat. '
+          + 'Een mislukte poging verliest nu hoogstens die ene wijziging.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Het overzicht van je uren volgt het echte rooster',
+        body:
+          'Het urenoverzicht in je instellingen rekende met 7u45 per dag, elke dag. Dat klopte '
+          + 'met geen enkele dag: het zijn er 8u30 van maandag tot donderdag en 6u00 op vrijdag. '
+          + 'Op vrijdagmiddag beweerde het dus dat je nog bijna twee uur voor de boeg had '
+          + 'terwijl je klaar was. Het leest nu hetzelfde rooster als de planning.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een bon zonder dag hoort in de pool, niet nergens',
+        body:
+          'Een werkbon moest tot nu toe altijd een geplande datum hebben, ook als er nog geen '
+          + 'dag voor gekozen was. Een ingescande bon kreeg daarom de datum van vandaag '
+          + 'opgeplakt — een dag die niemand gekozen had. Geen datum is nu een geldig antwoord, '
+          + 'en het is precies wat een bon in de open pool houdt.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.57',
     date: '11 september 2026',
     changes: [
@@ -1299,7 +1364,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.57'
+const CURRENT_RELEASE_VERSION = 'v1.58'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
