@@ -9,10 +9,11 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ## Stand van zaken
 
-**v1.58 draait op https://staging.bossuyt.fixassistant.com** en is nagemeten in
-een echte browser: slepen werkt beide richtingen en overleeft een herlaadbeurt.
+**v1.59 draait op https://staging.bossuyt.fixassistant.com** en is nagemeten in
+een echte browser: slepen werkt beide richtingen en overleeft een herlaadbeurt,
+en schuiven kost geen enkele netwerkaanroep meer.
 
-- 292 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
+- 324 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
 - Gepusht naar `feature/service-bon-v1.53`. `main` staat nog op v1.53.1 en is
   bewust niet aangeraakt; staging bouwt met `context: .` uit de werkmap, niet
   uit een branch — daarom draaide v1.57 al terwijl `main` achterbleef.
@@ -192,26 +193,59 @@ geheugen**, zonder koppeling naar een gebruiker. `/api/push/send` stuurt dus naa
 iedereen en verliest alles bij een herstart. Vereist een `push_subscriptions`-
 tabel met `user_id` voor punt 3 kan.
 
-### 5. `/api/route/daily` faalt op staging — 422 en nu ook 502
+### 5. Rijtijden — opgelost in v1.59, met één gat
 
-Zichtbaar bij elke paginalading. Komt uit `resolveEndpoint`: het geocoderen van
-het startadres mislukt terwijl er geen terugvalcoördinaat meegestuurd is —
-`startFallback` is `undefined` in het venster vlak na het wisselen van
-startlocatie (`useRouteTimeline.ts:196`).
+**Wat er fout was.** `mockTravel` berekende rijtijden uit een hash van de twee
+werkbon-id's, niet uit adressen. Twee bonnen bij dezelfde klant kregen daardoor
+10 tot 44 minuten rijden — de gemelde "Ennea naar Ennea, 12 min". Nul was per
+constructie onbereikbaar. Elk dagtotaal stond op verzonnen getallen.
 
-Daarbovenop geeft hij sinds de verificatieronde **502**: `getRouteMatrix` krijgt
-een antwoord van ORS terug in een vorm die hij niet verwacht en valt over
-`Cannot read properties of undefined (reading 'map')`. Vrijwel zeker het
-dagquotum van ORS, opgebruikt door herhaald herladen tijdens het testen. De 502
-zelf is bedoeld gedrag (`route.ts:83`).
+**Wat er nu staat.** Vier lagen, goedkoopste eerst:
 
-**Waarom het telt:** bij een 422 of 502 blijft `travelOverrides` op `null` en
-valt de tijdlijn terug op `mockTravel`. De overloop-waarschuwing zou dan op
-verzonnen rijtijden steunen. Ondervangen: `travelIsEstimated` staat in
-`useRouteTimeline`, en `DaySummary` zegt dan "ongeveer 3u37 te veel" met
-"rijtijden nog geschat" erbij, in plaats van een hard getal. Nagemeten op
-staging. De oorzaak zelf is niet opgelost — en `getRouteMatrix` hoort een
-ORS-foutantwoord netjes af te handelen in plaats van erover te struikelen.
+1. `lib/routing/travelCache.ts` — wat de routedienst al verteld heeft, 7 dagen
+   geldig. Sleutel is het coördinatenpaar op 5 decimalen (~1 m).
+2. `lib/routing/knownRoutes.ts` — met de hand vastgezette ritten. Nu alleen
+   atelier ⇄ thuis op 1u30; de berekening zei 1u41.
+3. `lib/routing/estimateTravel.ts` — hemelsbrede afstand × 1,3 omwegfactor,
+   gedeeld door een snelheid die met de afstand meeschaalt (25/40/55/70 km/u).
+4. niets — `? min · adres ontbreekt`, eerlijk.
+
+**De quotumbesparing.** Een matrix-aanroep beantwoordt alle N×N paren; er werden
+er N−1 bewaard en de rest weggegooid. Elke herordening vroeg dus opnieuw. Nu
+worden alle paren bewaard, en de aanroep gebeurt alleen nog als de **verzameling**
+stops verandert, niet de volgorde. Nagemeten op staging: 1 aanroep bij het laden,
+**0 extra na twee keer schuiven**.
+
+Er staat ook een cache op de server (procesbreed), zodat één technieker die zijn
+dag opent hem opwarmt voor de volgende.
+
+**Wat nog open staat:** de rijtijdcache leeft alleen in het geheugen van de tab
+en van het servercontainer-proces. Hij overleeft geen herstart. Hem in IndexedDB
+zetten vraagt een schemaversie-bump; de winst is klein omdat de servercache de
+ORS-aanroep toch al tegenhoudt.
+
+**ORS-quotum.** De sleutel gaf 403 "Quota exceeded" tijdens het testen. Reset is
+een **voortschrijdend venster van 24 uur** vanaf je eerste aanvraag, niet om
+middernacht. Het exacte aantal per endpoint staat alleen in het dashboard op
+account.heigit.org. `getRouteMatrix` controleert nu `res.ok`, dus een quotumfout
+is een nette logregel in plaats van een stack trace.
+
+### 5b. Drie vestigingen zonder coördinaten — daarom `? min`
+
+```
+Jan decan              Prinsbouwdewijnlaan 20, 2600 Berchem
+Molenhoeve group bvba  Van den nestlaan 132, 2520 Broechem
+Test Customer          Teststraat 1, Gent            (testrecord)
+```
+
+18 van de 21 vestigingen hebben wel coördinaten. Deze drie zijn aangemaakt
+voordat er bij het aanmaken gegeocodeerd werd, of het geocoderen mislukte. Ze
+tonen nu `? min · adres ontbreekt` en tellen voor nul mee in het dagtotaal, met
+een melding eronder hoeveel ritten onbekend zijn.
+
+Bij te vullen met een geocodeerronde over `sites` waar `lat`/`lon` leeg zijn —
+de machinerie bestaat (`geocodeSearchQuery`, `StreetCorrector`). Echte data, dus
+wacht op akkoord.
 
 ### 6. Wat na een onderbroken job? — te beslissen
 
