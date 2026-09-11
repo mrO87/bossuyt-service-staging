@@ -93,6 +93,8 @@ describe('alert note on a work order', () => {
       ...parseCreateWorkOrderBody(body({ alert_note: note, created_by: 'u1' })),
       source: 'reactive',
       status: 'aangemaakt',
+      // No day picked: that is what puts a work order in the open pool.
+      plannedDate: undefined,
     })
     ids.work_order_ids!.push(created.id)
 

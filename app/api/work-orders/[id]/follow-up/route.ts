@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
         customerId:  original.customerId,
         siteId:      original.siteId,
         deviceId:    original.deviceId,
-        plannedDate: new Date(), // placeholder — office reschedules via planning
+        plannedDate: null, // no day yet — it waits in the open pool until planned
         status:      'aangemaakt',
         type:        original.type,
         source:      'reactive',

@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
-import type { Intervention, InterventionTechnician } from '@/types'
+import { and, asc, desc, eq, gte, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm'
+import type { Intervention, InterventionTechnician, User } from '@/types'
 import { db } from '@/lib/db'
+import { canLeaveTheDay } from '@/lib/planning/dropIntent'
 import { workOrderIntakes } from '@/lib/db/schema'
 import {
   contacts,
@@ -9,6 +10,7 @@ import {
   sites,
   technicians,
   workOrderAssignments,
+  workOrderEvents,
   workOrders,
 } from '@/lib/db/schema'
 
@@ -53,7 +55,7 @@ type InterventionCoreRow = {
   ticketNumber: string | null
   ticketDate: Date | null
   createdAt: Date | null
-  plannedDate: Date
+  plannedDate: Date | null
   status: Intervention['status']
   type: Intervention['type']
   description: string | null
@@ -130,7 +132,7 @@ function toIntervention(
     ticketNumber: row.ticketNumber ?? undefined,
     ticketDate: row.ticketDate?.toISOString(),
     createdAt: row.createdAt?.toISOString(),
-    plannedDate: row.plannedDate.toISOString(),
+    plannedDate: row.plannedDate?.toISOString(),
     status: row.status,
     type: row.type,
     description: row.description ?? undefined,
@@ -313,31 +315,37 @@ export async function getTodayInterventions(
       asc(workOrders.plannedDate),
     )
 
-  // Reactive work orders not yet scheduled (aangemaakt) — visible in open pool
-  // regardless of whether a technician has been pre-assigned. They stay here
-  // until planning gives them a date, at which point status becomes 'gepland'.
-  const unassignedRows = await db
+  // The open pool: work orders without a day yet. A technician may already be
+  // attached — the pool is not "unassigned work", it is "assigned work nobody
+  // has put on a day". Closed work orders never belong here; there is nothing
+  // left to pick up.
+  //
+  // `plannedDate` is the single field that decides which of the two lists a
+  // work order lands in. `source` stays provenance (planned maintenance versus
+  // an incoming call) and `visibleInPool` stays the manual hide switch.
+  const poolRows = await db
     .select({ workOrderId: workOrders.id })
     .from(workOrders)
     .where(
       and(
-        eq(workOrders.source, 'reactive'),
-        eq(workOrders.status, 'aangemaakt'),
+        isNull(workOrders.plannedDate),
+        eq(workOrders.visibleInPool, true),
+        notInArray(workOrders.status, ['afgewerkt', 'geannuleerd']),
       ),
     )
 
-  const assignedIds   = [...new Set(workOrderIds.map(row => row.workOrderId))]
-  const unassignedIds = unassignedRows.map(row => row.workOrderId)
-  const allIds        = [...new Set([...assignedIds, ...unassignedIds])]
+  const assignedIds = [...new Set(workOrderIds.map(row => row.workOrderId))]
+  const poolIds     = poolRows.map(row => row.workOrderId)
+  const allIds      = [...new Set([...assignedIds, ...poolIds])]
 
   const interventions = await fetchInterventionRows(allIds)
 
   const planned = sortPlanned(
-    interventions.filter(i => assignedIds.includes(i.id) && i.source === 'planned'),
+    interventions.filter(i => assignedIds.includes(i.id)),
   ).slice(0, MAX_PLANNED_ITEMS)
 
   const open = interventions
-    .filter(i => i.source === 'reactive' && i.visibleInPool)
+    .filter(i => poolIds.includes(i.id))
     .sort((a, b) => Number(b.isUrgent) - Number(a.isUrgent))
     .slice(0, MAX_OPEN_ITEMS)
 
@@ -364,9 +372,11 @@ export async function getMonthInterventionDays(
       ),
     )
 
-  const days = new Set(rows.map(row => {
+  // Pool work orders have no day, so they mark no day on the calendar.
+  const days = new Set(rows.flatMap(row => {
     const d = row.plannedDate
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (!d) return []
+    return [`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`]
   }))
   return [...days].sort()
 }
@@ -399,47 +409,139 @@ export async function getPlanningVersion(
   return row?.planningVersion ?? 1
 }
 
-export async function saveTechnicianPlanningOrder(input: {
+
+/**
+ * Who is changing the planning. Present from the start so the authorisation
+ * check that arrives with Keycloak has one place to live: a technician may
+ * shuffle their own day freely, while a planner or admin moving someone's work
+ * around is a different act that the technician has to be told about.
+ */
+export interface PlanningActor {
+  id: string
+  role: User['role']
+}
+
+export type PlanningSnapshotResult =
+  | { ok: true;  planningVersion: number; planned: Intervention[]; open: Intervention[] }
+  | {
+      ok: false
+      reason: 'conflict' | 'locked'
+      lockedWorkOrderIds?: string[]
+      planningVersion: number
+      planned: Intervention[]
+      open: Intervention[]
+    }
+
+/**
+ * Write one complete picture of a technician's day.
+ *
+ * `orderedWorkOrderIds` is the whole day, in order — not a change to it. A work
+ * order in the list that has no day yet gets one; a work order missing from the
+ * list goes back to the open pool. That makes the call idempotent: applying it
+ * twice lands in the same place as applying it once, which is what lets the
+ * offline queue collapse a morning of dragging into a single pending write.
+ *
+ * Its predecessor refused any write where the set of work orders differed from
+ * what the server held, which is precisely what dragging does. That guard is
+ * replaced by two narrower ones: the planningVersion check below, and the rule
+ * that a work order already being worked on never leaves the day.
+ */
+export async function savePlanningSnapshot(input: {
+  actor: PlanningActor
   technicianId: string
   date: string
   planningVersion: number
   orderedWorkOrderIds: string[]
-}): Promise<
-  | { ok: true; planningVersion: number; planned: Intervention[]; open: Intervention[] }
-  | { ok: false; planningVersion: number; planned: Intervention[]; open: Intervention[] }
-> {
+}): Promise<PlanningSnapshotResult> {
   const currentPlanningVersion = await getPlanningVersion(input.technicianId, input.date)
   const latest = await getTodayInterventions(input.technicianId, input.date)
 
+  const refuse = (reason: 'conflict' | 'locked', lockedWorkOrderIds?: string[]) => ({
+    ok: false as const,
+    reason,
+    lockedWorkOrderIds,
+    planningVersion: currentPlanningVersion,
+    planned: latest.planned,
+    open: latest.open,
+  })
+
   if (input.planningVersion !== currentPlanningVersion) {
-    return {
-      ok: false,
-      planningVersion: currentPlanningVersion,
-      planned: latest.planned,
-      open: latest.open,
-    }
+    return refuse('conflict')
   }
 
-  const plannedIds = latest.planned.map(intervention => intervention.id).sort()
-  const requestedIds = [...input.orderedWorkOrderIds].sort()
+  const onTheDay = latest.planned.map(intervention => intervention.id)
+  const requested = input.orderedWorkOrderIds
 
-  if (
-    plannedIds.length !== requestedIds.length ||
-    plannedIds.some((id, index) => id !== requestedIds[index])
-  ) {
-    return {
-      ok: false,
-      planningVersion: currentPlanningVersion,
-      planned: latest.planned,
-      open: latest.open,
-    }
-  }
+  const toRelease  = onTheDay.filter(id => !requested.includes(id))
+  const toSchedule = requested.filter(id => !onTheDay.includes(id))
+
+  // The drag handle is hidden for these, but hiding a control is comfort, not a
+  // guard. An old tab or a replayed offline write must be refused here too.
+  const locked = toRelease.filter(id => {
+    const intervention = latest.planned.find(candidate => candidate.id === id)
+    return !canLeaveTheDay(intervention?.status)
+  })
+  if (locked.length > 0) return refuse('locked', locked)
+
+  // Only work orders actually sitting in the pool may join a day.
+  const poolIds = latest.open.map(intervention => intervention.id)
+  const notInPool = toSchedule.filter(id => !poolIds.includes(id))
+  if (notInPool.length > 0) return refuse('conflict')
 
   const nextPlanningVersion = currentPlanningVersion + 1
+  const { start: dayStart } = getDayBounds(input.date)
+  const touched = [...requested, ...toRelease]
 
   await db.transaction(async (tx) => {
+    // ── back to the pool ──────────────────────────────────────────────────
+    // The assignment row stays: the technician keeps the work order, it simply
+    // has no day any more. Status follows so the badge does not claim someone
+    // is on their way to a job nobody has planned.
+    for (const workOrderId of toRelease) {
+      const current = latest.planned.find(candidate => candidate.id === workOrderId)
+      await tx
+        .update(workOrders)
+        .set({
+          plannedDate: null,
+          plannedByRole: input.actor.role,
+          ...(current?.status === 'gepland' || current?.status === 'onderweg'
+            ? { status: 'aangemaakt' as const }
+            : {}),
+        })
+        .where(eq(workOrders.id, workOrderId))
+    }
+
+    // ── onto the day ──────────────────────────────────────────────────────
+    for (const workOrderId of toSchedule) {
+      const current = latest.open.find(candidate => candidate.id === workOrderId)
+
+      await tx
+        .insert(workOrderAssignments)
+        .values({
+          workOrderId,
+          technicianId: input.technicianId,
+          isLead: true,
+          accepted: false,
+          plannedOrder: 0,
+        })
+        .onConflictDoUpdate({
+          target: [workOrderAssignments.workOrderId, workOrderAssignments.technicianId],
+          set: { isLead: true },
+        })
+
+      await tx
+        .update(workOrders)
+        .set({
+          plannedDate: dayStart,
+          plannedByRole: input.actor.role,
+          ...(current?.status === 'aangemaakt' ? { status: 'gepland' as const } : {}),
+        })
+        .where(eq(workOrders.id, workOrderId))
+    }
+
+    // ── the order itself ──────────────────────────────────────────────────
     await Promise.all(
-      input.orderedWorkOrderIds.map((workOrderId, index) =>
+      requested.map((workOrderId, index) =>
         tx
           .update(workOrderAssignments)
           .set({ plannedOrder: index + 1 })
@@ -452,11 +554,27 @@ export async function saveTechnicianPlanningOrder(input: {
       ),
     )
 
-    if (input.orderedWorkOrderIds.length > 0) {
+    if (touched.length > 0) {
       await tx
         .update(workOrders)
         .set({ planningVersion: nextPlanningVersion })
-        .where(inArray(workOrders.id, input.orderedWorkOrderIds))
+        .where(inArray(workOrders.id, touched))
+    }
+
+    // One event per moved work order. Nobody reads these yet; they are the
+    // record the change notice and the planning board will be built on.
+    for (const workOrderId of [...toSchedule, ...toRelease]) {
+      await tx.insert(workOrderEvents).values({
+        workOrderId,
+        actorId:   input.actor.id,
+        eventType: 'planning_changed',
+        payload: {
+          actorRole:    input.actor.role,
+          technicianId: input.technicianId,
+          date:         input.date,
+          to:           toSchedule.includes(workOrderId) ? 'day' : 'pool',
+        },
+      })
     }
   })
 

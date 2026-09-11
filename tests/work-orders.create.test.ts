@@ -119,7 +119,7 @@ describe('createWorkOrder', () => {
     expect(wo?.source).toBe('planned')
     expect(wo?.description).toBe(fixture.description)
     expect(wo?.ticketDate?.toISOString().slice(0, 10)).toBe('2026-09-04')
-    expect(wo?.plannedDate.toISOString().slice(0, 10)).toBe('2026-09-05')
+    expect(wo?.plannedDate?.toISOString().slice(0, 10)).toBe('2026-09-05')
 
     const [customer] = await testDb.select().from(customers).where(eq(customers.id, wo!.customerId))
     expect(customer?.customerNumber).toBe((body.customer as { number: string }).number)

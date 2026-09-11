@@ -86,7 +86,10 @@ describe('confirmIntake', () => {
     expect(created.visibleInPool).toBe(true)
   })
 
-  it('fills in a planning date so the NOT NULL column is satisfied', async () => {
+  it('leaves the planning date empty, which is what puts it in the pool', async () => {
+    // It used to be stamped with today's date purely to satisfy a NOT NULL
+    // column, which made an unplanned bon claim a day it never had. Absence of
+    // a date is now the thing that keeps it in the open pool.
     const intake = await insertIntake()
     intakeIds.push(intake.id)
 
@@ -95,7 +98,7 @@ describe('confirmIntake', () => {
     ids.work_order_ids!.push(workOrderId)
 
     const [created] = await testDb.select().from(workOrders).where(eq(workOrders.id, workOrderId))
-    expect(created.plannedDate).toBeInstanceOf(Date)
+    expect(created.plannedDate).toBeNull()
   })
 
   it('marks the intake confirmed and links it to the work order it became', async () => {

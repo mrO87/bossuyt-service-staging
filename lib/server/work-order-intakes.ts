@@ -76,14 +76,12 @@ export type ConfirmResult =
  *
  * Three things are decided here rather than by the request body:
  *
- * - `source: 'reactive'` and `status: 'aangemaakt'`, because that is the pair
- *   getDayInterventions looks for when it fills the pool. A bon that arrived on
- *   paper has not been scheduled by planning, so it belongs there and not in
- *   somebody's day list.
- * - a placeholder `planned_date` of today when the body carries none. An
- *   unplanned bon has no date by definition, but the column is NOT NULL and
- *   planning overwrites it as soon as the job is scheduled. The follow-up route
- *   does exactly the same for exactly the same reason.
+ * - `source: 'reactive'` and `status: 'aangemaakt'`, recording that a bon which
+ *   arrived on paper has not been scheduled by planning.
+ * - no `planned_date`. An unplanned bon has no date by definition, and that
+ *   absence is now exactly what puts it in the open pool. It used to be given
+ *   today's date as a placeholder purely because the column was NOT NULL; that
+ *   constraint is gone, so the lie can go with it.
  */
 export async function confirmIntake(
   intakeId: string,
@@ -99,9 +97,7 @@ export async function confirmIntake(
     return { status: 200, body: { id: intake.workOrderId, already: true } }
   }
 
-  const body = withPlaceholderPlannedDate(rawBody)
-
-  const result = await handleCreateWorkOrderRequest(body, changedBy, {
+  const result = await handleCreateWorkOrderRequest(rawBody, changedBy, {
     source: 'reactive',
     status: 'aangemaakt',
   })
@@ -119,17 +115,6 @@ export async function confirmIntake(
   })
 
   return result
-}
-
-/** Fill in today's date when the body has none, leaving a supplied one alone. */
-function withPlaceholderPlannedDate(rawBody: unknown): unknown {
-  if (typeof rawBody !== 'object' || rawBody === null) return rawBody
-
-  const body = rawBody as Record<string, unknown>
-  const supplied = typeof body.planned_date === 'string' ? body.planned_date.trim() : ''
-  if (supplied) return body
-
-  return { ...body, planned_date: new Date().toISOString() }
 }
 
 /**

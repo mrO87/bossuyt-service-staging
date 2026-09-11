@@ -103,7 +103,7 @@ async function seed() {
       customerId: intervention.customerId,
       siteId: intervention.siteId,
       deviceId: intervention.deviceId,
-      plannedDate: new Date(intervention.plannedDate),
+      plannedDate: intervention.plannedDate ? new Date(intervention.plannedDate) : null,
       status: intervention.status,
       type: intervention.type,
       source: intervention.source,

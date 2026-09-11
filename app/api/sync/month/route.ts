@@ -30,10 +30,7 @@ export async function GET(req: NextRequest) {
         i.status === 'gepland' &&
         i.technicians.some(t => t.technicianId === technicianId),
       )
-      .map(i => {
-        const d = new Date(i.plannedDate)
-        return toLocalDateStr(d)
-      })
+      .flatMap(i => (i.plannedDate ? [toLocalDateStr(new Date(i.plannedDate))] : []))
       .filter(d => {
         const [y, m] = d.split('-').map(Number)
         return y === year && m === month

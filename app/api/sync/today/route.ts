@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       const end = new Date(`${date}T23:59:59.999Z`)
 
       const mockForDay = mockInterventions.filter(i => {
+        if (!i.plannedDate) return false   // pool item — belongs to no day
         const d = new Date(i.plannedDate)
         return d >= start && d <= end && i.status === 'gepland'
       })

@@ -79,7 +79,8 @@ export interface CreateWorkOrderDevice {
 export interface CreateWorkOrderInput {
   ticketNumber: string
   ticketDate?: string          // ISO date
-  plannedDate: string          // ISO date or datetime
+  /** Absent means the work order lands in the open pool — no day picked yet. */
+  plannedDate?: string         // ISO date or datetime
   description: string
   isUrgent?: boolean
   estimatedMinutes?: number    // default DEFAULT_ESTIMATED_MINUTES
@@ -173,8 +174,8 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
   if (!isObject(json)) throw new ValidationError('body', 'Body moet een JSON-object zijn')
 
   const ticketNumber = requiredString(json, 'ticket_number', 'ticket_number')
+  // No date is a valid answer: the work order then waits in the open pool.
   const plannedDate  = optionalDate(json, 'planned_date')
-  if (!plannedDate) throw new ValidationError('planned_date', 'planned_date is verplicht')
   const description  = requiredString(json, 'description', 'description')
   const ticketDate   = optionalDate(json, 'ticket_date')
 
@@ -556,7 +557,7 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       deviceId,
       ticketNumber: input.ticketNumber,
       ticketDate: input.ticketDate ? new Date(input.ticketDate) : null,
-      plannedDate: new Date(input.plannedDate),
+      plannedDate: input.plannedDate ? new Date(input.plannedDate) : null,
       status: input.status ?? 'gepland',
       type: input.type ?? 'warm',
       source: input.source ?? 'planned',

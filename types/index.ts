@@ -142,7 +142,9 @@ export interface Intervention {
   ticketNumber?: string   // TICKET N° (ERP)
   ticketDate?: string     // DATUM TICKET (ISO)
   createdAt?: string
-  plannedDate: string
+  /** Absent while the work order sits in the open pool — assigned, but no day
+   *  picked yet. Having a day is what moves it into the planning. */
+  plannedDate?: string
   status: InterventionStatus
   type: InterventionType
   description?: string    // reported problem (OMSCHRIJVING KLANT)

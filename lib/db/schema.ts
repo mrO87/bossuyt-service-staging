@@ -109,7 +109,14 @@ export const workOrders = pgTable(
     // Optional: a ticket can arrive before the technician knows which unit is broken.
     deviceId: text('device_id')
       .references(() => devices.id, { onDelete: 'restrict' }),
-    plannedDate: timestamp('planned_date', { withTimezone: true }).notNull(),
+    // Null means the work order sits in the open pool: assigned work without a
+    // day yet. This is the single field deciding which of the two lists a work
+    // order appears in — see getTodayInterventions.
+    plannedDate: timestamp('planned_date', { withTimezone: true }),
+    // Which role last moved this work order on or off a day. Written by
+    // savePlanningSnapshot and read by nobody yet: it is the record the change
+    // notice and the planner's lock will be built on once roles arrive.
+    plannedByRole: text('planned_by_role').$type<User['role']>(),
     status: text('status').$type<InterventionStatus>().notNull(),
     type: text('type').$type<InterventionType>().notNull(),
     source: text('source').$type<InterventionSource>().notNull(),
