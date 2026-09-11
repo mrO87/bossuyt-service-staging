@@ -230,22 +230,35 @@ middernacht. Het exacte aantal per endpoint staat alleen in het dashboard op
 account.heigit.org. `getRouteMatrix` controleert nu `res.ok`, dus een quotumfout
 is een nette logregel in plaats van een stack trace.
 
-### 5b. Drie vestigingen zonder coördinaten — daarom `? min`
+### 5b. Vestigingen zonder coördinaten — bijgevuld
 
-```
-Jan decan              Prinsbouwdewijnlaan 20, 2600 Berchem
-Molenhoeve group bvba  Van den nestlaan 132, 2520 Broechem
-Test Customer          Teststraat 1, Gent            (testrecord)
-```
+Drie van de 21 vestigingen hadden geen `lat`/`lon`, waardoor hun ritten
+`? min · adres ontbreekt` toonden. Twee echte klanten zijn bijgevuld met
+`scripts/backfill-site-coordinates.ts`:
 
-18 van de 21 vestigingen hebben wel coördinaten. Deze drie zijn aangemaakt
-voordat er bij het aanmaken gegeocodeerd werd, of het geocoderen mislukte. Ze
-tonen nu `? min · adres ontbreekt` en tellen voor nul mee in het dagtotaal, met
-een melding eronder hoeveel ritten onbekend zijn.
+| klant | gevonden via | coördinaten |
+|---|---|---|
+| Molenhoeve group bvba | adres zoals opgeslagen | 51.172459, 4.563706 |
+| Jan decan | **straat gecorrigeerd** | 51.180544, 4.423295 |
+| Test Customer | niet gevonden — testrecord, met rust gelaten | — |
 
-Bij te vullen met een geocodeerronde over `sites` waar `lat`/`lon` leeg zijn —
-de machinerie bestaat (`geocodeSearchQuery`, `StreetCorrector`). Echte data, dus
-wacht op akkoord.
+**Wat Jan decan leerde.** Het adres stond als
+`Prinsbouwdewijnlaan 20, 2600 BERCHEM (ANTWERPEN)`. Twee fouten in één regel:
+
+1. De gemeente draagt een postcode én een provincie tussen haakjes mee.
+   Nominatim leest die hele string als plaatsnaam en vindt niets.
+   `splitCity()` in `lib/routing/addressParts.ts` haalt ze uit elkaar.
+2. De straat is fout gescand: het is **Prins Boudewijnlaan**. `correctStreet()`
+   (Photon) vond dat wel; Nominatim niet, want die verdraagt geen typfouten.
+
+Het script rapporteert zo'n straatcorrectie maar **schrijft ze niet weg** — een
+klantadres herschrijven is een beslissing over dat dossier, geen bijwerking van
+een coördinaat opzoeken. `sites.address` staat dus nog op de gescande versie.
+**Nog te beslissen:** of die adressen rechtgezet moeten worden.
+
+Het script draait standaard als proefdraai en is herbruikbaar: nieuwe
+vestigingen kunnen opnieuw ongelokaliseerd binnenkomen wanneer Nominatim traag
+of weg is (`locateSite` zwijgt dan bewust).
 
 ### 6. Wat na een onderbroken job? — te beslissen
 
