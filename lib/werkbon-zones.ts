@@ -704,12 +704,23 @@ export function extractWerkbon(doc: DoclingDocument): ExtractedWerkbon {
   const addressBlock = zoneText(fragments, ZONES.address, 'address', false)
   let parsedAddress = parseAddressBlock(addressBlock)
 
+
   // A town and no street means the reading stopped at the next label with the
   // street still behind it. Try again on every word in the zone that no label
   // claims, and keep that only if a street actually comes out of it.
   if (!parsedAddress.address) {
     const wholeZone = parseAddressBlock(zoneText(fragments, ZONES.address, undefined, false))
     if (wholeZone.address) parsedAddress = wholeZone
+  }
+
+  // The street is printed past the CONTACT label, so the contact box reads it as
+  // its own value. On these bons the box is blank, and a street standing in for
+  // a contact is worse than nothing: it is a name somebody would try to ring.
+  const same = (a: string, b: string) =>
+    a.toLowerCase().replace(/[^a-z0-9]/g, '') === b.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (contact.value && parsedAddress.address && same(contact.value, parsedAddress.address)) {
+    contact.value = ''
+    contact.source = 'empty'
   }
 
   return {

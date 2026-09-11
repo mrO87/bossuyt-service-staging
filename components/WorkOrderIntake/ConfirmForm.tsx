@@ -120,11 +120,13 @@ export default function ConfirmForm({
     return out
   }, [draft, matched])
 
-  const valid = missingFields.length === 0
+  // Nothing is refused here any more. `missingFields` still drives the note above
+  // the button and the marks on the fields; it no longer decides whether the
+  // press counts.
+  const allFilled = missingFields.length === 0
 
   function submit() {
     setTouched(true)
-    if (!valid) return
 
     // Exactly the shape POST /api/work-orders accepts — the confirm route hands
     // it to the same parser the wizard and the ERP route use.
@@ -348,8 +350,8 @@ export default function ConfirmForm({
           {missingFields.length > 0 && (
             <p className="rounded-xl bg-brand-orange/10 border border-brand-orange px-3 py-3 text-sm font-semibold text-brand-orange">
               {missingFields.length === 1
-                ? `Vul ${missingFields[0]} nog in.`
-                : `Vul deze velden nog in: ${missingFields.join(', ')}.`}
+                ? `${missingFields[0]} is nog leeg.`
+                : `Nog leeg: ${missingFields.join(', ')}.`}
             </p>
           )}
 
@@ -361,7 +363,7 @@ export default function ConfirmForm({
             onClick={submit}
             disabled={submitting}
             className={`w-full py-4 rounded-xl font-bold text-base text-white disabled:opacity-50 ${
-              valid ? 'bg-brand-orange' : 'bg-brand-orange/40'
+              allFilled ? 'bg-brand-orange' : 'bg-brand-orange/40'
             }`}
           >
             {submitting ? 'Bezig…' : 'Zet in de open pool'}

@@ -165,6 +165,8 @@ export interface Intervention {
    * werkbon. Deliberately absent from ServiceBonPdfData: the PDF is what the
    * customer signs, and an internal instruction has no business on it.
    */
+  /** The uploaded bon this work order was read from, when it came from one. */
+  scanPath?: string
   alertNote?: string
   /** Who wrote the note — the only one allowed to change or remove it. */
   alertNoteBy?: string

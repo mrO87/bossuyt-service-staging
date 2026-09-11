@@ -139,6 +139,21 @@ export default function InterventionPage() {
       )}
 
       <main className="px-4 py-4">
+        {/* The sheet this was read from. Every field below is an interpretation
+            of it, so the original has to stay within reach — it is the only way
+            to settle whether a street or a name was read right. */}
+        {intervention.scanPath && (
+          <a
+            href={intervention.scanPath}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-3 flex items-center justify-between rounded-xl border border-stroke bg-white px-3 py-3 text-sm font-semibold text-ink"
+          >
+            <span>Originele bon bekijken</span>
+            <span className="text-xs font-normal text-ink-soft">opent in nieuw venster</span>
+          </a>
+        )}
+
         <WerkbonForm
           key={`${intervention.id}-${initialActivityId ?? 'default'}`}
           intervention={intervention}

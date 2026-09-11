@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { Intervention, InterventionTechnician } from '@/types'
 import { db } from '@/lib/db'
+import { workOrderIntakes } from '@/lib/db/schema'
 import {
   contacts,
   customers,
@@ -101,6 +102,7 @@ function toIntervention(
   row: InterventionCoreRow,
   techniciansForWorkOrder: InterventionTechnician[],
   contact: PrimaryContact | undefined,
+  scanPath: string | undefined,
 ): Intervention {
   return {
     id: row.id,
@@ -142,6 +144,7 @@ function toIntervention(
     statusOnderwegBy: row.statusOnderwegBy ?? undefined,
     createdBy: row.createdBy ?? undefined,
     visibleInPool: row.visibleInPool,
+    scanPath: scanPath ?? undefined,
     alertNote: row.alertNote ?? undefined,
     alertNoteBy: row.alertNoteBy ?? undefined,
     alertNoteAt: row.alertNoteAt?.toISOString(),
@@ -266,8 +269,23 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
   const assignmentsByWorkOrder = await fetchAssignmentsForWorkOrders(workOrderIds)
   const contactsBySite = await fetchPrimaryContacts([...new Set(rows.map(row => row.siteId))])
 
+  // The uploaded bon, where there was one. A work order typed in by hand has
+  // none, and that is not a gap — it just never came from paper.
+  const scanRows = await db
+    .select({ workOrderId: workOrderIntakes.workOrderId, path: workOrderIntakes.originalPath })
+    .from(workOrderIntakes)
+    .where(inArray(workOrderIntakes.workOrderId, workOrderIds))
+  const scanByWorkOrder = new Map(
+    scanRows.filter(r => r.workOrderId).map(r => [r.workOrderId as string, r.path]),
+  )
+
   return rows.map((row: InterventionCoreRow) =>
-    toIntervention(row, assignmentsByWorkOrder.get(row.id) ?? [], contactsBySite.get(row.siteId)),
+    toIntervention(
+      row,
+      assignmentsByWorkOrder.get(row.id) ?? [],
+      contactsBySite.get(row.siteId),
+      scanByWorkOrder.get(row.id),
+    ),
   )
 }
 
