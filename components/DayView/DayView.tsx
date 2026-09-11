@@ -3,10 +3,9 @@
 /**
  * DayView — het dagoverzicht van de technieker.
  *
- * v1.6: de Planning-sectie is nu een route-timeline (DayTimeline).
- * Start → rijtijd → job → rijtijd → job → pauze → rijtijd → job → rijtijd → einde.
- *
- * De open pool blijft als aparte sectie onderaan staan.
+ * Houdt de datum, de header en het ophalen van de dag. De planning en de open
+ * pool zitten samen in PlanningBoard, want tussen die twee kan gesleept worden
+ * en dat vraagt één gedeelde sleepcontext.
  */
 
 import { useState } from 'react'
@@ -14,13 +13,11 @@ import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
 import CalendarSheet from '@/components/CalendarSheet'
 import NewWorkOrderMenu from '@/components/WorkOrderIntake/NewWorkOrderMenu'
-import AlertNoteBadge from '@/components/AlertNoteBadge'
 import { useSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
-import type { InterventionStatus, InterventionType } from '@/types'
 import { usePushNotifications } from '@/lib/usePushNotifications'
-import { DayTimeline } from '@/components/DayTimeline/DayTimeline'
 import { useDayData } from '@/lib/useDayData'
+import { PlanningBoard } from './PlanningBoard'
 
 // ---------- helpers ----------
 
@@ -32,58 +29,6 @@ function formatDate(date: Date): string {
   }).format(date)
 }
 
-function formatMinutes(minutes?: number): string {
-  if (!minutes) return ''
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  if (m === 0) return `${h}u`
-  return `${h}u${m}`
-}
-
-function typeBorderClass(type: InterventionType, urgent: boolean): string {
-  if (urgent) return 'bg-brand-red'
-  switch (type) {
-    case 'warm':       return 'bg-brand-orange'
-    case 'montage':    return 'bg-brand-blue'
-    case 'preventief': return 'bg-brand-green'
-  }
-}
-function typeClass(type: InterventionType): string {
-  switch (type) {
-    case 'warm':       return 'bg-brand-orange text-white'
-    case 'montage':    return 'bg-brand-blue text-white'
-    case 'preventief': return 'bg-brand-green text-white'
-  }
-}
-function typeLabel(type: InterventionType): string {
-  switch (type) {
-    case 'warm':       return 'Warm'
-    case 'montage':    return 'Montage'
-    case 'preventief': return 'Preventief'
-  }
-}
-function statusClass(status: InterventionStatus): string {
-  switch (status) {
-    case 'onderweg':         return 'bg-brand-orange text-white'
-    case 'bezig':            return 'bg-brand-blue text-white'
-    case 'afgewerkt':        return 'bg-brand-green text-white'
-    case 'geannuleerd':      return 'bg-brand-red text-white'
-    default:                 return 'bg-stroke text-ink-soft'
-  }
-}
-function statusLabel(status: InterventionStatus): string {
-  switch (status) {
-    case 'aangemaakt':       return 'Aangemaakt'
-    case 'gepland':          return 'Gepland'
-    case 'onderweg':         return 'Onderweg'
-    case 'bezig':            return 'Bezig'
-    case 'wacht_onderdelen': return 'Wacht onderdelen'
-    case 'afgewerkt':        return 'Afgewerkt'
-    case 'geannuleerd':      return 'Geannuleerd'
-  }
-}
-
 function BossuyLogo() {
   return (
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
@@ -92,14 +37,6 @@ function BossuyLogo() {
       <text x="1"  y="27" fill="#F28C28" fontSize="13" fontWeight="bold" fontFamily="sans-serif">×</text>
       <text x="14" y="27" fill="#F28C28" fontSize="13" fontWeight="bold" fontFamily="sans-serif">×</text>
     </svg>
-  )
-}
-
-function Badge({ className, label }: { className: string; label: string }) {
-  return (
-    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${className}`}>
-      {label}
-    </span>
   )
 }
 
@@ -119,7 +56,6 @@ export default function DayView() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [newWorkOrderOpen, setNewWorkOrderOpen] = useState(false)
-  const [showOpenPool, setShowOpenPool] = useState(true)
 
   function navigate(delta: number) {
     setSelectedDate(d => {
@@ -260,98 +196,15 @@ export default function DayView() {
           </div>
         )}
 
-        {/* ---------- Planning — route timeline ---------- */}
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
-            Planning
-          </h2>
-          <span className="text-[11px] text-ink-soft">sleep om te herschikken</span>
-        </div>
 
-          <DayTimeline plannedInterventions={planned} settings={settings} />
-
-        {/* ---------- Open pool ---------- */}
-        {/* Anchored so adding a bon can land here rather than at the top of the
-            day: the pool is where the new work order actually turns up. */}
-        <div id="open-pool" className="flex items-center justify-between mt-8 mb-2 scroll-mt-4">
-          <h2 className="text-sm font-bold tracking-wide text-ink uppercase">
-            Open pool
-          </h2>
-          <button
-            onClick={() => setShowOpenPool(v => !v)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stroke text-ink-soft text-[11px] font-semibold active:opacity-70 transition-opacity"
-          >
-            {showOpenPool ? (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </svg>
-                Verbergen
-              </>
-            ) : (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                {openPool.length} tonen
-              </>
-            )}
-          </button>
-        </div>
-
-        {showOpenPool && (
-        <p className="text-xs text-ink-soft mb-3">
-          Flexibele jobs — pak er eentje op als je tijd over hebt. Ze
-          worden niet in de route meegerekend tot je ze toewijst.
-        </p>
-        )}
-
-        {showOpenPool && (
-        <div className="flex flex-col gap-3">
-          {openPool.map(intervention => (
-            <div
-              key={intervention.id}
-              onClick={() => router.push(`/interventions/${intervention.id}`)}
-              className="rounded-xl cursor-pointer transition-opacity active:opacity-70 flex overflow-hidden bg-white/70 border border-dashed border-stroke"
-            >
-              <div className={`w-1 shrink-0 ${typeBorderClass(intervention.type, intervention.isUrgent)}`} />
-              <div className="flex-1 p-3">
-                <div className="mb-1 flex items-start gap-2">
-                  {intervention.alertNote && <AlertNoteBadge note={intervention.alertNote} />}
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
-                    <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
-                  </div>
-                </div>
-                {intervention.deviceBrand && (
-                  <p className="text-xs font-medium mt-1 text-ink">
-                    {intervention.deviceBrand} {intervention.deviceModel}
-                  </p>
-                )}
-                {intervention.description && (
-                  <p className="text-xs mt-0.5 mb-2 text-ink-soft">{intervention.description}</p>
-                )}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge className={typeClass(intervention.type)} label={typeLabel(intervention.type)} />
-                  <Badge className={statusClass(intervention.status)} label={statusLabel(intervention.status)} />
-                  {intervention.estimatedMinutes && (
-                    <Badge className="bg-stroke text-ink-soft" label={formatMinutes(intervention.estimatedMinutes)} />
-                  )}
-                  {intervention.isUrgent && <Badge className="bg-brand-red text-white" label="Dringend" />}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        )}
-
-        {showOpenPool && openPool.length === 0 && (
-          <p className="text-center mt-6 text-ink-soft text-sm">
-            Geen jobs in de pool
-          </p>
-        )}
+        <PlanningBoard
+          planned={planned}
+          open={openPool}
+          settings={settings}
+          currentUser={currentUser}
+          selectedDate={selectedDate}
+          onOpenIntervention={(id) => router.push(`/interventions/${id}`)}
+        />
       </main>
 
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />

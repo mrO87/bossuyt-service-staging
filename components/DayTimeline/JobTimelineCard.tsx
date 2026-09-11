@@ -8,65 +8,17 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Intervention, InterventionStatus, InterventionType } from '@/types'
+import type { Intervention } from '@/types'
 import { TimelineRail, RailLine } from './TimelineRail'
 import AlertNoteBadge from '@/components/AlertNoteBadge'
-
-// ---------- small presentation helpers ----------
-
-function formatMinutes(minutes?: number): string {
-  if (!minutes) return ''
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  if (m === 0) return `${h}u`
-  return `${h}u${m}`
-}
-
-function typeBorderClass(type: InterventionType, urgent: boolean): string {
-  if (urgent) return 'bg-brand-red'
-  switch (type) {
-    case 'warm':       return 'bg-brand-orange'
-    case 'montage':    return 'bg-brand-blue'
-    case 'preventief': return 'bg-brand-green'
-  }
-}
-
-function typeClass(type: InterventionType): string {
-  switch (type) {
-    case 'warm':       return 'bg-brand-orange text-white'
-    case 'montage':    return 'bg-brand-blue text-white'
-    case 'preventief': return 'bg-brand-green text-white'
-  }
-}
-function typeLabel(type: InterventionType): string {
-  switch (type) {
-    case 'warm':       return 'Warm'
-    case 'montage':    return 'Montage'
-    case 'preventief': return 'Preventief'
-  }
-}
-
-function statusClass(status: InterventionStatus): string {
-  switch (status) {
-    case 'onderweg':         return 'bg-brand-orange text-white'
-    case 'bezig':            return 'bg-brand-blue text-white'
-    case 'afgewerkt':        return 'bg-brand-green text-white'
-    case 'geannuleerd':      return 'bg-brand-red text-white'
-    default:                 return 'bg-stroke text-ink-soft'
-  }
-}
-function statusLabel(status: InterventionStatus): string {
-  switch (status) {
-    case 'aangemaakt':       return 'Aangemaakt'
-    case 'gepland':          return 'Gepland'
-    case 'onderweg':         return 'Onderweg'
-    case 'bezig':            return 'Bezig'
-    case 'wacht_onderdelen': return 'Wacht onderdelen'
-    case 'afgewerkt':        return 'Afgewerkt'
-    case 'geannuleerd':      return 'Geannuleerd'
-  }
-}
+import {
+  statusClass,
+  statusLabel,
+  typeBorderClass,
+  typeClass,
+  typeLabel,
+} from '@/components/planning/interventionLabels'
+import { EstimateBadge } from '@/components/planning/EstimateBadge'
 
 function Chip({ className, label }: { className: string; label: string }) {
   return (
@@ -182,12 +134,11 @@ export function JobTimelineCard({
                 className={statusClass(intervention.status)}
                 label={statusLabel(intervention.status)}
               />
-              {intervention.estimatedMinutes && (
-                <Chip
-                  className="bg-stroke text-ink-soft"
-                  label={formatMinutes(intervention.estimatedMinutes)}
-                />
-              )}
+              <EstimateBadge
+                interventionId={intervention.id}
+                minutes={intervention.estimatedMinutes}
+              />
+
               {intervention.isUrgent && (
                 <Chip className="bg-brand-red text-white" label="Dringend" />
               )}

@@ -40,4 +40,7 @@ export interface RouteTotals {
   jobCount: number
   workMinutes: number
   travelMinutes: number
+  /** Break time on the timeline. Counted separately because the roster already
+   *  subtracts the unpaid break from the day's capacity. */
+  breakMinutes: number
 }

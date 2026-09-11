@@ -322,7 +322,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     ]
 
     const sequence: TimelineItem[] = []
-    const tally: RouteTotals = { jobCount: 0, workMinutes: 0, travelMinutes: 0 }
+    const tally: RouteTotals = { jobCount: 0, workMinutes: 0, travelMinutes: 0, breakMinutes: 0 }
 
     for (let i = 0; i < anchors.length; i++) {
       const current = anchors[i]
@@ -330,6 +330,10 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
       if (current.kind === 'job') {
         tally.jobCount++
         tally.workMinutes += current.intervention.estimatedMinutes ?? 0
+      }
+
+      if (current.kind === 'break') {
+        tally.breakMinutes += current.minutes
       }
 
       sequence.push(current)
@@ -443,6 +447,16 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     fullSequence,
     totals,
     routeLoading,
+    /**
+     * True while the travel times on screen come from `mockTravel` rather than
+     * the routing service. That happens when /api/route/daily has not answered
+     * yet, or answered 422 because an address could not be geocoded.
+     *
+     * It matters beyond cosmetics: the overrun warning is built on work plus
+     * travel, and a warning resting on invented travel times would be warning
+     * about fiction. DaySummary says so instead of asserting a number.
+     */
+    travelIsEstimated: travelOverrides === null,
     reorder,
     setStartAddress,
     setEndAddress,
