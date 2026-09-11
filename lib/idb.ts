@@ -466,6 +466,18 @@ export async function saveDayMeta(meta: DayMeta): Promise<void> {
   await db.put('dayMeta', meta)
 }
 
+/**
+ * Forget when the day was last synced, so the next look fetches it again.
+ *
+ * For the moment something is created that belongs in today's view. The cache
+ * is honest about being five minutes old; it just has no way to know that those
+ * five minutes now matter.
+ */
+export async function invalidateDayCache(): Promise<void> {
+  const db = await getDB()
+  await db.clear('dayMeta')
+}
+
 export async function getDayMeta(): Promise<DayMeta | undefined> {
   const db = await getDB()
   // We always store with the date as key, get the most recent

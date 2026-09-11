@@ -8,6 +8,7 @@ import ConfirmForm, {
   type FieldSources,
 } from '@/components/WorkOrderIntake/ConfirmForm'
 import {
+  invalidateDayCache,
   queueIntakeUpload,
   removeIntakeUpload,
   markIntakeUploadFailed,
@@ -231,6 +232,10 @@ function UploadWerkbon() {
       const json = (await response.json()) as { id?: string; error?: string; field?: string }
 
       if ((response.status === 201 || response.status === 200) && json.id) {
+        // The day view is cached for five minutes, so without this the pool we
+        // are about to open is the pool as it was before this bon existed — the
+        // work order sitting in it, invisible, which reads as never created.
+        await invalidateDayCache()
         // The pool, not the work order. The person just typed this bon in and
         // has no reason to read it back; what they want to see is that it
         // arrived where the technicians will find it.
@@ -289,19 +294,29 @@ function UploadWerkbon() {
             <div className="rounded-xl bg-white border border-stroke shadow-sm p-4 flex flex-col gap-2">
               <p className="font-bold text-base text-ink">Werkbon uploaden</p>
               <p className="text-sm text-ink-soft">
-                Maak een foto van de papieren bon, of kies een PDF. De velden worden uitgelezen
-                en je krijgt ze te zien voor de werkbon in de open pool komt.
+                Maak een foto van de papieren bon, kies er een uit je galerij, of neem een
+                PDF. De velden worden uitgelezen en je krijgt ze te zien voor de werkbon in
+                de open pool komt.
               </p>
             </div>
 
+            {/* One accepted type per button, so the phone opens the right
+                picker instead of asking what you meant. A button offering both
+                images and PDFs makes Android offer the camera too, which is
+                bewildering when you came to fetch a PDF. */}
             <label className="w-full py-5 rounded-xl font-bold text-base bg-brand-orange text-white text-center cursor-pointer">
               Foto maken
               <input type="file" accept="image/*" capture="environment" onChange={pickFile} className="hidden" />
             </label>
 
             <label className="w-full py-5 rounded-xl font-bold text-base bg-white text-ink border border-stroke text-center cursor-pointer">
-              Bestand kiezen (foto of PDF)
-              <input type="file" accept="image/*,application/pdf" onChange={pickFile} className="hidden" />
+              Foto kiezen
+              <input type="file" accept="image/*" onChange={pickFile} className="hidden" />
+            </label>
+
+            <label className="w-full py-5 rounded-xl font-bold text-base bg-white text-ink border border-stroke text-center cursor-pointer">
+              PDF kiezen
+              <input type="file" accept="application/pdf" onChange={pickFile} className="hidden" />
             </label>
           </>
         )}
