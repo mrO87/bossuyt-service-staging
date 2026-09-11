@@ -15,6 +15,59 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.59',
+    date: '11 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'Rijtijden kloppen nu met waar de klanten liggen',
+        body:
+          'De rijtijden waren verzonnen. Ze werden berekend uit de nummers van de twee '
+          + 'werkbonnen, niet uit hun adressen — vandaar dat twee jobs bij dezelfde klant '
+          + 'toch tien tot veertig minuten rijden kregen. Nu wordt de echte afstand tussen '
+          + 'de twee adressen gemeten, met een snelheid die meeschaalt: traag door de '
+          + 'bebouwde kom, vlot over de snelweg. Twee bonnen op hetzelfde adres geven '
+          + 'voortaan nul minuten, zoals het hoort.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Schuiven in je planning kost geen laadtijd meer',
+        body:
+          'Bij elke verschuiving werden de rijtijden opnieuw opgevraagd. Dat was niet alleen '
+          + 'traag, het verbruikte ook de dagelijkse limiet van de routedienst — die halverwege '
+          + 'de dag op kon zijn. De rijtijden worden nu een week onthouden, en in één keer voor '
+          + 'alle combinaties van je stops. Je kan dus zoveel schuiven als je wil zonder dat er '
+          + 'iets herladen wordt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De app zegt het nu als ze de rijtijd niet kent',
+        body:
+          'Ontbreekt het adres van een werkbon, dan staat er "? min · adres ontbreekt" in '
+          + 'plaats van een getal. Onderaan de dag zie je hoeveel ritten er zo onbekend zijn. '
+          + 'Dat is eerlijker dan een dagtotaal dat stiekem te laag uitvalt, en het wijst je '
+          + 'meteen aan welke bon een adres mist.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Atelier en thuis staan op de echte anderhalf uur',
+        body:
+          'De rit tussen het atelier in Kuurne en thuis in Kontich begint en eindigt bijna '
+          + 'elke dag. Een berekening kwam daar op 1u41 uit; in het echt is het 1u30. Die is '
+          + 'nu vastgelegd op de gekende waarde, zodat je dag niet twee keer per dag tien '
+          + 'minuten te lang lijkt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Het echte Waze-logo op de Waze-knop',
+        body:
+          'De knop op de werkbon had een algemeen navigatiepijltje. Nu staat het echte '
+          + 'Waze-logo er, in de eigen kleur, zodat je in één oogopslag ziet wat de knop doet.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.58',
     date: '11 september 2026',
     changes: [
@@ -1364,7 +1417,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.58'
+const CURRENT_RELEASE_VERSION = 'v1.59'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
