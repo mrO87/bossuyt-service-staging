@@ -28,6 +28,8 @@ const actor = { id: 'u1', role: 'technician' as const }
 describe('savePlanningSnapshot', () => {
   let ids: CleanupIds
   let technicianId: string
+  /** A second technician, for the case where a pool bon already has one. */
+  let otherTechnicianId: string
 
   /** A work order on the technician's day, at the given position. */
   async function onTheDay(plannedOrder: number, status: InterventionStatus = 'gepland') {
@@ -87,6 +89,17 @@ describe('savePlanningSnapshot', () => {
       active: true,
     })
     ids.technician_ids!.push(technicianId)
+
+    otherTechnicianId = `tech-${randomUUID()}`
+    await testDb.insert(technicians).values({
+      id: otherTechnicianId,
+      name: 'Andere technieker',
+      initials: 'AT',
+      email: `${otherTechnicianId}@example.test`,
+      role: 'technician',
+      active: true,
+    })
+    ids.technician_ids!.push(otherTechnicianId)
 
     const suffix = randomUUID()
     customerId = `customer-${suffix}`
@@ -175,6 +188,37 @@ describe('savePlanningSnapshot', () => {
       .from(workOrderAssignments)
       .where(eq(workOrderAssignments.workOrderId, leaving))
     expect(assignments.map(a => a.technicianId)).toContain(technicianId)
+  })
+
+  it('takes a pool work order that is assigned to somebody else', async () => {
+    // The pool is not "unassigned work". A bon can be sitting there with
+    // another technician already on it — planning pre-assigned it and never
+    // picked a day. Whoever drags it onto their day has to end up on it too,
+    // and the existing assignment must not get in the way of that.
+    const waiting = await inThePool()
+    await testDb.insert(workOrderAssignments).values({
+      workOrderId: waiting,
+      technicianId: otherTechnicianId,
+      isLead: true,
+      accepted: false,
+      plannedOrder: 0,
+    })
+
+    const result = await snapshot([waiting])
+    expect(result.ok).toBe(true)
+
+    const { planned } = await getTodayInterventions(technicianId, DATE)
+    expect(planned.map(p => p.id)).toEqual([waiting])
+
+    const [row] = await testDb.select().from(workOrders).where(eq(workOrders.id, waiting))
+    expect(row.plannedDate).not.toBeNull()
+
+    const assignments = await testDb
+      .select()
+      .from(workOrderAssignments)
+      .where(eq(workOrderAssignments.workOrderId, waiting))
+    expect(assignments.map(a => a.technicianId).sort())
+      .toEqual([otherTechnicianId, technicianId].sort())
   })
 
   it('moves in both directions in a single write', async () => {
