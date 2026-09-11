@@ -112,6 +112,7 @@ export interface PendingWrite {
     | 'update_planning'
     | 'update_sequence'
     | 'update_estimate'
+    | 'save_draft'
     | 'upload_work_order_photo'
     | 'delete_work_order_photo'
   payload: Record<string, unknown>
@@ -315,10 +316,52 @@ export async function updateInterventionSequence(
 
 // ---------- Werkbonnen ----------
 
-/** Save the werkbon form as a draft — called (debounced) on every change so it survives a refresh or a dead battery. */
-export async function saveWerkbon(interventionId: string, form: WerkbonFormState): Promise<void> {
+/**
+ * Save the werkbon form as a draft.
+ *
+ * Called debounced on every change, so it survives a refresh or a dead battery.
+ * It also queues the draft for the server: keeping it only here meant a bon
+ * typed into on one phone was gone when that phone cleared its storage, and
+ * nothing said so because nothing had been submitted.
+ *
+ * Only the newest draft per work order is ever queued. An older one carries
+ * nothing the newer one lacks, and replaying both would have the stale one
+ * refused for being stale — noise about a problem that does not exist.
+ */
+export async function saveWerkbon(
+  interventionId: string,
+  form: WerkbonFormState,
+  updatedBy?: string,
+): Promise<void> {
+  const savedAt = new Date().toISOString()
+
   const db = await getDB()
-  await db.put('werkbonnen', { interventionId, form, lastSavedAt: new Date().toISOString() })
+  await db.put('werkbonnen', { interventionId, form, lastSavedAt: savedAt })
+
+  await removePendingDraftWrites(interventionId)
+  await enqueuePendingWrite({
+    type: 'save_draft',
+    createdAt: savedAt,
+    payload: { workOrderId: interventionId, form, updatedAt: savedAt, updatedBy },
+  })
+}
+
+/** Drop any queued draft for this work order — used before queueing a newer one. */
+export async function removePendingDraftWrites(interventionId: string): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction('pendingWrites', 'readwrite')
+  const items = await tx.store.getAll()
+
+  await Promise.all(
+    items
+      .filter(item =>
+        item.type === 'save_draft' &&
+        (item.payload as { workOrderId?: string }).workOrderId === interventionId &&
+        typeof item.id === 'number')
+      .map(item => tx.store.delete(item.id!)),
+  )
+
+  await tx.done
 }
 
 /** Load the saved draft for an intervention, if any */

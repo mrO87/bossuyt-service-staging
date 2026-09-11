@@ -8,6 +8,7 @@ import type { PdfPart, ServiceBonPdfData } from '@/lib/pdf'
 import { useTasks } from '@/lib/task-store'
 import { queueTaskCommand } from '@/lib/tasks/sync'
 import { deleteWerkbon, loadWerkbon, saveWerkbon } from '@/lib/idb'
+import { chooseDraft, type DraftSide } from '@/lib/werkbon/draftMerge'
 import type { Device, Intervention, DbTask, WerkbonFormState } from '@/types'
 import PartsSection from './PartsSection'
 import PhotoUploadSection from './PhotoUploadSection'
@@ -94,6 +95,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [pickedDevice, setPickedDevice] = useState<Device | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  /** Whether this half-filled bon is safe yet, and where. Separate from
+   *  saveStatus, which is about submitting the finished bon. */
+  const [draftStatus, setDraftStatus] =
+    useState<'idle' | 'typing' | 'saved' | 'queued' | 'error'>('idle')
+  const [draftNotice, setDraftNotice] = useState<string | null>(null)
   const [bonNumber, setBonNumber] = useState<string | null>(null)
   const [existingCount, setExistingCount] = useState(0)
   const [deviceRefresh, setDeviceRefresh] = useState(0)
@@ -131,18 +137,56 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       : intervention.technicians.map(t => ({ id: t.technicianId, name: t.name }))
 
   // ── Draft: load once, then autosave (debounced 500 ms) ──────────────────────
+  //
+  // Two copies now: this device and the server. Newest wins, and if the
+  // server's copy sets aside something that was typed here, say so — an
+  // afternoon of work must not go quietly.
   useEffect(() => {
     let cancelled = false
-    loadWerkbon(intervention.id)
-      .then(draft => {
-        // IndexedDB is async. If the technician started typing while we were
-        // reading, their input is newer than the draft and must win.
-        if (!cancelled && draft && !isDirty.current) setForm(draft.form)
-      })
+
+    async function loadDraft() {
+      const local = await loadWerkbon(intervention.id).catch(() => undefined)
+
+      let remote: DraftSide<WerkbonFormState> | null = null
+      try {
+        const res = await fetch(`/api/work-orders/${intervention.id}/draft`)
+        if (res.ok) {
+          const data = await res.json() as { draft: DraftSide<WerkbonFormState> | null }
+          remote = data.draft ?? null
+        }
+      } catch {
+        // Offline. The local copy is all there is, which is the normal case in
+        // a cellar and not worth mentioning.
+      }
+
+      if (cancelled) return
+
+      const choice = chooseDraft<WerkbonFormState>(
+        local ? { form: local.form, updatedAt: local.lastSavedAt } : null,
+        remote,
+      )
+
+      // If the technician started typing while we were reading, their input is
+      // newer than anything we found and must win.
+      if (choice.use !== 'none' && !isDirty.current) setForm(choice.draft.form)
+
+      if (choice.use === 'remote' && choice.displaced) {
+        const who = remote?.updatedBy && remote.updatedBy !== currentUser?.id
+          ? ` door ${remote.updatedBy}`
+          : ''
+        setDraftNotice(
+          `Een nieuwere versie van deze bon${who} is geladen. Wat hier nog niet ` +
+          `verstuurd was, is vervangen.`,
+        )
+      }
+    }
+
+    loadDraft()
       .catch(() => {})
       .finally(() => { if (!cancelled) setDraftLoaded(true) })
+
     return () => { cancelled = true }
-  }, [intervention.id])
+  }, [intervention.id, currentUser?.id])
 
   useEffect(() => {
     // Only save real edits. Saving an untouched form would persist initialForm
@@ -150,10 +194,16 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     // And once the bon is submitted the draft is gone deliberately: writing it
     // back here would resurrect it.
     if (!draftLoaded || !isDirty.current || saveStatus === 'saved') return
+
     if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => { void saveWerkbon(intervention.id, form) }, 500)
+    saveTimer.current = window.setTimeout(() => {
+      void saveWerkbon(intervention.id, form, currentUser?.id)
+        .then(() => setDraftStatus(navigator.onLine ? 'saved' : 'queued'))
+        .catch(() => setDraftStatus('error'))
+    }, 500)
+
     return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current) }
-  }, [form, draftLoaded, saveStatus, intervention.id])
+  }, [form, draftLoaded, saveStatus, intervention.id, currentUser?.id])
 
   // How many werkbonnen already exist for this work order → bon number preview "-NN".
   // Falls back to the device the technician picked on-site, so a work order that
@@ -189,24 +239,35 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     return () => clearInterval(interval)
   }, [workflowTasks])
 
-  const update = useCallback(<K extends keyof WerkbonFormState>(field: K, value: WerkbonFormState[K]) => {
+  /**
+   * Every edit marks the form dirty and shows that something is being saved.
+   * Set here rather than in the autosave effect: this is where the typing
+   * actually happens, and an effect that calls setState on render is a
+   * cascade waiting to happen.
+   */
+  const markEdited = useCallback(() => {
     isDirty.current = true
-    setForm(prev => ({ ...prev, [field]: value }))
+    setDraftStatus('typing')
   }, [])
 
+  const update = useCallback(<K extends keyof WerkbonFormState>(field: K, value: WerkbonFormState[K]) => {
+    markEdited()
+    setForm(prev => ({ ...prev, [field]: value }))
+  }, [markEdited])
+
   function addPart(toOrder: boolean) {
-    isDirty.current = true
+    markEdited()
     const part: PdfPart = { id: `p-${Date.now()}`, code: '', description: '', quantity: 1, toOrder, urgent: false }
     setForm(prev => ({ ...prev, parts: [...prev.parts, part] }))
   }
 
   function updatePart(id: string, field: keyof PdfPart, value: string | number | boolean) {
-    isDirty.current = true
+    markEdited()
     setForm(prev => ({ ...prev, parts: prev.parts.map(p => (p.id === id ? { ...p, [field]: value } : p)) }))
   }
 
   function removePart(id: string) {
-    isDirty.current = true
+    markEdited()
     setForm(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }))
   }
 
@@ -314,6 +375,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
         setDeviceRefresh(current => current + 1)
         isDirty.current = false
         await deleteWerkbon(intervention.id)
+        setDraftStatus('idle')
+        // The draft has served its purpose; leaving it on the server would let
+        // a half-filled version of a submitted bon reappear on another device.
+        await fetch(`/api/work-orders/${intervention.id}/draft`, { method: 'DELETE' })
+          .catch(() => {})
 
         for (const part of form.parts) {
           await queueTaskCommand('/api/tasks', 'POST', {
@@ -367,6 +433,41 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
           workOrderId={intervention.id}
           onChange={next => setAlertNote(next ?? '')}
         />
+      )}
+
+      {/* What was typed here is only really safe once it has left the phone.
+          Saying which of the two it is costs one line and answers the question
+          a technician would otherwise have to guess at. */}
+      {draftNotice && (
+        <div className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 px-3 py-2">
+          <p className="text-xs text-ink">{draftNotice}</p>
+          <button
+            type="button"
+            onClick={() => setDraftNotice(null)}
+            className="mt-1 text-[11px] font-semibold text-brand-orange active:opacity-70"
+          >
+            Begrepen
+          </button>
+        </div>
+      )}
+
+      {draftStatus !== 'idle' && saveStatus !== 'saved' && (
+        <p className="px-1 text-[11px] text-ink-soft flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className={[
+              'inline-block w-2 h-2 rounded-full',
+              draftStatus === 'saved' ? 'bg-brand-green'
+                : draftStatus === 'queued' ? 'bg-brand-orange'
+                : draftStatus === 'error' ? 'bg-brand-red'
+                : 'bg-stroke',
+            ].join(' ')}
+          />
+          {draftStatus === 'typing' && 'Bewaren…'}
+          {draftStatus === 'saved' && 'Bewaard'}
+          {draftStatus === 'queued' && 'Bewaard op dit toestel — wacht op verbinding'}
+          {draftStatus === 'error' && 'Kon niet bewaren'}
+        </p>
       )}
 
       <BonHeaderCard intervention={intervention} bonNumberPreview={bonNumberPreview} />

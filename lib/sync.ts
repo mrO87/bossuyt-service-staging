@@ -197,6 +197,36 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         continue
       }
 
+      if (write.type === 'save_draft') {
+        const { workOrderId, form, updatedAt, updatedBy } = write.payload as {
+          workOrderId: string
+          form: unknown
+          updatedAt: string
+          updatedBy?: string
+        }
+        const res = await fetch(`/api/work-orders/${workOrderId}/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ form, updatedAt, updatedBy }),
+        })
+
+        if (res.ok || res.status === 409 || res.status === 404) {
+          // 409 means the server already holds something newer, which is the
+          // rule working rather than a failure — retrying would only lose
+          // again. 404 means the work order is gone; so is the point of the
+          // draft.
+          await removePendingWrite(write.id!)
+          synced++
+          if (res.status === 409) {
+            notice = 'Er stond een nieuwere versie van een werkbon op de server'
+            conflict = true
+          }
+        } else {
+          failed++
+        }
+        continue
+      }
+
       if (write.type === 'update_estimate') {
         // Its own endpoint rather than the planning door: changing how long a
         // job takes says nothing about which day it is on, and coupling the two

@@ -75,6 +75,29 @@ export const sites = pgTable('sites', {
   closingDay: text('closing_day'),                          // SLUITINGSDAG | FERMÉ
 })
 
+/**
+ * A werkbon that is being filled in but not finished.
+ *
+ * It was only ever kept in the browser, which meant a half-filled bon lived on
+ * exactly one phone: change device, clear site data, or simply fill the storage
+ * with photos until the browser evicts something, and an afternoon's typing was
+ * gone. Nothing told anybody, because as far as the app was concerned nothing
+ * had been submitted.
+ *
+ * One row per work order — a draft is the current state of the form, not a
+ * history — deleted when the bon is actually submitted.
+ */
+export const workOrderDrafts = pgTable('work_order_drafts', {
+  workOrderId: text('work_order_id')
+    .primaryKey()
+    .references(() => workOrders.id, { onDelete: 'cascade' }),
+  form: jsonb('form').notNull(),
+  /** When the form last changed, decided by the device that changed it. This is
+   *  what "newest wins" compares, so it travels with the draft. */
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  updatedBy: text('updated_by'),
+})
+
 export const contacts = pgTable('contacts', {
   id: text('id').primaryKey(),
   siteId: text('site_id')
