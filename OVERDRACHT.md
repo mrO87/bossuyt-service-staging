@@ -13,7 +13,7 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 een echte browser: slepen werkt beide richtingen en overleeft een herlaadbeurt,
 en schuiven kost geen enkele netwerkaanroep meer.
 
-- 324 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
+- 368 tests groen (was 208), typecheck schoon, lint schoon, `npm run build` ok
 - Gepusht naar `feature/service-bon-v1.53`. `main` staat nog op v1.53.1 en is
   bewust niet aangeraakt; staging bouwt met `context: .` uit de werkmap, niet
   uit een branch — daarom draaide v1.57 al terwijl `main` achterbleef.
@@ -119,6 +119,16 @@ vraagt gewerkte tijd, en niets schrijft naar `workStart` / `workEnd` /
 ---
 
 ## Openstaande punten
+
+### 0. Opgelost sinds de vorige overdracht
+
+- **Laatste bon kon niet uit de planning.** De bewaking las
+  `if (!nextSignature) return`, en een lege dag geeft een lege vingerafdruk —
+  dus leegmaken zag eruit als "nog niets binnen". `null` = nog niets, `''` = een
+  lege dag. 10 tests in `tests/external-job-signature.test.ts`.
+- **Overloop-melding verborgen** op vraag van de gebruiker. Vlag
+  `SHOW_OVERRUN_WARNING` bovenaan `DaySummary.tsx`; de berekening en haar tests
+  blijven staan. Op `true` zetten brengt hem terug.
 
 ### 1. De dagplanning toont mock-data zodra de dag leeg is — het ergste punt
 
@@ -273,6 +283,30 @@ gewijzigd is en het kunnen terugdraaien.
 Het script draait standaard als proefdraai en is herbruikbaar: nieuwe
 vestigingen kunnen opnieuw ongelokaliseerd binnenkomen wanneer Nominatim traag
 of weg is (`locateSite` zwijgt dan bewust).
+
+### 5c. Concepten van werkbonnen — opgelost
+
+**Gemeten wat er fout was:** typen in een bon, wegnavigeren en terug → bewaard.
+Herladen → bewaard. **Ander toestel of gewiste opslag → weg.** Het opslaan werkte
+dus wel, maar bereikte de server nooit. Een half ingevulde bon leefde op precies
+één telefoon, en niets zei dat, want er was niets verstuurd.
+
+Dat is dezelfde opslag die dingen weggooit als ze volloopt met bonfoto's — zie
+de instellingen-bug. Het was geen theoretisch risico.
+
+**Nu:** concepten gaan naar `work_order_drafts` via dezelfde offline-wachtrij als
+de rest. Er staat altijd maar één concept per werkbon in de rij.
+
+- **Nieuwste wint**, op het tijdstip dat het bewerkende toestel meegeeft
+  (`lib/werkbon/draftMerge.ts`, 12 tests).
+- Zet de serverversie iets opzij dat hier getypt was, dan **verschijnt er een
+  melding** met wie. Stil werk laten verdwijnen mag niet.
+- Onder de header staat een bolletje: *Bewaard* of *Bewaard op dit toestel —
+  wacht op verbinding*.
+- Bij het afsluiten van de bon wordt het concept aan beide kanten gewist.
+
+Nagemeten op staging: alle drie de proeven slagen nu, inclusief het verse
+toestel.
 
 ### 6. Wat na een onderbroken job? — te beslissen
 
