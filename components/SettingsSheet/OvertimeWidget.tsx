@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { dayCapacityMinutes } from '@/lib/planning/workSchedule'
 
 interface Props {
   startTime: string   // "HH:MM"
@@ -34,10 +35,12 @@ function formatSaldo(minutes: number): string {
   return `${sign}${h}u${m.toString().padStart(2, '0')}`
 }
 
-const TARGET_MINUTES = 7 * 60 + 45  // 7u45
-
 export default function OvertimeWidget({ startTime, saldo }: Props) {
   const [elapsed, setElapsed] = useState(0)  // minutes since startTime
+  // The day's target comes from the roster, so it is 8u30 Monday to Thursday
+  // and 6u00 on Friday instead of a flat 7u45 that was right on no day at all.
+  // Recomputed on the same tick as `elapsed` so it survives midnight.
+  const [target, setTarget] = useState<number | null>(null)
 
   useEffect(() => {
     function update() {
@@ -47,14 +50,16 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
       // Handle midnight rollover (shift started before midnight)
       if (nowMinutes < startMinutes) nowMinutes += 24 * 60
       setElapsed(Math.max(0, nowMinutes - startMinutes))
+      setTarget(dayCapacityMinutes(now))
     }
     update()
     const id = setInterval(update, 60_000)
     return () => clearInterval(id)
   }, [startTime])
 
-  const progress = Math.min(100, (elapsed / TARGET_MINUTES) * 100)
-  const remaining = TARGET_MINUTES - elapsed
+  // A day with no roster — a weekend — has nothing to count down to.
+  const progress = target ? Math.min(100, (elapsed / target) * 100) : 0
+  const remaining = target ? target - elapsed : 0
 
   return (
     <div className="rounded-xl border border-stroke bg-surface p-4">
@@ -66,7 +71,11 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
           </p>
           <p className="text-2xl font-bold text-brand-orange leading-none">
             {formatElapsed(elapsed)}
-            <span className="text-sm font-normal text-ink-soft ml-1">/ 7u45</span>
+            {target !== null && (
+              <span className="text-sm font-normal text-ink-soft ml-1">
+                / {formatElapsed(target)}
+              </span>
+            )}
           </p>
         </div>
 
@@ -95,7 +104,9 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
 
       {/* Status line */}
       <div className="mb-2">
-        {remaining > 0 ? (
+        {target === null ? (
+          <p className="text-xs text-ink-soft">Geen werkdag vandaag</p>
+        ) : remaining > 0 ? (
           <p className="text-xs text-ink-soft">
             Nog {formatRemaining(remaining)} tot einde dag
           </p>
