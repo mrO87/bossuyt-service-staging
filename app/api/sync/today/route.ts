@@ -1,6 +1,17 @@
+/**
+ * De planning van één dag, plus de open pool.
+ *
+ * Hier stond een terugval op mock-data: was een dag leeg, dan stuurde deze
+ * route verzonnen bonnen terug. Dat was bedoeld als demo-comfort en werd een
+ * echte bug zodra er twee weergaven op dezelfde route zaten. Een bon uit een
+ * dag slepen maakte die dag leeg, waarna de volgende oproep hem vulde met
+ * verzinsels — de gebruiker zag zijn wijziging "terugspringen", en in de
+ * weekweergave stonden lege dagen vol met bonnen die niet bestaan.
+ *
+ * Een lege dag is nu leeg. Dat is minder gezellig en het is waar.
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { getTodayInterventions } from '@/lib/server/interventions'
-import { interventions as mockInterventions } from '@/lib/mock-data'
 
 export async function GET(req: NextRequest) {
   const technicianId = req.nextUrl.searchParams.get('technicianId')
@@ -15,30 +26,6 @@ export async function GET(req: NextRequest) {
 
   try {
     const data = await getTodayInterventions(technicianId, date)
-
-    // When the DB has no planned items for this date, fall back to mock data.
-    // We only check planned — open pool is date-independent and always has DB items.
-    if (data.planned.length === 0) {
-      const start = new Date(`${date}T00:00:00.000Z`)
-      const end = new Date(`${date}T23:59:59.999Z`)
-
-      const mockForDay = mockInterventions.filter(i => {
-        if (!i.plannedDate) return false   // pool item — belongs to no day
-        const d = new Date(i.plannedDate)
-        return d >= start && d <= end && i.status === 'gepland'
-      })
-
-      const planned = mockForDay
-        .filter(i => i.technicians.some(t => t.technicianId === technicianId && t.accepted))
-        .sort((a, b) => {
-          const ao = a.technicians.find(t => t.technicianId === technicianId)?.plannedOrder ?? 99
-          const bo = b.technicians.find(t => t.technicianId === technicianId)?.plannedOrder ?? 99
-          return ao - bo
-        })
-
-      return NextResponse.json({ planned, open: data.open })
-    }
-
     return NextResponse.json(data)
   } catch (error) {
     console.error('[sync/today] kon interventies niet laden:', error)
