@@ -50,6 +50,7 @@ export default function WeekView() {
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})
   const [pool, setPool] = useState<Intervention[]>([])
+  const [poolVisible, setPoolVisible] = useState(true)
   const [refusal, setRefusal] = useState<string | null>(null)
 
   const sensors = useSensors(
@@ -161,7 +162,7 @@ export default function WeekView() {
 
     if (intent.kind === 'none') {
       if (intent.reason === 'het werk is al begonnen') {
-        setRefusal('Deze werkbon is al gestart en blijft op zijn dag staan.')
+        setRefusal('Deze werkbon is al gestart en blijft op de dag staan.')
       }
       return
     }
@@ -171,28 +172,50 @@ export default function WeekView() {
     if (!moving) return
 
     if (intent.kind === 'unschedule') {
-      const rest = (byDate[intent.fromDate] ?? []).filter(i => i.id !== moving.id)
+      const previousDay = byDate[intent.fromDate] ?? []
+      const previousPool = pool
+      const rest = previousDay.filter(i => i.id !== moving.id)
       const released: Intervention = {
         ...moving,
         plannedDate: undefined,
         status: moving.status === 'gepland' || moving.status === 'onderweg' ? 'aangemaakt' : moving.status,
       }
+
       setByDate(current => ({ ...current, [intent.fromDate]: rest }))
       setPool(current => [released, ...current])
-      await persistDay(intent.fromDate, rest, released)
+
+      try {
+        await persistDay(intent.fromDate, rest, released)
+      } catch {
+        // Nog niets is gelukt: zet de dag en de pool terug zoals ze waren.
+        setByDate(current => ({ ...current, [intent.fromDate]: previousDay }))
+        setPool(previousPool)
+        setRefusal('Verplaatsen is niet gelukt. Probeer het opnieuw.')
+      }
       return
     }
 
     if (intent.kind === 'schedule') {
-      const target = [...(byDate[intent.toDate] ?? []), moving]
+      const previousDay = byDate[intent.toDate] ?? []
+      const previousPool = pool
       const scheduled: Intervention = {
         ...moving,
         plannedDate: `${intent.toDate}T00:00:00.000Z`,
         status: moving.status === 'aangemaakt' ? 'gepland' : moving.status,
       }
+      const target = [...previousDay, scheduled]
+
       setPool(current => current.filter(i => i.id !== moving.id))
-      setByDate(current => ({ ...current, [intent.toDate]: [...(current[intent.toDate] ?? []), scheduled] }))
-      await persistDay(intent.toDate, target.map(i => (i.id === moving.id ? scheduled : i)), scheduled)
+      setByDate(current => ({ ...current, [intent.toDate]: target }))
+
+      try {
+        await persistDay(intent.toDate, target, scheduled)
+      } catch {
+        // Nog niets is gelukt: zet de dag en de pool terug zoals ze waren.
+        setByDate(current => ({ ...current, [intent.toDate]: previousDay }))
+        setPool(previousPool)
+        setRefusal('Verplaatsen is niet gelukt. Probeer het opnieuw.')
+      }
       return
     }
 
@@ -233,7 +256,13 @@ export default function WeekView() {
         [intent.toDate]: (current[intent.toDate] ?? []).filter(i => i.id !== scheduled.id),
       }))
       setPool(current => [released, ...current])
-      await upsertIntervention(released)
+      try {
+        await upsertIntervention(released)
+      } catch {
+        // Best-effort: the screen already shows the bon back in the pool, and
+        // the user needs to hear that the move failed regardless of whether
+        // this recovery write itself reached IndexedDB.
+      }
       setRefusal('Verplaatsen niet volledig gelukt — de werkbon staat terug in de pool.')
     }
   }
@@ -264,7 +293,7 @@ export default function WeekView() {
         <button
           type="button"
           onClick={() => shiftWeek(-1)}
-          className="h-9 w-9 rounded-full text-ink-soft active:bg-brand-mid/40"
+          className="h-11 w-11 rounded-full text-ink-soft active:bg-brand-mid/40"
           aria-label="Vorige week"
         >
           ‹
@@ -275,7 +304,7 @@ export default function WeekView() {
         <button
           type="button"
           onClick={() => shiftWeek(1)}
-          className="h-9 w-9 rounded-full text-ink-soft active:bg-brand-mid/40"
+          className="h-11 w-11 rounded-full text-ink-soft active:bg-brand-mid/40"
           aria-label="Volgende week"
         >
           ›
@@ -319,8 +348,8 @@ export default function WeekView() {
 
           <OpenPool
             interventions={pool}
-            visible
-            onToggleVisible={() => {}}
+            visible={poolVisible}
+            onToggleVisible={() => setPoolVisible(v => !v)}
             onOpen={id => router.push(`/interventions/${id}`)}
           />
         </DndContext>
