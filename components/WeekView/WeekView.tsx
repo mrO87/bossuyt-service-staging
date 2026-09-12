@@ -23,6 +23,7 @@ import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
+import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
 import { OpenPool } from '@/components/DayView/OpenPool'
 import type { Intervention } from '@/types'
 import type { ReactNode } from 'react'
@@ -278,16 +279,14 @@ export default function WeekView() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <header className="flex items-center justify-between bg-brand-dark px-4 py-3">
-        <button
-          type="button"
-          onClick={() => router.push('/')}
-          className="text-xs font-semibold text-ink-soft active:opacity-70"
-        >
-          ← Dag
-        </button>
-        <p className="text-sm font-bold text-white">Weekplanning</p>
-        <span className="w-10" />
+      {/* De titel is de knop naar de andere weergaven — zie ViewSwitcher. De
+          losse "← Dag" die hier stond is daarmee overbodig: terug naar de dag
+          is nu één van de keuzes in de lijst, en niet langer een aparte weg. */}
+      <header className="flex items-center gap-3 bg-brand-dark px-4 py-3">
+        <div>
+          <p className="text-sm font-bold leading-tight text-white">bossuyt</p>
+          <ViewSwitcher current="week" />
+        </div>
       </header>
 
       <div className="flex items-center justify-between border-b border-brand-mid bg-brand-dark px-4 pb-2">

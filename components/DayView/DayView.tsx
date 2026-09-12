@@ -18,6 +18,7 @@ import { useTasks } from '@/lib/task-store'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { useDayData } from '@/lib/useDayData'
 import { toLocalDateStr } from '@/lib/planning/weekDays'
+import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
 import { PlanningBoard } from './PlanningBoard'
 
 // ---------- helpers ----------
@@ -83,7 +84,7 @@ export default function DayView() {
           <BossuyLogo />
           <div>
             <p className="font-bold text-base leading-tight tracking-wide text-white">bossuyt</p>
-            <p className="text-xs leading-tight text-ink-soft">technieker</p>
+            <ViewSwitcher current="dag" />
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -147,14 +148,6 @@ export default function DayView() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push('/planning/week')}
-            className="h-10 px-2 text-[11px] font-semibold text-ink-soft active:opacity-70"
-            aria-label="Weekplanning openen"
-          >
-            Week
           </button>
         </div>
       </div>
