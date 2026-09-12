@@ -79,16 +79,15 @@ export function computeDaySchedule(input: {
 
   let previous: Coordinates | undefined = origin
 
-  jobs.forEach((job, index) => {
-    const legMinutes = travelBetween(previous, job.at)
-
+  /** Zet één rit in de tijdlijn en schuift de klok op. Null blijft nul minuten. */
+  function pushTravelLeg(id: string, legMinutes: number | null) {
     if (legMinutes === null) {
       // Onbekend duurt nul. Een verzonnen duur zou de hele dag erachter
       // verschuiven, en dat is erger dan een gat dat zichzelf aanwijst.
       unknownLegs++
       blocks.push({
         kind: 'travel',
-        id: `travel-${index}`,
+        id,
         startMinutes: cursor,
         endMinutes: cursor,
         minutes: null,
@@ -96,7 +95,7 @@ export function computeDaySchedule(input: {
     } else if (legMinutes > 0) {
       blocks.push({
         kind: 'travel',
-        id: `travel-${index}`,
+        id,
         startMinutes: cursor,
         endMinutes: cursor + legMinutes,
         minutes: legMinutes,
@@ -104,6 +103,11 @@ export function computeDaySchedule(input: {
       cursor += legMinutes
       travelMinutes += legMinutes
     }
+  }
+
+  jobs.forEach((job, index) => {
+    const legMinutes = travelBetween(previous, job.at)
+    pushTravelLeg(`travel-${index}`, legMinutes)
 
     if (index === breakBefore) {
       blocks.push({
@@ -130,20 +134,7 @@ export function computeDaySchedule(input: {
   })
 
   const homeLeg = travelBetween(previous, origin)
-  if (homeLeg === null) {
-    unknownLegs++
-    blocks.push({
-      kind: 'travel', id: 'travel-home',
-      startMinutes: cursor, endMinutes: cursor, minutes: null,
-    })
-  } else if (homeLeg > 0) {
-    blocks.push({
-      kind: 'travel', id: 'travel-home',
-      startMinutes: cursor, endMinutes: cursor + homeLeg, minutes: homeLeg,
-    })
-    cursor += homeLeg
-    travelMinutes += homeLeg
-  }
+  pushTravelLeg('travel-home', homeLeg)
 
   blocks.push({ kind: 'anchor', id: 'origin-end', startMinutes: cursor, endMinutes: cursor + 10 })
 
