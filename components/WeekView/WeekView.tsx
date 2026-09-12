@@ -8,6 +8,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  DndContext, PointerSensor, TouchSensor, closestCenter, useDroppable, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
 import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
 import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedule'
@@ -15,7 +19,12 @@ import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { estimateTravel } from '@/lib/routing/estimateTravel'
 import { knownRoute } from '@/lib/routing/knownRoutes'
+import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
+import { buildPlanningWrite } from '@/lib/planning/planningWrite'
+import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
+import { OpenPool } from '@/components/DayView/OpenPool'
 import type { Intervention } from '@/types'
+import type { ReactNode } from 'react'
 import { WeekGrid } from './WeekGrid'
 
 /**
@@ -41,6 +50,12 @@ export default function WeekView() {
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})
   const [pool, setPool] = useState<Intervention[]>([])
+  const [refusal, setRefusal] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
 
   const days = useMemo(() => weekDaysAround(anchor), [anchor])
 
@@ -100,6 +115,93 @@ export default function WeekView() {
     for (const list of Object.values(byDate)) for (const i of list) map[i.id] = i
     return map
   }, [byDate])
+
+  const dayOf = useMemo(() => {
+    const map: Record<string, string | undefined> = {}
+    for (const [date, list] of Object.entries(byDate)) for (const i of list) map[i.id] = date
+    return map
+  }, [byDate])
+
+  const statusById = useMemo(() => {
+    const map: Record<string, Intervention['status']> = {}
+    for (const i of [...Object.values(byDate).flat(), ...pool]) map[i.id] = i.status
+    return map
+  }, [byDate, pool])
+
+  /**
+   * Eén dag wegschrijven. savePlanningSnapshot beschrijft altijd precies één
+   * dag, dus een verplaatsing tussen twee dagen is twee van deze.
+   */
+  async function persistDay(dateStr: string, list: Intervention[], moved?: Intervention) {
+    await Promise.all(list.map((i, index) => updateInterventionSequence(i.id, index + 1)))
+    if (moved) await upsertIntervention(moved)
+    await enqueuePlanningWrite(
+      buildPlanningWrite({
+        day: list,
+        actor: currentUser,
+        technicianId: currentUser.id,
+        date: new Date(`${dateStr}T12:00:00`),
+      }),
+    )
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setRefusal(null)
+
+    const intent = resolveWeekDrop({
+      activeId: String(event.active.id),
+      overId: event.over ? String(event.over.id) : null,
+      dayOf,
+      statusById,
+    })
+
+    if (intent.kind === 'none') {
+      if (intent.reason === 'het werk is al begonnen') {
+        setRefusal('Deze werkbon is al gestart en blijft op zijn dag staan.')
+      }
+      return
+    }
+
+    const all = [...Object.values(byDate).flat(), ...pool]
+    const moving = all.find(i => i.id === intent.workOrderId)
+    if (!moving) return
+
+    if (intent.kind === 'unschedule') {
+      const rest = (byDate[intent.fromDate] ?? []).filter(i => i.id !== moving.id)
+      const released: Intervention = {
+        ...moving,
+        plannedDate: undefined,
+        status: moving.status === 'gepland' || moving.status === 'onderweg' ? 'aangemaakt' : moving.status,
+      }
+      setByDate(current => ({ ...current, [intent.fromDate]: rest }))
+      setPool(current => [released, ...current])
+      await persistDay(intent.fromDate, rest, released)
+      return
+    }
+
+    if (intent.kind === 'schedule') {
+      const target = [...(byDate[intent.toDate] ?? []), moving]
+      const scheduled: Intervention = {
+        ...moving,
+        plannedDate: `${intent.toDate}T00:00:00.000Z`,
+        status: moving.status === 'aangemaakt' ? 'gepland' : moving.status,
+      }
+      setPool(current => current.filter(i => i.id !== moving.id))
+      setByDate(current => ({ ...current, [intent.toDate]: [...(current[intent.toDate] ?? []), scheduled] }))
+      await persistDay(intent.toDate, target.map(i => (i.id === moving.id ? scheduled : i)), scheduled)
+      return
+    }
+
+    // move: de oude dag eerst. Mislukt de tweede schrijfbeweging, dan staat de
+    // bon in de pool — vervelend, maar beter dan op twee dagen tegelijk.
+    const without = (byDate[intent.fromDate] ?? []).filter(i => i.id !== moving.id)
+    const scheduled: Intervention = { ...moving, plannedDate: `${intent.toDate}T00:00:00.000Z` }
+    const target = [...(byDate[intent.toDate] ?? []), scheduled]
+
+    setByDate(current => ({ ...current, [intent.fromDate]: without, [intent.toDate]: target }))
+    await persistDay(intent.fromDate, without)
+    await persistDay(intent.toDate, target, scheduled)
+  }
 
   function shiftWeek(weeks: number) {
     setAnchor(current => {
@@ -161,19 +263,32 @@ export default function WeekView() {
           <span className="tabular-nums">{pixelsPerHour} px</span>
         </label>
 
-        <WeekGrid
-          days={days}
-          schedules={schedules}
-          interventionsById={interventionsById}
-          pixelsPerHour={pixelsPerHour}
-          selectedDate={new Date()}
-          onOpenIntervention={id => router.push(`/interventions/${id}`)}
-        />
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          {refusal && (
+            <div className="mb-3 rounded-xl border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-xs text-ink">
+              {refusal}
+            </div>
+          )}
 
-        <h2 className="mb-2 mt-8 text-sm font-bold uppercase tracking-wide text-ink">Open pool</h2>
-        <p className="mb-3 text-xs text-ink-soft">
-          {pool.length} {pool.length === 1 ? 'job' : 'jobs'} zonder dag
-        </p>
+          <WeekGrid
+            days={days}
+            schedules={schedules}
+            interventionsById={interventionsById}
+            pixelsPerHour={pixelsPerHour}
+            selectedDate={new Date()}
+            onOpenIntervention={id => router.push(`/interventions/${id}`)}
+            renderDayColumn={(day, index, column) => (
+              <DayDroppable dateStr={toLocalDateStr(day)}>{column}</DayDroppable>
+            )}
+          />
+
+          <OpenPool
+            interventions={pool}
+            visible
+            onToggleVisible={() => {}}
+            onOpen={id => router.push(`/interventions/${id}`)}
+          />
+        </DndContext>
       </main>
     </div>
   )
@@ -181,4 +296,22 @@ export default function WeekView() {
 
 function monthName(day: Date): string {
   return new Intl.DateTimeFormat('nl-BE', { month: 'short' }).format(day)
+}
+
+/**
+ * Een hele dagkolom als doelwit, niet de blokken erin.
+ *
+ * Dat is wat 62 px bruikbaar maakt met een duim: je mikt op een dag, niet op
+ * een uur. Het uur volgt uit de berekening, dus grof richten is genoeg.
+ */
+function DayDroppable({ dateStr, children }: { dateStr: string; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: dayDroppableId(dateStr) })
+  return (
+    <div
+      ref={setNodeRef}
+      className={isOver ? 'bg-brand-orange/10 outline-2 outline-dashed outline-brand-orange' : ''}
+    >
+      {children}
+    </div>
+  )
 }
