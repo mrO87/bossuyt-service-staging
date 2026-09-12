@@ -154,6 +154,14 @@ export default function DayView() {
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
+          <button
+            type="button"
+            onClick={() => router.push('/planning/week')}
+            className="h-10 px-2 text-[11px] font-semibold text-ink-soft active:opacity-70"
+            aria-label="Weekplanning openen"
+          >
+            Week
+          </button>
         </div>
       </div>
 
