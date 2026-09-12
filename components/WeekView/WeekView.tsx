@@ -2,7 +2,9 @@
  * WeekView — de week als agenda, met de open pool eronder.
  *
  * Haalt per dag de planning op en laat computeDaySchedule er kloktijden van
- * maken. In deze taak is alles alleen-lezen; het slepen komt in Task 3.
+ * maken. Slepen verplaatst een werkbon tussen de pool en een dag, of van dag
+ * naar dag — die laatste richting kent de dagweergave niet en is twee
+ * momentopnames na elkaar, niet één verplaatsing (zie handleDragEnd).
  */
 'use client'
 
@@ -197,14 +199,45 @@ export default function WeekView() {
     }
 
     // move: de oude dag eerst. Mislukt de tweede schrijfbeweging, dan staat de
-    // bon in de pool — vervelend, maar beter dan op twee dagen tegelijk.
-    const without = (byDate[intent.fromDate] ?? []).filter(i => i.id !== moving.id)
+    // bon in de pool — vervelend, maar beter dan op twee dagen tegelijk. Het
+    // scherm volgt dezelfde volgorde: elke schrijfbeweging wordt pas op het
+    // scherm gezet nadat de vorige echt gelukt is, nooit vooruitlopend op een
+    // schrijfbeweging die nog kan mislukken — anders lopen scherm en
+    // IndexedDB uiteen zodra er iets misgaat.
+    const fromList = byDate[intent.fromDate] ?? []
+    const without = fromList.filter(i => i.id !== moving.id)
     const scheduled: Intervention = { ...moving, plannedDate: `${intent.toDate}T00:00:00.000Z` }
-    const target = [...(byDate[intent.toDate] ?? []), scheduled]
 
-    setByDate(current => ({ ...current, [intent.fromDate]: without, [intent.toDate]: target }))
-    await persistDay(intent.fromDate, without)
-    await persistDay(intent.toDate, target, scheduled)
+    setByDate(current => ({ ...current, [intent.fromDate]: without }))
+
+    try {
+      await persistDay(intent.fromDate, without)
+    } catch {
+      // Nog niets is gelukt: zet de oude dag terug zoals hij was.
+      setByDate(current => ({ ...current, [intent.fromDate]: fromList }))
+      setRefusal('Verplaatsen is niet gelukt. Probeer het opnieuw.')
+      return
+    }
+
+    const target = [...(byDate[intent.toDate] ?? []), scheduled]
+    setByDate(current => ({ ...current, [intent.toDate]: target }))
+
+    try {
+      await persistDay(intent.toDate, target, scheduled)
+    } catch {
+      // De oude dag is al bijgewerkt; er terug naartoe zou een derde
+      // schrijfbeweging vergen die evengoed kan mislukken. In plaats daarvan
+      // volgt het scherm de bon naar waar hij werkelijk staat: op geen enkele
+      // dag, dus de pool — de vluchtroute die de schrijfvolgorde bewust openhoudt.
+      const released: Intervention = { ...moving, plannedDate: undefined }
+      setByDate(current => ({
+        ...current,
+        [intent.toDate]: (current[intent.toDate] ?? []).filter(i => i.id !== scheduled.id),
+      }))
+      setPool(current => [released, ...current])
+      await upsertIntervention(released)
+      setRefusal('Verplaatsen niet volledig gelukt — de werkbon staat terug in de pool.')
+    }
   }
 
   function shiftWeek(weeks: number) {
