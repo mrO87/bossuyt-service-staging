@@ -1,0 +1,540 @@
+<title>Volgorde of vast uur</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --app-dark:#2F343A; --app-orange:#F28C28; --app-blue:#4C6A85; --app-green:#2E9E5B;
+    --app-red:#D64545; --app-surface:#F4F6F8; --app-stroke:#E5E7EB;
+    --app-soft:#6B7280; --app-faint:#9CA3AF;
+
+    --bg:#F6F7F8; --panel:#FFF; --line:#DCE0E5; --line-soft:#E8EBEE;
+    --text:#1F2933; --text-soft:#5A646F; --text-faint:#8B949E;
+    --accent:#C2661A; --good:#2E7D4F; --bad:#B3413F;
+
+    --display:'Archivo','Helvetica Neue',Arial,sans-serif;
+    --body:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#15181B; --panel:#1E2226; --line:#343A40; --line-soft:#2B3036;
+    --text:#E8EBEE; --text-soft:#A8B1BA; --text-faint:#78828C;
+    --accent:#F0A057; --good:#5FBF88; --bad:#E0736F;
+    --app-surface:#22272B; --app-stroke:#343A40; --app-soft:#A8B1BA; --app-faint:#78828C;
+    color-scheme:dark;}}
+  :root[data-theme="dark"]{
+    --bg:#15181B; --panel:#1E2226; --line:#343A40; --line-soft:#2B3036;
+    --text:#E8EBEE; --text-soft:#A8B1BA; --text-faint:#78828C;
+    --accent:#F0A057; --good:#5FBF88; --bad:#E0736F;
+    --app-surface:#22272B; --app-stroke:#343A40; --app-soft:#A8B1BA; --app-faint:#78828C;
+    color-scheme:dark;}
+
+  body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1010px;margin:0 auto;padding-inline:20px;padding-block:34px 60px}
+
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);margin:0 0 12px}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(26px,5.5vw,38px);line-height:1.12;letter-spacing:-.02em;text-wrap:balance;margin:0 0 14px}
+  .lede{max-width:64ch;font-size:16.5px;color:var(--text-soft);margin:0 0 9px}
+  .lede strong{color:var(--text);font-weight:600}
+  .pinico{display:inline-block;background:var(--app-red);color:#fff;border-radius:3px;padding:0 4px;font-size:11px;font-weight:700;font-family:var(--mono)}
+
+  .cols{display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:32px;align-items:start;margin-top:30px}
+  @media (max-width:780px){.cols{grid-template-columns:1fr;gap:24px}}
+
+  .phone{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--app-surface);box-shadow:0 1px 2px rgb(0 0 0/.05),0 10px 30px -14px rgb(31 41 51/.4)}
+  .phdr{background:var(--app-dark);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+  .phdr b{font-size:12.5px;color:#fff;font-weight:700}
+  .phdr span{font-size:10.5px;color:#9CA3AF;font-family:var(--mono)}
+
+  .cal{position:relative;display:grid;grid-template-columns:46px 1fr;background:var(--app-surface)}
+  .gutter{position:relative;border-right:1px solid var(--app-stroke)}
+  .gutter i{position:absolute;right:6px;transform:translateY(-50%);font-family:var(--mono);font-size:9.5px;font-style:normal;color:var(--app-faint)}
+  .track{position:relative;overflow:hidden;contain:layout paint}
+
+  .hr{position:absolute;left:0;right:0;border-top:1px solid var(--app-stroke)}
+  .hr.half{border-top-style:dotted;opacity:.5}
+  .roster{position:absolute;left:0;right:0;background:rgb(0 0 0/.045)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .roster{background:rgb(255 255 255/.05)}}
+
+  /* Alles wat beweegt: top:0 plus transform, dus geen herberekening van de
+     pagina-indeling tijdens het slepen. */
+  .blk{position:absolute;top:0;left:5px;right:7px;border-radius:6px;display:flex;overflow:hidden;
+       will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  .blk .grip{width:15px;flex:0 0 15px;background:rgb(0 0 0/.26);display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab}
+  .blk .grip::before{content:'';width:2px;height:16px;border-radius:2px;background:rgb(255 255 255/.7)}
+  .blk .body{flex:1;min-width:0;padding:3px 5px;color:#fff;cursor:pointer}
+  .blk .t{display:block;font-family:var(--mono);font-size:9.5px;font-weight:600;line-height:1.25;white-space:nowrap}
+  .blk .n{display:block;font-size:10px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .blk .pinbtn{width:20px;flex:0 0 20px;background:rgb(0 0 0/.18);color:rgb(255 255 255/.5);border:0;padding:0;min-height:0;
+               font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;border-radius:0}
+  .blk.fix .pinbtn{background:var(--app-red);color:#fff}
+  .blk .edge{position:absolute;left:15px;right:20px;bottom:0;height:13px;touch-action:none;cursor:ns-resize;
+             display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}
+  .blk .edge::before{content:'';width:24px;height:2px;border-radius:2px;background:rgb(255 255 255/.65)}
+  .blk.fix{outline:2px solid var(--app-red);outline-offset:-2px}
+  .blk.live{z-index:9;box-shadow:0 8px 20px -6px rgb(0 0 0/.5)}
+
+  /* Het uurblokje links staat er altijd. Rood = vastgezet op dat uur.
+     Groen = berekend, dus het schuift mee als er iets voor verandert. */
+  .pinline{position:absolute;top:0;left:0;right:0;border-top:2px dashed var(--app-red);pointer-events:none;z-index:8;will-change:transform}
+  .pinline.dv{border-top-color:var(--app-green)}
+  .pinlab{position:absolute;top:0;left:2px;font-family:var(--mono);font-size:9px;font-weight:600;color:#fff;background:var(--app-red);
+          border-radius:3px;padding:0 4px;pointer-events:none;z-index:8;will-change:transform}
+  .pinlab.dv{background:var(--app-green)}
+
+  .travel{position:absolute;top:0;left:5px;right:7px;border-radius:4px;pointer-events:none;will-change:transform;
+    background:repeating-linear-gradient(135deg,rgb(107 114 128/.3) 0 4px,transparent 4px 8px);border:1px solid rgb(107 114 128/.35)}
+  .travel i{position:absolute;left:5px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8.5px;font-style:normal;white-space:nowrap;color:var(--app-soft)}
+
+  .clashlayer{position:absolute;top:0;left:5px;right:7px;border-radius:5px;pointer-events:none;z-index:12;will-change:transform;
+    border:1.5px solid var(--app-red);
+    background:repeating-linear-gradient(135deg,rgb(214 69 69/.55) 0 5px,rgb(214 69 69/.16) 5px 10px)}
+  .clashlayer i{position:absolute;left:6px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8.5px;
+    font-style:normal;font-weight:600;color:#fff;white-space:nowrap;text-shadow:0 1px 2px rgb(0 0 0/.6)}
+
+  .anchor{position:absolute;top:0;left:5px;right:7px;height:10px;border-radius:3px;background:var(--app-dark);pointer-events:none;will-change:transform}
+  .anchor i{position:absolute;left:6px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8.5px;font-style:normal;color:#C7CDD4;white-space:nowrap}
+  .hide{display:none}
+
+  .read{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:17px 19px}
+  .read h3{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint);margin:0 0 13px}
+  .read h3.mt{margin-top:20px}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
+  .row:last-of-type{border-bottom:0}
+  .row .k{font-size:13.5px;color:var(--text-soft)}
+  .row .v{font-family:var(--mono);font-size:14px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .row.big .v{font-size:18px}
+  .row .v.warn{color:var(--bad)}
+  .row .v.good{color:var(--good)}
+  .route{font-family:var(--mono);font-size:12px;color:var(--text-soft);margin:9px 0 0;line-height:1.7}
+
+  .alert{margin-top:13px;border-left:3px solid var(--bad);background:color-mix(in srgb,var(--bad) 9%,transparent);border-radius:3px;padding:10px 12px;font-size:13.5px}
+  .alert b{color:var(--bad)}
+  .alert.hide{display:none}
+
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  button{font-family:var(--body);font-size:13.5px;font-weight:600;color:var(--text);background:var(--panel);
+         border:1px solid var(--line);border-radius:5px;padding:9px 13px;cursor:pointer;min-height:44px}
+  button:hover{border-color:var(--text-faint)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.pri{background:var(--app-dark);border-color:var(--app-dark);color:#fff}
+
+  .how{margin-top:24px;font-size:14px;color:var(--text-soft);max-width:64ch}
+  .how h3{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint);margin:0 0 9px}
+  .how li{margin-bottom:6px}
+  .how code{font-family:var(--mono);font-size:12.5px;background:var(--line-soft);padding:1px 5px;border-radius:3px}
+
+  table.km{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px;font-family:var(--mono)}
+  table.km th,table.km td{padding:5px 8px 5px 0;text-align:right;border-bottom:1px solid var(--line-soft);font-weight:400}
+  table.km th{color:var(--text-faint);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+  table.km th:first-child,table.km td:first-child{text-align:left;color:var(--text)}
+
+  .foot{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--text-faint);max-width:66ch}
+  .foot b{color:var(--text-soft)}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Bossuyt Service &middot; wegwerp-prototype</p>
+  <h1>Volgorde schuiven, of een uur vastzetten</h1>
+  <p class="lede">
+    Sleep aan het <strong>grijze strookje</strong>. Elke sleep zet de bon op een uur, en daar wordt
+    alles uit herrekend: de <strong>vertrektijd</strong> en de <strong>rijtijden</strong> tussen de klanten
+    die je zo naast elkaar zet.
+  </p>
+  <p class="lede">
+    Een bon blijft staan waar je hem neerzet &mdash; ook bovenop een andere. Botst het, dan komt er
+    <strong>rode arcering</strong> over het stuk dat niet kan, en die blijft tot jij het oplost. Er
+    schuift niets vanzelf weg onder je vinger.
+  </p>
+  <p class="lede">
+    Het <span class="pinico">&#128204;</span> zegt alleen of het uur een <em>afspraak</em> is.
+    <span class="pinico">rood</span> blijft staan als je op &bdquo;kortste volgorde&rdquo; drukt;
+    <span class="pinico" style="background:#2E9E5B">groen</span> mag verplaatst worden.
+  </p>
+  <p class="lede">
+    En ja: de <strong>rijtijd past zich aan</strong>. Elke rit wordt opgezocht tussen de twee klanten die
+    op dat moment na elkaar komen. Lokeren tussen twee Kortrijkse jobs zetten kost je dus echt tijd
+    &mdash; en dat zie je meteen in het rijtotaal.
+  </p>
+
+  <div class="cols">
+    <div>
+      <div class="phone">
+        <div class="phdr"><b>maandag 14 september</b><span id="hdrSum"></span></div>
+        <div class="cal">
+          <div class="gutter" id="gutter"></div>
+          <div class="track" id="track"></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="read">
+        <h3>Wat de technieker ziet</h3>
+        <div class="row big"><span class="k">Vertrekken uit Kuurne</span><span class="v" id="vDep">&mdash;</span></div>
+        <div class="row"><span class="k">Aankomst eerste klant</span><span class="v" id="vFirst">&mdash;</span></div>
+        <div class="row"><span class="k">Terug thuis</span><span class="v" id="vHome">&mdash;</span></div>
+
+        <h3 class="mt">Hoe efficiënt is deze volgorde</h3>
+        <div class="row big"><span class="k">Rijden vandaag</span><span class="v" id="vDrive">&mdash;</span></div>
+        <div class="row"><span class="k">Werken</span><span class="v" id="vWork">&mdash;</span></div>
+        <div class="row"><span class="k">Kortst mogelijke rit</span><span class="v" id="vBest">&mdash;</span></div>
+        <p class="route" id="vRoute"></p>
+
+        <div class="alert hide" id="alert"></div>
+
+        <div class="btns">
+          <button class="pri" id="bBest">Zet in de kortste volgorde</button>
+          <button id="bClash">Toon een conflict</button>
+          <button id="bOver">Rek de eerste job 40 min uit</button>
+          <button id="bReset">Opnieuw</button>
+        </div>
+      </div>
+
+      <div class="how">
+        <h3>De rijtijden die gebruikt worden</h3>
+        <table class="km">
+          <thead><tr><th>van &rarr; naar</th><th>Kuurne</th><th>Lokeren</th><th>Kuurne D.</th><th>Harelbeke</th></tr></thead>
+          <tbody id="kmBody"></tbody>
+        </table>
+
+        <h3 style="margin-top:22px">Waar ik je oordeel over wil</h3>
+        <ul>
+          <li><b>Is het onderscheid duidelijk?</b> Slepen zet altijd een uur;
+            <span class="pinico">&#128204;</span> maakt dat uur bindend. Zet een bon eens veel te vroeg
+            zonder speldje (hij schuift op) en daarna mét (hij blijft staan, met arcering).</li>
+          <li>Zet Frituur 't Pleintje (Lokeren) eens <b>eerst</b>, dan <b>tussenin</b>, dan <b>laatst</b>, en
+            kijk naar <b>rijden vandaag</b>. Zegt dat getal je genoeg?</li>
+          <li>Druk op <b>&bdquo;kortste volgorde&rdquo;</b>. Een bon met een vast uur blijft daarbij staan waar
+            hij staat &mdash; dat is de bedoeling. Klopt dat met hoe jij plant?</li>
+          <li>Is <code>15 min</code> de juiste stap voor een vast uur?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">
+    <b>Dit is geen bouwwerk.</b> Geen database, geen server, en er is niets in de app gewijzigd. De
+    rijtijden zijn vaste waarden uit de tabel hierboven &mdash; in het echt komen ze uit dezelfde vier
+    lagen als nu: cache, gekende routes, schatting, of eerlijk onbekend.
+  </p>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var VIEW_START=6*60+30, VIEW_END=18*60, PPH=52, SNAP=15;
+  var ROSTER_START=7*60, ROSTER_END=16*60;
+
+  // ── de plaatsen en de echte rijtijden ertussen ────────────────────────────
+  // Dit was eerder een lijstje per pósitie in de dag, dus de volgorde wijzigen
+  // kostte altijd hetzelfde en efficiëntie viel niet te testen. Nu hangt elke
+  // rit af van wélke twee klanten na elkaar komen.
+  var PLACE={home:'Kuurne',a:'Lokeren',b:'Kuurne D.',c:'Harelbeke'};
+  var MIN={'a|home':58,'b|home':4,'c|home':9,'a|b':55,'a|c':66,'b|c':8};
+  function legMinutes(x,y){
+    if(x===y) return 0;
+    return MIN[[x,y].sort().join('|')];
+  }
+
+  var BASE=[
+    {id:'a',n:"Frituur 't Pleintje",col:'var(--app-orange)',min:90},
+    {id:'b',n:'Jan Decan',           col:'var(--app-blue)',  min:60},
+    {id:'c',n:'Bakkerij Vergote',    col:'var(--app-green)', min:75}
+  ];
+
+  var track=document.getElementById('track'), gutter=document.getElementById('gutter');
+  var jobs, order, ui={}, dragging=null, pending=null, frame=0;
+
+  function y(m){return (m-VIEW_START)*PPH/60;}
+  function hhmm(m){m=Math.round(m);var h=Math.floor(m/60),q=m%60;return (h<10?'0':'')+h+':'+(q<10?'0':'')+q;}
+  function dur(m){m=Math.round(m);var h=Math.floor(m/60),q=m%60;return h?(q?h+'u'+(q<10?'0':'')+q:h+'u'):q+'min';}
+  function el(cls,parent){var d=document.createElement('div');d.className=cls;parent.appendChild(d);return d;}
+  function byId(id){for(var i=0;i<jobs.length;i++) if(jobs[i].id===id) return jobs[i];return null;}
+
+  // ── de rekenkern ──────────────────────────────────────────────────────────
+  // `order` is de volgorde van de dag. Een bon met `fix` staat op dat uur vast;
+  // een bon zonder volgt gewoon op de vorige, rijtijd inbegrepen.
+  function compute(seq){
+    seq=seq||order;
+    var rows=[],cursor=null,prevPlace='home',prevEnd=null,clashName=null,work=0,drive=0;
+    for(var i=0;i<seq.length;i++){
+      var job=byId(seq[i]);
+      var leg=legMinutes(prevPlace,job.id);
+      var earliest=(cursor===null?7*60+leg:cursor+leg);
+      var start,cf=null,ct=null;
+
+      if(job.at===null){
+        // Nooit ergens neergezet: volgt gewoon op de vorige.
+        start=earliest;
+      } else {
+        // Waar je hem neerzet, daar staat hij. Punt.
+        //
+        // Hier heeft even een variant gestaan die een niet-vastgezette bon
+        // stilletjes opschoof tot hij paste. Bedoeld als hulp, maar het maakt
+        // vrij plaatsen onmogelijk: je zet iets neer en het glijdt weg onder je
+        // vinger, en alles lijkt aan elkaar te hangen. Botst het, dan tekenen
+        // we dat — de gebruiker ziet zelf wel wat hij ermee doet.
+        start=job.at;
+        if(cursor!==null&&start<earliest-0.5){
+          cf=Math.min(start,prevEnd===null?start:prevEnd);
+          ct=earliest;
+          if(clashName===null) clashName=job.n;
+        }
+      }
+
+      rows.push({job:job,start:start,end:start+job.min,leg:leg,travelStart:start-leg,clashFrom:cf,clashTo:ct});
+      work+=job.min; drive+=leg; prevPlace=job.id; prevEnd=start+job.min; cursor=prevEnd;
+    }
+    var back=legMinutes(prevPlace,'home');
+    drive+=back;
+    return {rows:rows,clash:clashName!==null,clashName:clashName,work:work,drive:drive,
+            depart:rows.length?rows[0].travelStart:null,
+            home:cursor===null?null:cursor+back};
+  }
+
+  /** De kortste rit over alle volgordes — vaste uren blijven op hun plaats. */
+  function bestOrder(){
+    var fixedAt={},loose=[];
+    order.forEach(function(id,i){ var j=byId(id); if(j.fix) fixedAt[i]=id; else loose.push(id); });
+    var best=null,bestDrive=Infinity;
+    permute(loose,function(p){
+      var seq=[],k=0;
+      for(var i=0;i<order.length;i++) seq.push(fixedAt[i]!==undefined?fixedAt[i]:p[k++]);
+      var d=compute(seq).drive;
+      if(d<bestDrive){ bestDrive=d; best=seq; }
+    });
+    return {seq:best||order.slice(),drive:bestDrive};
+  }
+  function permute(arr,fn){
+    if(arr.length<=1){ fn(arr.slice()); return; }
+    for(var i=0;i<arr.length;i++){
+      var rest=arr.slice(); var head=rest.splice(i,1);
+      permute(rest,function(p){ fn(head.concat(p)); });
+    }
+  }
+
+  // ── DOM één keer opbouwen ─────────────────────────────────────────────────
+  function build(){
+    var H=y(VIEW_END),m;
+    track.style.height=H+'px'; gutter.style.height=H+'px';
+
+    var g='';
+    for(m=Math.ceil(VIEW_START/60)*60;m<=VIEW_END;m+=60) g+='<i style="top:'+y(m)+'px">'+hhmm(m)+'</i>';
+    gutter.innerHTML=g;
+
+    track.textContent='';
+    var r1=el('roster',track); r1.style.top='0'; r1.style.height=y(ROSTER_START)+'px';
+    var r2=el('roster',track); r2.style.top=y(ROSTER_END)+'px'; r2.style.height=(H-y(ROSTER_END))+'px';
+    for(m=Math.ceil(VIEW_START/60)*60;m<=VIEW_END;m+=60) el('hr',track).style.top=y(m)+'px';
+    for(m=Math.ceil(VIEW_START/30)*30;m<=VIEW_END;m+=30) if(m%60) el('hr half',track).style.top=y(m)+'px';
+
+    ui.depart=el('anchor',track); ui.depart.innerHTML='<i></i>'; ui.departT=ui.depart.querySelector('i');
+    ui.home=el('anchor',track);   ui.home.innerHTML='<i></i>';   ui.homeT=ui.home.querySelector('i');
+
+    ui.byId={};
+    jobs.forEach(function(job){
+      var trav=el('travel',track); trav.innerHTML='<i></i>';
+      var clash=el('clashlayer hide',track); clash.innerHTML='<i></i>';
+      var line=el('pinline hide',track), lab=el('pinlab hide',track);
+      var b=el('blk',track); b.style.background=job.col; b.dataset.id=job.id;
+      b.innerHTML='<div class="grip"></div>'+
+                  '<div class="body"><span class="t"></span><span class="n"></span></div>'+
+                  '<button class="pinbtn" type="button" title="Vast uur">&#128204;</button>'+
+                  '<div class="edge"></div>';
+      var u={job:job,blk:b,grip:b.querySelector('.grip'),edge:b.querySelector('.edge'),
+             pinbtn:b.querySelector('.pinbtn'),t:b.querySelector('.t'),n:b.querySelector('.n'),
+             travel:trav,travelT:trav.querySelector('i'),clash:clash,clashT:clash.querySelector('i'),
+             line:line,lab:lab};
+      u.n.textContent=job.n;
+      ui.byId[job.id]=u;
+    });
+
+    var body=document.getElementById('kmBody'), ids=['home','a','b','c'], html='';
+    ids.forEach(function(x){
+      html+='<tr><td>'+PLACE[x]+'</td>';
+      ids.forEach(function(z){ html+='<td>'+(x===z?'—':legMinutes(x,z)+'′')+'</td>'; });
+      html+='</tr>';
+    });
+    body.innerHTML=html;
+  }
+
+  function place(node,topPx,heightPx){
+    node.style.transform='translateY('+topPx+'px)';
+    if(heightPx!==undefined) node.style.height=heightPx+'px';
+    node.classList.remove('hide');
+  }
+
+  function apply(){
+    var s=compute();
+
+    if(s.depart===null) ui.depart.classList.add('hide');
+    else { place(ui.depart,y(s.depart)-10); ui.departT.textContent='vertrek '+hhmm(s.depart); }
+    if(s.home===null) ui.home.classList.add('hide');
+    else { place(ui.home,y(s.home)); ui.homeT.textContent='thuis '+hhmm(s.home); }
+
+    s.rows.forEach(function(r){
+      var u=ui.byId[r.job.id];
+      var h=Math.max(26,y(r.end)-y(r.start));
+
+      // Een los blok volgt tijdens het slepen de vinger. Zonder dit bleef het
+      // staan waar de berekening het zette en voelde slepen alsof er niets
+      // gebeurde — terwijl de volgorde ondertussen wél veranderde.
+      var following=dragging&&dragging.mode==='move'&&dragging.u.job.id===r.job.id
+                    &&dragging.at!=null;
+      var top=following?y(dragging.at):y(r.start);
+
+      place(u.blk,top,h);
+      u.blk.classList.toggle('fix',r.job.fix);
+      u.t.textContent=hhmm(r.start)+'–'+hhmm(r.end)+' · '+dur(r.job.min);
+
+      if(r.leg>0){ place(u.travel,y(r.travelStart),y(r.start)-y(r.travelStart));
+        u.travelT.textContent=r.leg+' min rijden'; }
+      else u.travel.classList.add('hide');
+
+      if(r.clashFrom!==null){ place(u.clash,y(r.clashFrom),Math.max(10,y(r.clashTo)-y(r.clashFrom)));
+        u.clashT.textContent='kan niet'; }
+      else u.clash.classList.add('hide');
+
+      // Het uurblokje staat er altijd: rood als het uur vastligt, groen als het
+      // berekend is. De lijn ernaast alleen bij een vast uur, of tijdens het
+      // slepen — anders wordt het rooster een streepjesbos.
+      var fixed=r.job.fix;
+      place(u.lab,top-6);
+      u.lab.textContent=hhmm(r.start);
+      u.lab.classList.toggle('dv',!fixed);
+
+      if(fixed||following){ place(u.line,top); u.line.classList.toggle('dv',!fixed); }
+      else u.line.classList.add('hide');
+    });
+
+    var dep=document.getElementById('vDep');
+    dep.textContent=s.depart===null?'—':hhmm(s.depart);
+    dep.className='v'+(s.depart!==null&&s.depart<ROSTER_START?' warn':'');
+    document.getElementById('vFirst').textContent=s.rows.length?hhmm(s.rows[0].start):'—';
+    document.getElementById('vHome').textContent=s.home===null?'—':hhmm(s.home);
+    document.getElementById('vWork').textContent=dur(s.work);
+
+    var best=bestOrder();
+    var dr=document.getElementById('vDrive');
+    dr.textContent=dur(s.drive);
+    dr.className='v'+(s.drive<=best.drive?' good':'');
+    document.getElementById('vBest').textContent=dur(best.drive)+(s.drive>best.drive?'  (−'+dur(s.drive-best.drive)+')':'');
+
+    document.getElementById('vRoute').textContent=
+      'Kuurne → '+s.rows.map(function(r){return PLACE[r.job.id];}).join(' → ')+' → Kuurne';
+    document.getElementById('hdrSum').textContent=s.depart===null?'':hhmm(s.depart)+' → '+hhmm(s.home);
+
+    var a=document.getElementById('alert');
+    if(s.clash){ a.className='alert';
+      a.innerHTML='<b>'+s.clashName+' kan daar niet staan.</b> Het gearceerde stuk ligt vóór het moment waarop je er ten vroegste kunt zijn. Kort de vorige job in, zet deze later, of haal het vaste uur weg.'; }
+    else if(s.depart!==null&&s.depart<ROSTER_START){ a.className='alert';
+      a.innerHTML='<b>Vertrek vóór 07:00.</b> Om die klant op dat uur te halen moet er vroeger vertrokken worden dan het rooster toelaat.'; }
+    else a.className='alert hide';
+  }
+
+  // ── slepen ────────────────────────────────────────────────────────────────
+  var rectTop=0;
+  function minutesAt(clientY){ return VIEW_START+(clientY-rectTop)*60/PPH; }
+  function snap(m){ return Math.round(m/SNAP)*SNAP; }
+
+  /** Waar hoort deze bon te staan als hij op dit uur losgelaten wordt? */
+  function indexAt(minutes,movingId){
+    var s=compute(),idx=0;
+    s.rows.forEach(function(r){
+      if(r.job.id===movingId) return;
+      if(minutes>(r.start+r.end)/2) idx++;
+    });
+    return idx;
+  }
+  function moveTo(id,idx){
+    var next=order.filter(function(x){ return x!==id; });
+    next.splice(Math.max(0,Math.min(idx,next.length)),0,id);
+    var changed=next.join()!==order.join();
+    order=next;
+    return changed;
+  }
+
+  function onDown(e,u,mode){
+    e.preventDefault();
+    rectTop=track.getBoundingClientRect().top;
+    var s=compute(),row=null;
+    for(var k=0;k<s.rows.length;k++) if(s.rows[k].job.id===u.job.id) row=s.rows[k];
+    dragging={u:u,mode:mode,grab:minutesAt(e.clientY)-row.start,from:row.start,at:row.start};
+    u.blk.classList.add('live');
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onMove(e){
+    if(!dragging) return;
+    pending=e.clientY;
+    if(frame) return;
+    frame=requestAnimationFrame(function(){
+      frame=0;
+      if(!dragging) return;
+      var m=minutesAt(pending), job=dragging.u.job, touched=false;
+      if(dragging.mode==='move'){
+        var at=Math.max(VIEW_START,Math.min(snap(m-dragging.grab),VIEW_END-job.min));
+        // Slepen zet altijd een uur. Dát is wat de vertrektijd terugrekent en
+        // de rijtijden opnieuw laat opzoeken; alleen de volgorde verzetten
+        // levert niets om te herrekenen.
+        if(at!==dragging.at){ dragging.at=at; touched=true; }
+        if(at!==job.at){ job.at=at; touched=true; }
+        touched=moveTo(job.id,indexAt(at+job.min/2,job.id))||touched;
+      } else {
+        var len=Math.max(SNAP,Math.min(snap(m-dragging.from),8*60));
+        if(len!==job.min){ job.min=len; touched=true; }
+      }
+      if(touched) apply();
+    });
+  }
+  function onUp(){ if(!dragging) return; dragging.u.blk.classList.remove('live'); dragging=null; apply(); }
+
+  function wire(){
+    Object.keys(ui.byId).forEach(function(id){
+      var u=ui.byId[id];
+      u.grip.addEventListener('pointerdown',function(e){ onDown(e,u,'move'); });
+      u.edge.addEventListener('pointerdown',function(e){ onDown(e,u,'size'); });
+      u.blk.addEventListener('pointermove',onMove);
+      u.blk.addEventListener('pointerup',onUp);
+      u.blk.addEventListener('pointercancel',onUp);
+      u.pinbtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        var s=compute(),row=null;
+        for(var k=0;k<s.rows.length;k++) if(s.rows[k].job.id===u.job.id) row=s.rows[k];
+        u.job.fix=!u.job.fix;
+        // Vastzetten legt het uur vast waar de bon nu staat; losmaken laat het
+        // uur staan als wens, zodat er niets verspringt onder je handen.
+        if(u.job.at===null) u.job.at=snap(row.start);
+        apply();
+      });
+    });
+  }
+
+  function reset(){
+    jobs=BASE.map(function(j){ return {id:j.id,n:j.n,col:j.col,min:j.min,at:null,fix:false}; });
+    order=jobs.map(function(j){ return j.id; });
+    build(); wire(); apply();
+  }
+
+  document.getElementById('bBest').addEventListener('click',function(){
+    order=bestOrder().seq;
+    // De losse bonnen laten hun gewenste uur los en schuiven tegen elkaar aan —
+    // dat ís de kortste dag. Vaste uren blijven onaangeroerd.
+    jobs.forEach(function(j){ if(!j.fix) j.at=null; });
+    apply();
+  });
+  document.getElementById('bOver').addEventListener('click',function(){ byId(order[0]).min+=40; apply(); });
+  document.getElementById('bClash').addEventListener('click',function(){
+    var s=compute();
+    if(s.rows.length<2) return;
+    var second=s.rows[1].job;
+    second.at=Math.round((s.rows[0].end-45)/SNAP)*SNAP;   // ruim vóór het kan
+    second.fix=true;                                      // en bindend, dus conflict
+    apply();
+  });
+  document.getElementById('bReset').addEventListener('click',reset);
+
+  reset();
+})();
+</script>
