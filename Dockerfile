@@ -20,6 +20,12 @@ ARG NEXT_PUBLIC_STAGING
 ENV NEXT_PUBLIC_STAGING=$NEXT_PUBLIC_STAGING
 ARG NEXT_PUBLIC_GIT_SHA=unknown
 ENV NEXT_PUBLIC_GIT_SHA=$NEXT_PUBLIC_GIT_SHA
+# Cap the build's heap. Left to itself, Next grows until the host swaps and the
+# machine's memory guard kills the build — which is what happened here twice,
+# with no output to show for it. A ceiling makes the garbage collector work
+# instead of the swap file. Raise it with --build-arg on a bigger machine.
+ARG NODE_BUILD_HEAP_MB=2048
+ENV NODE_OPTIONS=--max-old-space-size=$NODE_BUILD_HEAP_MB
 RUN npm run build
 
 # Production image

@@ -31,11 +31,21 @@ export interface WeekDropContext {
   overId: string | null
   /** De dag waarop elke werkbon nu staat; ontbreekt hij, dan zit hij in de pool. */
   dayOf: Record<string, string | undefined>
+  /**
+   * De werkbonnen die nu in de pool liggen.
+   *
+   * Nodig omdat de pool niet één doelwit is maar evenveel doelwitten als er
+   * kaarten in liggen: die kaarten zijn sortable en dus zelf ook loslaatdoel.
+   * Laat je een bon boven een kaart los, dan is dát het `overId` en niet de
+   * pool — precies waardoor terugslepen op staging niets deed. De dagweergave
+   * kent deze regel al (`resolveDropIntent`); hier ontbrak ze.
+   */
+  poolIds: string[]
   statusById: Record<string, InterventionStatus | undefined>
 }
 
 export function resolveWeekDrop(context: WeekDropContext): WeekDropIntent {
-  const { activeId, overId, dayOf, statusById } = context
+  const { activeId, overId, dayOf, poolIds, statusById } = context
 
   if (!overId) return { kind: 'none', reason: 'losgelaten naast de lijst' }
 
@@ -46,7 +56,7 @@ export function resolveWeekDrop(context: WeekDropContext): WeekDropIntent {
   // is comfort, dit is de regel.
   const mustStay = Boolean(fromDate) && !canLeaveTheDay(statusById[activeId])
 
-  if (overId === POOL_DROPPABLE_ID) {
+  if (overId === POOL_DROPPABLE_ID || poolIds.includes(overId)) {
     if (!fromDate) return { kind: 'none', reason: 'staat al in de pool' }
     if (mustStay) return { kind: 'none', reason: 'het werk is al begonnen' }
     return { kind: 'unschedule', workOrderId: activeId, fromDate }

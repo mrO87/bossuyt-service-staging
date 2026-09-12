@@ -157,6 +157,7 @@ export default function WeekView() {
       activeId: String(event.active.id),
       overId: event.over ? String(event.over.id) : null,
       dayOf,
+      poolIds: pool.map(i => i.id),
       statusById,
     })
 

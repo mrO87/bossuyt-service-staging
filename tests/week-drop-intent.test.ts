@@ -18,6 +18,7 @@ const context = {
   activeId: 'wo-1',
   overId: dayDroppableId(TUE),
   dayOf: { 'wo-1': MON } as Record<string, string | undefined>,
+  poolIds: [] as string[],
   statusById: { 'wo-1': 'gepland' as const },
 }
 
@@ -81,6 +82,40 @@ describe('resolveWeekDrop', () => {
 
   it('does nothing when let go outside any list', () => {
     expect(resolveWeekDrop({ ...context, overId: null }).kind).toBe('none')
+  })
+
+  it('releases a work order dropped on a card that sits in the pool', () => {
+    // Dit is de bug die op staging naar boven kwam: naar een dag slepen lukte,
+    // terug naar de pool niet. De blokken op een dag zijn alleen sleepbaar, dus
+    // een drop op een dagkolom raakt altijd de kolom zelf. De kaarten in de pool
+    // zijn sortable en dus óók loslaatdoel — laat je een bon boven een kaart
+    // los, dan is dát het doel, en de pool zelf werd nooit geraakt.
+    const result = resolveWeekDrop({
+      ...context,
+      overId: 'wo-pool-2',
+      poolIds: ['wo-pool-2', 'wo-pool-3'],
+    })
+    expect(result).toEqual({ kind: 'unschedule', workOrderId: 'wo-1', fromDate: MON })
+  })
+
+  it('refuses a started work order dropped on a pool card, same as on the pool', () => {
+    const result = resolveWeekDrop({
+      ...context,
+      overId: 'wo-pool-2',
+      poolIds: ['wo-pool-2'],
+      statusById: { 'wo-1': 'bezig' },
+    })
+    expect(result.kind).toBe('none')
+  })
+
+  it('does not read a day column as the pool just because the pool is empty', () => {
+    const result = resolveWeekDrop({ ...context, poolIds: [] })
+    expect(result.kind).toBe('move')
+  })
+
+  it('still does nothing for a card that belongs to no list at all', () => {
+    const result = resolveWeekDrop({ ...context, overId: 'iets-anders', poolIds: [] })
+    expect(result.kind).toBe('none')
   })
 
   it('treats a card it has never placed as coming from the pool', () => {
