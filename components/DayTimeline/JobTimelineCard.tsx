@@ -33,10 +33,12 @@ function Chip({ className, label }: { className: string; label: string }) {
 export function JobTimelineCard({
   id,
   intervention,
+  startMinutes,
   onClick,
 }: {
   id: string
   intervention: Intervention
+  startMinutes?: number
   onClick: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -90,9 +92,17 @@ export function JobTimelineCard({
               <div className="flex-1 min-w-0 flex items-start gap-2">
                 {intervention.alertNote && <AlertNoteBadge note={intervention.alertNote} />}
                 <div className="min-w-0">
-                  <p className="font-bold text-sm leading-tight text-ink">
-                    {intervention.customerName}
-                  </p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="font-bold text-sm leading-tight text-ink truncate">
+                      {intervention.customerName}
+                    </p>
+                    {typeof startMinutes === 'number' && (
+                      <p className="text-[11px] font-bold tabular-nums text-brand-orange">
+                        {String(Math.floor(startMinutes / 60)).padStart(2, '0')}:
+                        {String(startMinutes % 60).padStart(2, '0')}
+                      </p>
+                    )}
+                  </div>
                   <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
                 </div>
               </div>

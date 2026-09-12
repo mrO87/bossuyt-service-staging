@@ -35,6 +35,7 @@ export function DayTimeline({
     state,
     fullSequence,
     totals,
+    startByIntervention,
     routeLoading,
     travelIsEstimated,
     setStartAddress,
@@ -104,6 +105,7 @@ export function DayTimeline({
                       key={item.id}
                       id={item.id}
                       intervention={item.intervention}
+                      startMinutes={startByIntervention[item.intervention.id]}
                       onClick={() => onOpenIntervention(item.intervention.id)}
                     />
                   )

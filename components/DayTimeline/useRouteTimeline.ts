@@ -40,6 +40,8 @@ import {
   type CachedLeg,
   type TravelCache,
 } from '@/lib/routing/travelCache'
+import { clockToMinutes } from '@/lib/planning/workSchedule'
+import { computeDaySchedule } from '@/lib/planning/daySchedule'
 import type {
   RouteState,
   RouteTotals,
@@ -309,8 +311,8 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationSetKey])
 
-  // Derived: the full visible sequence and the day's totals.
-  const { fullSequence, totals, travelIsEstimated } = useMemo(() => {
+  // Derived: the full visible sequence, the day's totals, and each job's clock time.
+  const { fullSequence, totals, travelIsEstimated, startByIntervention } = useMemo(() => {
     const startItem: StartItem = { kind: 'start', id: 'start', address: state.startAddress }
     const endItem: EndItem = {
       kind: 'end',
@@ -391,12 +393,39 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
       sequence.push(travel)
     }
 
+    // Dezelfde motor als de weekweergave, zodat dag en week nooit een andere
+    // tijd tonen voor dezelfde job.
+    const schedule = computeDaySchedule({
+      departureMinutes: clockToMinutes(settings.startTime),
+      origin: startCoordinates,
+      jobs: state.movableItems
+        .filter((item): item is JobItem => item.kind === 'job')
+        .map(item => ({
+          id: item.intervention.id,
+          estimatedMinutes: item.intervention.estimatedMinutes,
+          at: jobCoordinates(item.intervention),
+        })),
+      travelBetween: (from, to) => {
+        const leg = resolveLeg(cacheSnapshot, from, to)
+        return leg.provider === 'unknown' ? null : leg.minutes
+      },
+      breakMinutes: DEFAULT_BREAK_MINUTES,
+    })
+
+    const startByIntervention: Record<string, number> = {}
+    for (const block of schedule.blocks) {
+      if (block.kind === 'job' && block.interventionId) {
+        startByIntervention[block.interventionId] = block.startMinutes
+      }
+    }
+
     return {
       fullSequence: sequence,
       totals: tally,
       travelIsEstimated: anyEstimated || tally.unknownLegs > 0,
+      startByIntervention,
     }
-  }, [state, startCoordinates, endCoordinates, cacheSnapshot])
+  }, [state, startCoordinates, endCoordinates, cacheSnapshot, settings.startTime])
 
   const reorder = useCallback((activeId: string, overId: string) => {
     const oldIndex = movableItems.findIndex(item => item.id === activeId)
@@ -439,6 +468,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     state,
     fullSequence,
     totals,
+    startByIntervention,
     routeLoading,
     /**
      * True while any leg on screen is a guess rather than a routed answer.
