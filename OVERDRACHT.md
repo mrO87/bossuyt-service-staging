@@ -348,6 +348,69 @@ Dat is **niet** met een test afgedekt: er is geen in-memory IndexedDB in de
 testopstelling (geen jsdom, geen fake-indexeddb). Met de hand na te gaan, of
 `fake-indexeddb` toevoegen.
 
+### 11. Weekplanning (v1.60) — gebouwd, nog niet uitgerold
+
+Zestien commits, `7fb746b..762d131`. 415 tests groen, typecheck/lint/build schoon.
+Nog **niets** uitgerold en de versie is **niet** verhoogd.
+
+Wat er staat: `lib/planning/daySchedule.ts` (`computeDaySchedule` — vertrekuur +
+rijtijd = aankomst = start eerste job, en zo verder; niets wordt opgeslagen),
+`lib/planning/weekDays.ts`, `lib/planning/weekDropIntent.ts`,
+`components/WeekView/` en de route `app/planning/week/`. De dagweergave toont nu
+hetzelfde uur op haar kaarten, uit dezelfde functie.
+
+**Drie dingen die nog met de hand op een echte telefoon moeten:**
+
+1. **Is 62 px breed genoeg om met een duim te slepen?** Dit stond al in het
+   ontwerp als het hoogste risico. Zo niet: indeling B is de terugval — `62px`
+   → `108px` in `WeekGrid` en meer tekst per blok.
+2. **Scrollt een veeg over een gevulde weekkolom?** `touch-none` wordt nu pas
+   aangezet zodra het slepen echt begonnen is (na de 250 ms van de
+   `TouchSensor`). Dat is op redenering gebouwd — er is hier geen harnas dat
+   echte aanraakgebeurtenissen kan afvuren.
+3. De 11 bonnen met `10:11` als tijdstip over de week verdelen, zodat de
+   weergave met een deels gevulde planning te beoordelen is.
+
+**Twee open beslissingen voor de gebruiker:**
+
+- **De weekweergave leest niet offline.** Ze haalt elke dag op met een gewone
+  `fetch`; zonder netwerk staan er zeven lege kolommen die niet te
+  onderscheiden zijn van een lege week, en terugkomen op het scherm kan een nog
+  niet verzonden sleep ongedaan lijken maken. Schrijven gaat wél eerst naar
+  IndexedDB, dus er gaat niets verloren. `lib/useDayData.ts` doet het wel goed
+  en is het voorbeeld. Het ontwerp vroeg dit nooit — het is nieuw werk.
+- **Waar komt de knop die van weergave wisselt?** Vier opties zijn in mockup
+  gezet (schakelbalk onder de kop / de titel als knop / één icoon / tabbalk
+  onderaan). Er is nog niets vastgelegd; vandaag staat er nog "Week" in de
+  datumbalk en "← Dag" in de kop.
+
+**Eén gat dat bewust blijft staan:** `isOnDate` (`lib/planning/listPlacement.ts`)
+bucket op **UTC**-kalenderdag, net als `getDayBounds` op de server, terwijl
+`toLocalDateStr` uit **lokale** delen bouwt. Een bon die tussen lokale
+middernacht en de UTC-offset (1–2 uur in België) ingepland wordt, valt daardoor
+in de vorige bucket en kan uit de geplande lijst vallen tot de volgende
+serververversing. De server heeft precies dezelfde bucketing, dus alleen de
+client rechtzetten laat de twee juist uit elkaar lopen — dit moet in één keer
+aan beide kanten beslist worden. Praktisch smal: de werkdag begint om 06:30.
+Alle tests draaien in `Etc/UTC`, waar lokaal en UTC gelijk zijn, dus CI ziet dit
+nooit.
+
+**Kleinere dingen die bewust bleven liggen:** twee blokken die allebei volledig
+voorbij 18:00 lopen tekenen over elkaar heen op dezelfde 9 px; een blokje dat
+korter is dan de minimumhoogte loopt enkele pixels voorbij zijn echte einde; de
+`schedules`-memo van de weekweergave kan niet afhangen van de gedeelde
+rijtijdencache, dus een al geopende weekweergave pikt een net opgehaalde rit pas
+op als haar memo opnieuw draait; `sticky top-0` op de dagkoppen doet niets; de
+echte uren en de reden "Rijtijd onbekend" zitten alleen in `title`, wat een
+aanraakgebruiker nooit ziet; en de niet-job-blokken registreren dezelfde
+sleep-id in elke kolom (nu onschadelijk, maar een Gantt vermenigvuldigt dat).
+
+**De Gantt kan erop gebouwd worden.** `computeDaySchedule` leest niets uit
+modulescope en noemt nergens een technieker — één aanroep per technieker is
+precies waar ze voor gevormd is. Wat er nog voor moet gebeuren:
+`getTodayInterventions` haalt één technieker op, en de sleep-id's hierboven
+moeten uniek per kolom worden.
+
 ---
 
 ## Migratie die al uitgevoerd is op staging
