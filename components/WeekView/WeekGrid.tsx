@@ -91,7 +91,7 @@ export function WeekGrid({
           })}
 
           <div
-            className="sticky left-0 z-10 relative border-r border-stroke bg-white"
+            className="sticky left-0 z-10 border-r border-stroke bg-white"
             style={{ height: totalPx }}
           >
             {hours.map(m => (
@@ -302,9 +302,13 @@ function Block({
   if (!intervention) return null
 
   // Op 62 px is er geen ruimte voor een aparte handle naast de kaart, zoals de
-  // dagweergave die heeft. Het blok is hier zelf de handle: touch-none maakt
-  // dat een sleepbeweging niet ook de pagina scrollt, en de 250 ms vertraging
-  // van de TouchSensor is wat een tik (openen) onderscheidt van slepen.
+  // dagweergave die heeft. Het blok is hier zelf de handle, en touch-none
+  // staat pas aan zodra `isDragging` waar is — niet vanaf de eerste aanraking.
+  // Tijdens de 250 ms vertraging van de TouchSensor blijft de pagina dus
+  // gewoon scrollbaar: een veeg schuift de kolom, en pas een sleepbeweging die
+  // echt is gestart (en dus is bevestigd, geen scroll) blokkeert het scrollen.
+  // Zou touch-none hier onvoorwaardelijk staan, dan kan een duim die het blok
+  // raakt om te scrollen daar niet meer voorbij.
   return (
     <button
       ref={setNodeRef}
@@ -313,7 +317,8 @@ function Block({
       {...listeners}
       onClick={() => onOpen(intervention.id)}
       className={[
-        'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80 touch-none',
+        'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80',
+        isDragging ? 'touch-none' : '',
         typeBorderClass(intervention.type, intervention.isUrgent),
         clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
       ].join(' ')}
