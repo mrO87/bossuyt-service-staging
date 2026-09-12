@@ -141,6 +141,10 @@ export default function WeekView() {
         actor: currentUser,
         technicianId: currentUser.id,
         date: new Date(`${dateStr}T12:00:00`),
+        // `moved` only ever arrives from elsewhere (the pool, or the other
+        // day in a move) — its planningVersion describes where it came from,
+        // not this day, and must not raise this day's version.
+        arrivingIds: moved ? [moved.id] : undefined,
       }),
     )
   }

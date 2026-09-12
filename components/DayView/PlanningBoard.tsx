@@ -95,6 +95,11 @@ export function PlanningBoard({
         actor: currentUser,
         technicianId: currentUser.id,
         date: selectedDate,
+        // `moved` is only ever a work order arriving from the pool (schedule)
+        // or leaving to it (unschedule, already absent from nextDay) — never
+        // one already resident that a reorder merely reshuffled. Its version
+        // describes the pool, not this day, so it must not raise the day's.
+        arrivingIds: moved ? [moved.id] : undefined,
       }),
     )
   }, [currentUser, selectedDate])

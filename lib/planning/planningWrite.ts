@@ -20,6 +20,15 @@ export interface PlanningWritePayload extends Record<string, unknown> {
   orderedWorkOrderIds: string[]
 }
 
+/**
+ * Every name a pending planning write can carry. Lives here rather than
+ * beside the IndexedDB schema because deciding what counts as "a planning
+ * write" is a planning concept, not a storage one — `lib/idb.ts` imports this
+ * rather than defining its own copy, so there is exactly one list to keep in
+ * sync with `PendingWrite['type']`.
+ */
+export const PLANNING_WRITE_TYPES = ['update_planning', 'update_sequence'] as const
+
 export function toLocalDateStr(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -28,12 +37,24 @@ export function toLocalDateStr(date: Date): string {
 }
 
 /**
- * The version the server will compare against: the highest on the day, never
- * the first one. An empty day is version 1, matching getPlanningVersion's
- * `coalesce(max(...), 1)`.
+ * The version the server will compare against: the highest already on the
+ * day, never the first job's — and never an arriving work order's either.
+ *
+ * `arrivingIds` names work orders that are joining this day from elsewhere
+ * (the pool, or another day) rather than having already been on it. Such a
+ * work order's `planningVersion` describes where it came FROM, not this day,
+ * so counting it — whether it is higher or lower than the day's own version —
+ * sends the server a number that does not describe this day's actual state
+ * and gets refused as a conflict that never happened. An empty day (or one
+ * where everyone present is arriving) is version 1, matching
+ * getPlanningVersion's `coalesce(max(...), 1)`.
  */
-export function planningVersionFor(day: Intervention[]): number {
+export function planningVersionFor(
+  day: Intervention[],
+  arrivingIds: readonly string[] = [],
+): number {
   return day.reduce((highest, intervention) => {
+    if (arrivingIds.includes(intervention.id)) return highest
     return Math.max(highest, intervention.planningVersion ?? 1)
   }, 1)
 }
@@ -43,13 +64,42 @@ export function buildPlanningWrite(input: {
   actor: Pick<User, 'id' | 'role'>
   technicianId: string
   date: Date
+  /** Work orders joining this day from elsewhere; see `planningVersionFor`. */
+  arrivingIds?: readonly string[]
 }): PlanningWritePayload {
   return {
     technicianId: input.technicianId,
     actorId: input.actor.id,
     actorRole: input.actor.role,
     date: toLocalDateStr(input.date),
-    planningVersion: planningVersionFor(input.day),
+    planningVersion: planningVersionFor(input.day, input.arrivingIds),
     orderedWorkOrderIds: input.day.map(intervention => intervention.id),
   }
+}
+
+/**
+ * Which queued planning writes a new one should replace.
+ *
+ * A planning write states a day's whole result, so an older write for the
+ * SAME technician and day carries no information the newer one lacks —
+ * replacing it is correct, and keeping both would be worse than useless: the
+ * first would bump the planning version the second still claims, turning a
+ * later drag into a phantom conflict.
+ *
+ * A write for a DIFFERENT day states a different day's result and must
+ * survive. That is exactly what a day-to-day move queues: the origin day's
+ * write, then the destination day's — collapsing on "type" alone would delete
+ * the first because the second merely looks similar in shape, leaving the
+ * server told about the destination and never about the origin, which is the
+ * work order ending up on two days at once.
+ */
+export function supersededPlanningWrites<T extends { type: string; payload: Record<string, unknown> }>(
+  pending: readonly T[],
+  incoming: Pick<PlanningWritePayload, 'technicianId' | 'date'>,
+): T[] {
+  return pending.filter(item =>
+    (PLANNING_WRITE_TYPES as readonly string[]).includes(item.type) &&
+    item.payload.technicianId === incoming.technicianId &&
+    item.payload.date === incoming.date,
+  )
 }

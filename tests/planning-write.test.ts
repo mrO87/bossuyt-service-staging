@@ -6,9 +6,18 @@
  * only agreed while every work order on a day was always written together. A
  * work order coming out of the pool breaks that assumption, which is exactly
  * the case this feature introduces.
+ *
+ * A second thing worth pinning: which queued write a new one may replace.
+ * `supersededPlanningWrites` decides that without touching IndexedDB, because
+ * IndexedDB itself cannot be unit tested here.
  */
 import { describe, expect, it } from 'vitest'
-import { buildPlanningWrite, planningVersionFor, toLocalDateStr } from '@/lib/planning/planningWrite'
+import {
+  buildPlanningWrite,
+  planningVersionFor,
+  supersededPlanningWrites,
+  toLocalDateStr,
+} from '@/lib/planning/planningWrite'
 import type { Intervention } from '@/types'
 
 function bon(id: string, planningVersion?: number): Intervention {
@@ -32,6 +41,23 @@ describe('planningVersionFor', () => {
   it('treats a missing version as 1', () => {
     expect(planningVersionFor([bon('a'), bon('b')])).toBe(1)
     expect(planningVersionFor([bon('a'), bon('b', 4)])).toBe(4)
+  })
+
+  it('ignores an arriving work order even when its version is higher than the day', () => {
+    // The bon carries version 20 from the day it left; this day is on 3. If
+    // that 20 leaked into the max, the server would refuse a write against a
+    // conflict that never happened.
+    expect(planningVersionFor([bon('a', 3), bon('arriving', 20)], ['arriving'])).toBe(3)
+  })
+
+  it('ignores an arriving work order even when its version is lower than the day', () => {
+    // The original bug this module fixed: a pool arrival still on version 1
+    // must not drag a version-7 day down to 1.
+    expect(planningVersionFor([bon('a', 7), bon('arriving', 1)], ['arriving'])).toBe(7)
+  })
+
+  it('is 1 when every work order present is arriving', () => {
+    expect(planningVersionFor([bon('arriving', 9)], ['arriving'])).toBe(1)
   })
 })
 
@@ -61,6 +87,21 @@ describe('buildPlanningWrite', () => {
     expect(payload.orderedWorkOrderIds).toEqual([])
   })
 
+  it('threads arrivingIds through to the version, not to the ordered ids', () => {
+    // The arriving bon still has to be sent in orderedWorkOrderIds — it is
+    // joining the day — only its own version must not count toward the day's.
+    const payload = buildPlanningWrite({
+      day: [bon('resident', 4), bon('arriving', 99)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+      arrivingIds: ['arriving'],
+    })
+
+    expect(payload.orderedWorkOrderIds).toEqual(['resident', 'arriving'])
+    expect(payload.planningVersion).toBe(4)
+  })
+
   it('records who acted, separately from whose day it is', () => {
     // Today they are the same person. They stop being the same the moment a
     // planner moves someone else's work, which is what the notice will read.
@@ -86,5 +127,40 @@ describe('toLocalDateStr', () => {
 
   it('pads single digits', () => {
     expect(toLocalDateStr(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+})
+
+function pending(type: string, technicianId: string, date: string) {
+  return { type, payload: { technicianId, date } }
+}
+
+describe('supersededPlanningWrites', () => {
+  const incoming = { technicianId: 'tech-1', date: '2026-09-15' }
+
+  it('supersedes a queued write for the same technician and day', () => {
+    const same = pending('update_planning', 'tech-1', '2026-09-15')
+    expect(supersededPlanningWrites([same], incoming)).toEqual([same])
+  })
+
+  it('keeps a queued write for a different day', () => {
+    // Exactly the origin-day write in a day-to-day move: it must survive the
+    // destination-day write that follows it moments later.
+    const otherDay = pending('update_planning', 'tech-1', '2026-09-14')
+    expect(supersededPlanningWrites([otherDay], incoming)).toEqual([])
+  })
+
+  it('keeps a queued write for a different technician', () => {
+    const otherTech = pending('update_planning', 'tech-2', '2026-09-15')
+    expect(supersededPlanningWrites([otherTech], incoming)).toEqual([])
+  })
+
+  it('never touches a non-planning write type, even with matching payload fields', () => {
+    const notPlanning = pending('patch_status', 'tech-1', '2026-09-15')
+    expect(supersededPlanningWrites([notPlanning], incoming)).toEqual([])
+  })
+
+  it('recognises update_sequence as a planning write too', () => {
+    const legacy = pending('update_sequence', 'tech-1', '2026-09-15')
+    expect(supersededPlanningWrites([legacy], incoming)).toEqual([legacy])
   })
 })

@@ -14,6 +14,7 @@
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
 import { isInThePool, isOnADay } from '@/lib/planning/listPlacement'
+import { supersededPlanningWrites, type PlanningWritePayload } from '@/lib/planning/planningWrite'
 import type {
   Intervention,
   WerkbonFormState,
@@ -98,8 +99,9 @@ export interface PendingWrite {
   /**
    * 'update_planning' states a technician's whole day — which work orders and
    * in what order. Anything left out goes back to the open pool. Because it is
-   * a result rather than a change, a newer one can simply replace an older one:
-   * see PLANNING_WRITE_TYPES.
+   * a result rather than a change, a newer one for the same day can simply
+   * replace an older one: see `PLANNING_WRITE_TYPES` and
+   * `supersededPlanningWrites` in `lib/planning/planningWrite.ts`.
    *
    * 'update_sequence' is what that write was called when it could only reorder.
    * The payload shape never changed, so writes queued on a phone before the
@@ -119,13 +121,6 @@ export interface PendingWrite {
   createdAt: string
   attempts: number
 }
-
-/**
- * Every name a pending planning write can carry. Only one such write is ever
- * queued at a time: dragging twenty times offline has to arrive as one call,
- * not twenty that each carry a version number the previous one invalidated.
- */
-export const PLANNING_WRITE_TYPES = ['update_planning', 'update_sequence'] as const
 
 export interface PendingWriteResult {
   synced: number
@@ -531,17 +526,35 @@ export async function removePendingWritesByType(
 }
 
 /**
- * Queue one planning write, replacing whatever planning write was waiting.
+ * Queue one planning write, replacing whatever planning write was waiting
+ * for the SAME technician and day.
  *
- * The payload describes the resulting day, so an older one carries no
- * information the newer one lacks — and keeping both would be worse than
- * useless: the first would bump the planning version the second still claims,
- * turning a second drag into a phantom conflict.
+ * The payload describes the resulting day, so an older write for that exact
+ * day carries no information the newer one lacks — and keeping both would be
+ * worse than useless: the first would bump the planning version the second
+ * still claims, turning a second drag into a phantom conflict.
+ *
+ * A write for a DIFFERENT day must survive, which is why the collapse is
+ * scoped rather than blanket: a day-to-day move queues the origin day's write
+ * and then the destination day's, one after the other, and the second must
+ * not delete the first just because both happen to be `update_planning`. See
+ * `supersededPlanningWrites`.
  */
 export async function enqueuePlanningWrite(
-  payload: Record<string, unknown>,
+  payload: PlanningWritePayload,
 ): Promise<void> {
-  await removePendingWritesByType(PLANNING_WRITE_TYPES)
+  const db = await getDB()
+  const tx = db.transaction('pendingWrites', 'readwrite')
+  const items = await tx.store.getAll()
+
+  await Promise.all(
+    supersededPlanningWrites(items, payload)
+      .filter(item => typeof item.id === 'number')
+      .map(item => tx.store.delete(item.id!)),
+  )
+
+  await tx.done
+
   await enqueuePendingWrite({
     type: 'update_planning',
     createdAt: new Date().toISOString(),
