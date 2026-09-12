@@ -9,6 +9,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useDraggable } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import type { DayScheduleResult, ScheduleBlock } from '@/lib/planning/daySchedule'
 import { scheduleForDate, clockToMinutes } from '@/lib/planning/workSchedule'
 import { formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
@@ -230,6 +232,12 @@ function clipEdgeClasses(clippedTop: boolean, clippedBottom: boolean, tone: 'lig
   return [topClass, bottomClass].filter(Boolean).join(' ')
 }
 
+/**
+ * Alleen een jobblok mag versleept worden — de ankers, de rijtijd en de pauze
+ * zijn geen werkbon en hebben niets om naartoe te slepen. `useDraggable` moet
+ * hier boven aan staan (React laat hooks niet overslaan), dus roep hem altijd
+ * op en zet `disabled` voor de blokken die geen job zijn.
+ */
 function Block({
   block, intervention, top, height, clippedTop, clippedBottom, onOpen,
 }: {
@@ -241,6 +249,12 @@ function Block({
   clippedBottom: boolean
   onOpen: (id: string) => void
 }) {
+  const isJob = block.kind === 'job' && Boolean(intervention)
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: block.interventionId ?? block.id,
+    disabled: !isJob,
+  })
+
   if (block.kind === 'anchor') {
     return (
       <div
@@ -287,16 +301,29 @@ function Block({
 
   if (!intervention) return null
 
+  // Op 62 px is er geen ruimte voor een aparte handle naast de kaart, zoals de
+  // dagweergave die heeft. Het blok is hier zelf de handle: touch-none maakt
+  // dat een sleepbeweging niet ook de pagina scrollt, en de 250 ms vertraging
+  // van de TouchSensor is wat een tik (openen) onderscheidt van slepen.
   return (
     <button
+      ref={setNodeRef}
       type="button"
+      {...attributes}
+      {...listeners}
       onClick={() => onOpen(intervention.id)}
       className={[
-        'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80',
+        'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80 touch-none',
         typeBorderClass(intervention.type, intervention.isUrgent),
         clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
       ].join(' ')}
-      style={{ top, height }}
+      style={{
+        top,
+        height,
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.6 : 1,
+        zIndex: isDragging ? 20 : undefined,
+      }}
       title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
     >
       <span className="block text-[9px] font-bold leading-tight tabular-nums">
