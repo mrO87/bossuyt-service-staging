@@ -395,6 +395,12 @@ aan beide kanten beslist worden. Praktisch smal: de werkdag begint om 06:30.
 Alle tests draaien in `Etc/UTC`, waar lokaal en UTC gelijk zijn, dus CI ziet dit
 nooit.
 
+De schrijfplek om te beginnen als je dit aanpakt: `components/DayView/PlanningBoard.tsx`
+zet `plannedDate: selectedDate.toISOString()` — een echt lokaal moment, niet op
+middernacht genormaliseerd. De weekweergave doet het anders en veiliger
+(`${dateStr}T00:00:00.000Z`, waar dezelfde string er weer uit komt). Eén van de
+twee vormen moet winnen, aan beide kanten van de lijn.
+
 **Kleinere dingen die bewust bleven liggen:** twee blokken die allebei volledig
 voorbij 18:00 lopen tekenen over elkaar heen op dezelfde 9 px; een blokje dat
 korter is dan de minimumhoogte loopt enkele pixels voorbij zijn echte einde; de
