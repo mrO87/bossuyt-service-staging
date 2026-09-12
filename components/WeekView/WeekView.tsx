@@ -19,8 +19,7 @@ import { useTasks } from '@/lib/task-store'
 import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedule'
 import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@/lib/planning/daySchedule'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
-import { estimateTravel } from '@/lib/routing/estimateTravel'
-import { knownRoute } from '@/lib/routing/knownRoutes'
+import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
@@ -30,17 +29,16 @@ import type { ReactNode } from 'react'
 import { WeekGrid } from './WeekGrid'
 
 /**
- * Dezelfde lagen als de dagweergave, minus de cache: die leeft in
- * useRouteTimeline en hoort niet in twee componenten tegelijk te staan. Voor de
- * weekweergave zijn geschatte tijden genoeg — het gaat om overzicht, niet om de
- * minuut.
+ * Dezelfde vier lagen als de dagweergave, via dezelfde gedeelde cache — zodat
+ * een job nooit het ene uur op de week laat zien en het andere op de dag. De
+ * weekweergave vraagt zelf nooit iets aan de routeringsdienst; ze leest alleen
+ * wat de dagweergave (de enige die `/api/route/daily` aanroept) al heeft
+ * geleerd. Is die rit nog nooit opgevraagd, dan valt dit terug op de schatting
+ * — precies zoals vroeger.
  */
 const lookupTravel: TravelLookup = (from, to) => {
-  if (!from || !to) return null
-  const pinned = knownRoute(from, to)
-  if (pinned) return pinned.minutes
-  const estimated = estimateTravel(from, to)
-  return estimated ? estimated.minutes : null
+  const leg = resolveLeg(sharedTravelCache, from, to)
+  return leg.provider === 'unknown' ? null : leg.minutes
 }
 
 export default function WeekView() {

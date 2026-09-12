@@ -15,7 +15,7 @@
  * Add to this table whenever a route is driven often enough that somebody knows
  * it better than a formula does.
  */
-import { legKey } from './travelCache'
+import { legKey } from './legKey'
 import type { Coordinates } from './IRoutingService'
 import type { TravelLeg } from './estimateTravel'
 

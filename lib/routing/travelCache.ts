@@ -16,20 +16,14 @@
  * what still has to be asked live in one place and are tested without either.
  */
 import type { Coordinates } from './IRoutingService'
+import { estimateTravel } from './estimateTravel'
+import { knownRoute } from './knownRoutes'
+import { legKey } from './legKey'
+
+export { legKey }
 
 /** How long a remembered drive stays believable. */
 export const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-
-/**
- * Five decimals is about a metre — far finer than any address needs, so two
- * lookups of the same building almost always land on the same key.
- *
- * Almost: rounding has boundaries, and a coordinate sitting on one splits into
- * two keys. That is deliberately the harmless direction. A miss costs one extra
- * request; a key coarse enough to never miss would eventually merge two
- * neighbouring addresses and hand back the wrong drive.
- */
-const KEY_PRECISION = 5
 
 export interface CachedLeg {
   minutes: number
@@ -45,21 +39,6 @@ export interface MatrixCell {
 }
 
 export type TravelCache = Map<string, CachedLeg>
-
-function round(value: number): string {
-  return value.toFixed(KEY_PRECISION)
-}
-
-/**
- * The cache key for driving from one point to another.
- *
- * Direction matters: one-way systems and motorway junctions are not symmetric,
- * and the matrix answers both directions anyway, so there is nothing to gain by
- * folding them together.
- */
-export function legKey(from: Coordinates, to: Coordinates): string {
-  return `${round(from.lat)},${round(from.lon)}>${round(to.lat)},${round(to.lon)}`
-}
 
 /** The remembered drive, if we have one and it has not gone stale. */
 export function readFresh(
@@ -143,4 +122,51 @@ export function pruneCache(cache: TravelCache, now: number = Date.now()): Travel
     if (now - entry.fetchedAt > CACHE_MAX_AGE_MS) cache.delete(key)
   }
   return cache
+}
+
+/**
+ * Shared by every mount of the day timeline, and read (never fetched into) by
+ * the week view. Switching days, opening a work order and coming back,
+ * dragging for ten minutes — none of it throws away what we already know
+ * about the roads, and the week overview gets the benefit of that knowledge
+ * without ever making a request of its own.
+ */
+export const sharedTravelCache: TravelCache = new Map()
+
+export interface ResolvedLeg {
+  minutes: number | null
+  km: number | null
+  provider: 'ors' | 'estimate' | 'unknown'
+}
+
+/** No coordinates on one end, or a road nobody has ever answered for. */
+const UNKNOWN_LEG: ResolvedLeg = { minutes: null, km: null, provider: 'unknown' }
+
+/**
+ * The four layers, cheapest and most trustworthy first — shared by the day
+ * view and the week view so the same leg cannot answer one way on one screen
+ * and another way on the other:
+ *
+ *   1. the travel cache — what the routing service already told us, good for
+ *      seven days
+ *   2. a pinned route — a road somebody has actually measured
+ *   3. an estimate from the distance between the two points
+ *   4. nothing, admitted as unknown, when an address never geocoded
+ *
+ * Reading the cache costs nothing and makes no request — only the day view's
+ * own effect ever fetches into it.
+ */
+export function resolveLeg(cache: TravelCache, from?: Coordinates, to?: Coordinates): ResolvedLeg {
+  if (!from || !to) return UNKNOWN_LEG
+
+  const cached = readFresh(cache, from, to)
+  if (cached) return { minutes: cached.minutes, km: cached.km, provider: cached.provider }
+
+  const pinned = knownRoute(from, to)
+  if (pinned) return { minutes: pinned.minutes, km: pinned.km, provider: 'estimate' }
+
+  const estimated = estimateTravel(from, to)
+  if (estimated) return { minutes: estimated.minutes, km: estimated.km, provider: 'estimate' }
+
+  return UNKNOWN_LEG
 }

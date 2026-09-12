@@ -18,7 +18,9 @@ import {
   missingPairs,
   pairsFromMatrix,
   readFresh,
+  resolveLeg,
 } from '@/lib/routing/travelCache'
+import { ATELIER_KUURNE, THUIS_KONTICH } from '@/lib/routing/knownRoutes'
 
 const A = { lat: 50.8582720, lon: 3.2584752 }
 const B = { lat: 51.1307205, lon: 4.4779880 }
@@ -149,5 +151,50 @@ describe('pairsFromMatrix', () => {
     const ragged = [[{ minutes: 0, km: 0 }]]
     expect(() => pairsFromMatrix(stops, ragged, 'ors', NOW)).not.toThrow()
     expect(pairsFromMatrix(stops, ragged, 'ors', NOW).size).toBe(1)
+  })
+})
+
+describe('resolveLeg', () => {
+  // The four layers this drives both the day view and the week view through,
+  // so a job cannot get one hour on one screen and another on the other.
+
+  it('is unknown when either point never geocoded', () => {
+    expect(resolveLeg(new Map(), undefined, B)).toEqual({ minutes: null, km: null, provider: 'unknown' })
+    expect(resolveLeg(new Map(), A, undefined)).toEqual({ minutes: null, km: null, provider: 'unknown' })
+  })
+
+  it('is zero for the same point twice', () => {
+    expect(resolveLeg(new Map(), A, A)).toEqual({ minutes: 0, km: 0, provider: 'estimate' })
+  })
+
+  it('lets a cached leg win over a pinned route', () => {
+    // Atelier ⇄ thuis is pinned at 90 minutes, but a routed answer that has
+    // actually been driven since must still come first.
+    const cache = new Map<string, CachedLeg>([[legKey(ATELIER_KUURNE, THUIS_KONTICH), leg(61)]])
+    expect(resolveLeg(cache, ATELIER_KUURNE, THUIS_KONTICH)).toEqual({
+      minutes: 61,
+      km: 61,
+      provider: 'ors',
+    })
+  })
+
+  it('lets a pinned route win over the generic estimate', () => {
+    const result = resolveLeg(new Map(), ATELIER_KUURNE, THUIS_KONTICH)
+    expect(result.provider).toBe('estimate')
+    expect(result.minutes).toBe(90)   // the pinned figure, not the ~101 a formula would guess
+  })
+
+  it('falls back to the generic estimate for a road nobody pinned or cached', () => {
+    const result = resolveLeg(new Map(), A, C)
+    expect(result.provider).toBe('estimate')
+    expect(result.minutes).toBeGreaterThan(0)
+  })
+
+  it('answers the same for an empty cache as the week view got before this change', () => {
+    // An empty cache falls straight through cache → pinned → estimate — the
+    // exact chain the week view used to run inline with its own knownRoute and
+    // estimateTravel calls.
+    expect(resolveLeg(new Map(), ATELIER_KUURNE, THUIS_KONTICH).minutes).toBe(90)
+    expect(resolveLeg(new Map(), A, C).provider).toBe('estimate')
   })
 })
