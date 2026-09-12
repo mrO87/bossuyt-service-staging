@@ -123,7 +123,7 @@ export default function WeekView() {
         <span className="w-10" />
       </header>
 
-      <div className="flex items-center justify-between border-b border-brand-mid bg-brand-dark px-2 pb-2">
+      <div className="flex items-center justify-between border-b border-brand-mid bg-brand-dark px-4 pb-2">
         <button
           type="button"
           onClick={() => shiftWeek(-1)}
@@ -171,7 +171,9 @@ export default function WeekView() {
         />
 
         <h2 className="mb-2 mt-8 text-sm font-bold uppercase tracking-wide text-ink">Open pool</h2>
-        <p className="mb-3 text-xs text-ink-soft">{pool.length} job(s) zonder dag</p>
+        <p className="mb-3 text-xs text-ink-soft">
+          {pool.length} {pool.length === 1 ? 'job' : 'jobs'} zonder dag
+        </p>
       </main>
     </div>
   )

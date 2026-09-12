@@ -11,7 +11,7 @@
 import type { ReactNode } from 'react'
 import type { DayScheduleResult, ScheduleBlock } from '@/lib/planning/daySchedule'
 import { scheduleForDate, clockToMinutes } from '@/lib/planning/workSchedule'
-import { typeBorderClass } from '@/components/planning/interventionLabels'
+import { formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
 import type { Intervention } from '@/types'
 
 export const VIEW_START_MINUTES = 6 * 60 + 30
@@ -81,7 +81,7 @@ export function WeekGrid({
                 </div>
                 <div className="text-[9px] tabular-nums text-ink-faint">
                   {schedules[index].workMinutes + schedules[index].travelMinutes > 0
-                    ? shortHours(schedules[index].workMinutes + schedules[index].travelMinutes)
+                    ? formatHours(schedules[index].workMinutes + schedules[index].travelMinutes)
                     : '—'}
                 </div>
               </div>
@@ -165,33 +165,92 @@ function DayColumn({
         </>
       )}
 
-      {schedule.blocks.map(block => (
-        <Block
-          key={block.id}
-          block={block}
-          intervention={block.interventionId ? interventionsById[block.interventionId] : undefined}
-          top={toPx(block.startMinutes)}
-          height={Math.max(9, toPx(block.endMinutes) - toPx(block.startMinutes))}
-          onOpen={onOpenIntervention}
-        />
-      ))}
+      {schedule.blocks.map(block => {
+        const rawTop = toPx(block.startMinutes)
+        const rawBottom = toPx(block.endMinutes)
+        const { top, height } = clampBlockGeometry(rawTop, rawBottom, totalPx)
+
+        return (
+          <Block
+            key={block.id}
+            block={block}
+            intervention={block.interventionId ? interventionsById[block.interventionId] : undefined}
+            top={top}
+            height={height}
+            clippedTop={rawTop < 0}
+            clippedBottom={rawBottom > totalPx}
+            onOpen={onOpenIntervention}
+          />
+        )
+      })}
     </div>
   )
 }
 
+/** Onder deze hoogte is er niets meer om aan te tikken. */
+const MIN_BLOCK_HEIGHT = 9
+
+/**
+ * Legt de tekenpositie van een blok binnen het venster [0, totalPx].
+ *
+ * Een dag die vóór 06:30 vertrekt of na 18:00 doorloopt (Task 1 laat dat toe —
+ * overuren worden getekend, niet geweigerd) zou zonder deze correctie buiten de
+ * kolom vallen en door de overflow-hidden buitenrand onzichtbaar en
+ * onaantikbaar worden. Geklemd blijft het blok zichtbaar met een minimumhoogte,
+ * tegen de rand waar het hoort.
+ */
+function clampBlockGeometry(rawTop: number, rawBottom: number, totalPx: number): { top: number; height: number } {
+  const paddedBottom = Math.max(rawBottom, rawTop + MIN_BLOCK_HEIGHT)
+
+  let top = Math.max(0, Math.min(rawTop, totalPx))
+  let bottom = Math.max(0, Math.min(paddedBottom, totalPx))
+
+  if (bottom - top < MIN_BLOCK_HEIGHT) {
+    if (rawTop >= totalPx) {
+      bottom = totalPx
+      top = totalPx - MIN_BLOCK_HEIGHT
+    } else {
+      top = 0
+      bottom = MIN_BLOCK_HEIGHT
+    }
+  }
+
+  return { top, height: bottom - top }
+}
+
+/**
+ * Rand op de kant die buiten het venster valt — het enige teken dat een blok
+ * doorloopt voorbij 06:30 of 18:00, want op 62 px is er geen ruimte voor
+ * tekst. De echte uren staan al in de `title`; hier komt geen nieuwe tekst bij.
+ */
+function clipEdgeClasses(clippedTop: boolean, clippedBottom: boolean, tone: 'light' | 'dark'): string {
+  const topClass = clippedTop
+    ? (tone === 'dark' ? 'border-t-2 border-dashed border-t-white' : 'border-t-2 border-dashed border-t-ink')
+    : ''
+  const bottomClass = clippedBottom
+    ? (tone === 'dark' ? 'border-b-2 border-dashed border-b-white' : 'border-b-2 border-dashed border-b-ink')
+    : ''
+  return [topClass, bottomClass].filter(Boolean).join(' ')
+}
+
 function Block({
-  block, intervention, top, height, onOpen,
+  block, intervention, top, height, clippedTop, clippedBottom, onOpen,
 }: {
   block: ScheduleBlock
   intervention?: Intervention
   top: number
   height: number
+  clippedTop: boolean
+  clippedBottom: boolean
   onOpen: (id: string) => void
 }) {
   if (block.kind === 'anchor') {
     return (
       <div
-        className="absolute inset-x-0.5 rounded bg-brand-dark px-1 text-[8.5px] font-semibold text-white flex items-center"
+        className={[
+          'absolute inset-x-0.5 rounded bg-brand-dark px-1 text-[8.5px] font-semibold text-white flex items-center',
+          clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
+        ].join(' ')}
         style={{ top, height }}
       >
         {hhmm(block.endMinutes)}
@@ -202,7 +261,10 @@ function Block({
   if (block.kind === 'travel') {
     return (
       <div
-        className="absolute inset-x-1.5 rounded-sm bg-stroke/70 flex items-center justify-center text-[8px] font-semibold text-ink-soft"
+        className={[
+          'absolute inset-x-1.5 rounded-sm bg-stroke/70 flex items-center justify-center text-[8px] font-semibold text-ink-soft',
+          clipEdgeClasses(clippedTop, clippedBottom, 'light'),
+        ].join(' ')}
         style={{ top, height }}
         title={block.minutes === null ? 'Rijtijd onbekend — adres ontbreekt' : `Rijden ${block.minutes} min`}
       >
@@ -214,7 +276,10 @@ function Block({
   if (block.kind === 'break') {
     return (
       <div
-        className="absolute inset-x-0.5 rounded-sm bg-stroke flex items-center justify-center text-[8px] font-semibold text-ink-soft"
+        className={[
+          'absolute inset-x-0.5 rounded-sm bg-stroke flex items-center justify-center text-[8px] font-semibold text-ink-soft',
+          clipEdgeClasses(clippedTop, clippedBottom, 'light'),
+        ].join(' ')}
         style={{ top, height }}
         title="Middagpauze"
       >
@@ -232,6 +297,7 @@ function Block({
       className={[
         'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80',
         typeBorderClass(intervention.type, intervention.isUrgent),
+        clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
       ].join(' ')}
       style={{ top, height }}
       title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
@@ -246,13 +312,6 @@ function Block({
       )}
     </button>
   )
-}
-
-function shortHours(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  return m === 0 ? `${h}u` : `${h}u${String(m).padStart(2, '0')}`
 }
 
 function isSameDay(a: Date, b: Date): boolean {
