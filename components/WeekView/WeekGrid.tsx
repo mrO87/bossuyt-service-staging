@@ -301,24 +301,27 @@ function Block({
 
   if (!intervention) return null
 
-  // Op 62 px is er geen ruimte voor een aparte handle naast de kaart, zoals de
-  // dagweergave die heeft. Het blok is hier zelf de handle, en touch-none
-  // staat pas aan zodra `isDragging` waar is — niet vanaf de eerste aanraking.
-  // Tijdens de 250 ms vertraging van de TouchSensor blijft de pagina dus
-  // gewoon scrollbaar: een veeg schuift de kolom, en pas een sleepbeweging die
-  // echt is gestart (en dus is bevestigd, geen scroll) blokkeert het scrollen.
-  // Zou touch-none hier onvoorwaardelijk staan, dan kan een duim die het blok
-  // raakt om te scrollen daar niet meer voorbij.
+  // Een apart handvat, net als in de dagweergave — en om dezelfde reden.
+  //
+  // Dit stond eerst anders: het hele blok was de handle en `touch-none` ging
+  // pas aan zodra het slepen bevestigd was, om de pagina scrollbaar te houden.
+  // Op een echte telefoon werkt dat niet. De browser beslist bij de eerste
+  // aanraking wat een gebaar wordt; is `touch-action` dan nog `auto`, dan
+  // claimt hij het gebaar om te scrollen of te zoomen en breekt hij de sleep
+  // af voordat de 250 ms van de TouchSensor voorbij zijn. Tekstselectie en de
+  // callout deden de rest.
+  //
+  // Het handvat lost beide kanten op: het strookje staat permanent op
+  // `touch-none`, dus daar weet de browser het meteen, en de rest van het blok
+  // blijft gewoon aantikbaar én scrollbaar.
+  const noSelect = { WebkitTouchCallout: 'none', WebkitUserSelect: 'none' } as const
+
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
       {...attributes}
-      {...listeners}
-      onClick={() => onOpen(intervention.id)}
       className={[
-        'absolute inset-x-0.5 overflow-hidden rounded px-1 py-0.5 text-left text-white shadow-sm active:opacity-80',
-        isDragging ? 'touch-none' : '',
+        'absolute inset-x-0.5 flex select-none overflow-hidden rounded text-white shadow-sm',
         typeBorderClass(intervention.type, intervention.isUrgent),
         clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
       ].join(' ')}
@@ -328,18 +331,36 @@ function Block({
         transform: CSS.Translate.toString(transform),
         opacity: isDragging ? 0.6 : 1,
         zIndex: isDragging ? 20 : undefined,
+        ...noSelect,
       }}
       title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
     >
-      <span className="block text-[9px] font-bold leading-tight tabular-nums">
-        {hhmm(block.startMinutes)}
+      {/* Het handvat. Smal, maar over de volle hoogte, zodat een duim het raakt. */}
+      <span
+        {...listeners}
+        aria-label={`${intervention.customerName} verslepen`}
+        className="flex w-3.5 shrink-0 touch-none cursor-grab items-center justify-center bg-black/25 active:cursor-grabbing"
+        style={noSelect}
+      >
+        <span className="block h-4 w-0.5 rounded-full bg-white/70" />
       </span>
-      {height >= 24 && (
-        <span className="block truncate text-[9.5px] font-semibold leading-tight">
-          {intervention.customerName}
+
+      <button
+        type="button"
+        onClick={() => onOpen(intervention.id)}
+        className="min-w-0 flex-1 px-1 py-0.5 text-left active:opacity-80"
+        style={noSelect}
+      >
+        <span className="block text-[9px] font-bold leading-tight tabular-nums">
+          {hhmm(block.startMinutes)}
         </span>
-      )}
-    </button>
+        {height >= 24 && (
+          <span className="block truncate text-[9.5px] font-semibold leading-tight">
+            {intervention.customerName}
+          </span>
+        )}
+      </button>
+    </div>
   )
 }
 
