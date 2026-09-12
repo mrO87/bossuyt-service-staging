@@ -15,6 +15,59 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.60',
+    date: '12 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'De weekplanning',
+        body:
+          'Zeven dagen naast elkaar, van 06:30 tot 18:00, met de werkbonnen getekend op '
+          + 'schaal van hun duur — zoals in een agenda. De open pool staat eronder, en je '
+          + 'sleept een bon van de pool naar een dag, van een dag terug naar de pool, of '
+          + 'van de ene dag naar de andere. Te vinden via "Week" in de datumbalk.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Een uur bij elke job',
+        body:
+          'De dagweergave toont nu bij elke werkbon hoe laat je er bent. Dat uur wordt '
+          + 'berekend en nergens bewaard: het ingestelde vertrekuur plus de rijtijd is de '
+          + 'aankomst, en zo verder van job naar job. Loopt iets uit, dan schuift de rest '
+          + 'vanzelf mee, en een bon naar de pool slepen laat zijn uur gewoon verdwijnen. '
+          + 'Dag en week rekenen met dezelfde motor, dus ze kunnen nooit een ander uur tonen.',
+      },
+      {
+        label: 'Fix',
+        title: 'Een lege dag is nu echt leeg',
+        body:
+          'Stond er niets ingepland, dan vulde de app de dag met verzonnen werkbonnen. Dat '
+          + 'was ooit bedoeld als demo, maar met twee weergaven werd het een echte fout: de '
+          + 'laatste bon van een dag slepen maakte die dag leeg, waarna hij zich meteen weer '
+          + 'vulde met verzinsels — je wijziging leek terug te springen. In de weekweergave '
+          + 'stonden lege dagen vol met bonnen die niet bestaan.',
+      },
+      {
+        label: 'Fix',
+        title: 'Een werkbon kan niet meer op twee dagen tegelijk staan',
+        body:
+          'Een bon van de ene dag naar de andere slepen is niet één wijziging maar twee: de '
+          + 'oude dag geeft hem vrij, de nieuwe neemt hem op. Die twee overschreven elkaar in '
+          + 'de wachtrij, waardoor de server alleen over de nieuwe dag te horen kreeg. Ze '
+          + 'blijven nu allebei bewaard en vertrekken in de juiste volgorde.',
+      },
+      {
+        label: 'Fix',
+        title: 'De dagplanning toont geen werk van een andere dag meer',
+        body:
+          'De planning van vandaag werd uit een cache gelezen die niet op datum keek. Een bon '
+          + 'die je in de weekweergave op donderdag zette, kon daardoor in de planning van '
+          + 'vandaag opduiken — en zonder netwerk bleef hij daar staan.',
+      },
+    ],
+  },
+
+  {
     version: 'v1.59',
     date: '11 september 2026',
     changes: [
@@ -1417,7 +1470,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.59'
+const CURRENT_RELEASE_VERSION = 'v1.60'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
