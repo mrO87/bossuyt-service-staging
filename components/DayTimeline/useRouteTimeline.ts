@@ -31,13 +31,13 @@ import {
   type Settings,
 } from '@/lib/hooks/useSettings'
 import type { Coordinates } from '@/lib/routing/IRoutingService'
-import { estimateTravel } from '@/lib/routing/estimateTravel'
-import { knownRoute } from '@/lib/routing/knownRoutes'
 import {
   mergeIntoCache,
   pruneCache,
-  readFresh,
+  resolveLeg,
+  sharedTravelCache,
   type CachedLeg,
+  type ResolvedLeg,
   type TravelCache,
 } from '@/lib/routing/travelCache'
 import { clockToMinutes } from '@/lib/planning/workSchedule'
@@ -57,42 +57,12 @@ import type {
 const DEFAULT_BREAK_MINUTES = 30
 const ROUTE_REFRESH_DEBOUNCE_MS = 350
 
-/**
- * Shared by every mount in this tab. Switching days, opening a work order and
- * coming back, dragging for ten minutes — none of it throws away what we
- * already know about the roads.
- */
-const travelCache: TravelCache = new Map()
-
-type ResolvedLeg = {
-  minutes: number | null
-  km: number | null
-  provider: 'ors' | 'estimate' | 'unknown'
-}
-
-const UNKNOWN_LEG: ResolvedLeg = { minutes: null, km: null, provider: 'unknown' }
 const NO_TRAVEL: ResolvedLeg = { minutes: 0, km: 0, provider: 'ors' }
 
 function jobCoordinates(intervention: Intervention): Coordinates | undefined {
   if (typeof intervention.siteLat !== 'number') return undefined
   if (typeof intervention.siteLon !== 'number') return undefined
   return { lat: intervention.siteLat, lon: intervention.siteLon }
-}
-
-/** The four layers, in order. */
-function resolveLeg(cache: TravelCache, from?: Coordinates, to?: Coordinates): ResolvedLeg {
-  if (!from || !to) return UNKNOWN_LEG
-
-  const cached = readFresh(cache, from, to)
-  if (cached) return { minutes: cached.minutes, km: cached.km, provider: cached.provider }
-
-  const pinned = knownRoute(from, to)
-  if (pinned) return { minutes: pinned.minutes, km: pinned.km, provider: 'estimate' }
-
-  const estimated = estimateTravel(from, to)
-  if (estimated) return { minutes: estimated.minutes, km: estimated.km, provider: 'estimate' }
-
-  return UNKNOWN_LEG
 }
 
 /**
@@ -163,7 +133,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
    * know about the roads; the snapshot is what React can actually observe, so
    * the sequence redraws when new legs land.
    */
-  const [cacheSnapshot, setCacheSnapshot] = useState<TravelCache>(() => new Map(travelCache))
+  const [cacheSnapshot, setCacheSnapshot] = useState<TravelCache>(() => new Map(sharedTravelCache))
   /**
    * Start and end are given as addresses and geocoded on the server, so their
    * coordinates only become known once it has answered. Until then the
@@ -284,8 +254,8 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
           )
         }
 
-        mergeIntoCache(travelCache, fresh)
-        pruneCache(travelCache, now)
+        mergeIntoCache(sharedTravelCache, fresh)
+        pruneCache(sharedTravelCache, now)
 
         if (data.stops?.length) {
           setResolvedEndpoints({
@@ -293,7 +263,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
             end: data.stops[data.stops.length - 1],
           })
         }
-        setCacheSnapshot(new Map(travelCache))
+        setCacheSnapshot(new Map(sharedTravelCache))
       } catch {
         // Offline, or the service is down. The estimate layer covers it.
       } finally {

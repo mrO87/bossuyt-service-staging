@@ -74,8 +74,9 @@ export function computeDaySchedule(input: {
   // begint in plaats van in het niets te openen.
   blocks.push({ kind: 'anchor', id: 'origin-start', startMinutes: cursor - 10, endMinutes: cursor })
 
-  // Eén pauze, en pas vanaf drie jobs: bij twee is er geen midden.
-  const breakBefore = jobs.length >= 3 ? Math.floor(jobs.length / 2) : -1
+  // Eén pauze, vanaf twee jobs: de dagweergave tekent de pauze zelf al vanaf
+  // twee jobs (insertMiddayBreak), en de twee mogen elkaar nooit tegenspreken.
+  const breakBefore = jobs.length >= 2 ? Math.floor(jobs.length / 2) : -1
 
   let previous: Coordinates | undefined = origin
 

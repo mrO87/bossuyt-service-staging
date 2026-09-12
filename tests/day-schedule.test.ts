@@ -68,13 +68,16 @@ describe('computeDaySchedule', () => {
 
   it('puts no travel between two jobs at the same address', () => {
     // Twee bonnen bij dezelfde klant. Dit is het geval dat in v1.59 nog twaalf
-    // minuten rijden kreeg.
+    // minuten rijden kreeg. Met een derde, andere job ervoor valt de pauze
+    // (nu vanaf twee jobs) tussen a en b, niet tussen de twee gelijke adressen
+    // — anders zou de pauze deze test verstoren in plaats van de rijtijd.
     const result = day([
-      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'a', estimatedMinutes: 60, at: NEAR },
       { id: 'b', estimatedMinutes: 60, at: FAR },
+      { id: 'c', estimatedMinutes: 60, at: FAR },
     ])
     const jobs = result.blocks.filter(b => b.kind === 'job')
-    expect(jobs[1].startMinutes).toBe(jobs[0].endMinutes)
+    expect(jobs[2].startMinutes).toBe(jobs[1].endMinutes)
   })
 
   it('counts a job with no estimate as taking no time, and says so', () => {
@@ -100,12 +103,18 @@ describe('computeDaySchedule', () => {
     expect(unknown!.startMinutes).toBe(unknown!.endMinutes)
   })
 
-  it('inserts one break in the middle from three jobs on', () => {
+  it('inserts one break in the middle from two jobs on, none with a single job', () => {
+    // De dagweergave tekent zelf al een pauze vanaf twee jobs
+    // (insertMiddayBreak in useRouteTimeline.ts) — dit moet dat volgen, anders
+    // toont de dag een pauze die de motor eronder ontkent.
+    const one = day([{ id: 'a', estimatedMinutes: 60, at: FAR }])
+    expect(one.blocks.filter(b => b.kind === 'break')).toHaveLength(0)
+
     const two = day([
       { id: 'a', estimatedMinutes: 60, at: FAR },
       { id: 'b', estimatedMinutes: 60, at: NEAR },
     ])
-    expect(two.blocks.filter(b => b.kind === 'break')).toHaveLength(0)
+    expect(two.blocks.filter(b => b.kind === 'break')).toHaveLength(1)
 
     const three = day([
       { id: 'a', estimatedMinutes: 60, at: FAR },
