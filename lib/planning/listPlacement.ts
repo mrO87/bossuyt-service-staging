@@ -37,3 +37,30 @@ export function isInThePool(
   if (intervention.visibleInPool === false) return false
   return intervention.status !== 'afgewerkt' && intervention.status !== 'geannuleerd'
 }
+
+/**
+ * On THIS day, not merely on some day.
+ *
+ * `isOnADay` only ever had to ask "does it have a day at all" — the IndexedDB
+ * cache used to hold exactly one day's worth of records, so having a day meant
+ * having this one. The week view broke that assumption: it writes a job for
+ * any day of the week into that same cache (`WeekView.persistDay` →
+ * `upsertIntervention`), so a Thursday job can now sit right next to today's
+ * record. A reader asking "is this today's?" has to check which day, or it
+ * reads a foreign day's work order back as today's the moment both happen to
+ * share the cache.
+ *
+ * `plannedDate` is an ISO instant (e.g. `2026-09-17T00:00:00.000Z`); `dateStr`
+ * is a local `YYYY-MM-DD`. Asking whether they match means asking which UTC
+ * calendar day the instant falls in — the same day bucket the server builds
+ * with `gte`/`lt` against `${date}T00:00:00.000Z` / `${date}T23:59:59.999Z` in
+ * `getDayBounds`. `toISOString().slice(0, 10)` names that same UTC day, so this
+ * mirrors the server's rule rather than inventing a new one.
+ */
+export function isOnDate(
+  intervention: Pick<Intervention, 'plannedDate'>,
+  dateStr: string,
+): boolean {
+  if (!isOnADay(intervention)) return false
+  return new Date(intervention.plannedDate as string).toISOString().slice(0, 10) === dateStr
+}

@@ -3,16 +3,10 @@
 import { useEffect, useState } from 'react'
 import type { Intervention } from '@/types'
 import { getOpenInterventions, getPlannedInterventions } from '@/lib/idb'
+import { toLocalDateStr } from '@/lib/planning/weekDays'
 import { shouldSync, syncPendingWrites, syncToday } from '@/lib/sync'
 
 const DEFAULT_TECHNICIAN_ID = 'u1'
-
-function toLocalDateStr(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
 
 function sortPlanned(interventions: Intervention[]): Intervention[] {
   return [...interventions].sort((a, b) => {
@@ -22,9 +16,9 @@ function sortPlanned(interventions: Intervention[]): Intervention[] {
   })
 }
 
-async function readCachedDayData(): Promise<{ planned: Intervention[]; open: Intervention[] }> {
+async function readCachedDayData(dateStr: string): Promise<{ planned: Intervention[]; open: Intervention[] }> {
   const [planned, open] = await Promise.all([
-    getPlannedInterventions(),
+    getPlannedInterventions(dateStr),
     getOpenInterventions(),
   ])
 
@@ -57,7 +51,7 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
 
       if (isCurrentDay) {
         // Today: use IDB cache + sync logic
-        const cached = await readCachedDayData()
+        const cached = await readCachedDayData(dateStr)
         if (isCancelled) return
 
         setPlanned(cached.planned)
@@ -70,7 +64,7 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
           if (isCancelled) return
 
           if (writeResult.synced > 0 || writeResult.conflict) {
-            const refreshed = await readCachedDayData()
+            const refreshed = await readCachedDayData(dateStr)
             if (isCancelled) return
 
             setPlanned(refreshed.planned)
@@ -93,7 +87,7 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
         const result = await syncToday(technicianId)
         if (isCancelled) return
 
-        const fresh = await readCachedDayData()
+        const fresh = await readCachedDayData(dateStr)
         if (isCancelled) return
 
         setPlanned(fresh.planned)

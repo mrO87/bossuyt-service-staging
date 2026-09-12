@@ -13,7 +13,7 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
-import { isInThePool, isOnADay } from '@/lib/planning/listPlacement'
+import { isInThePool, isOnDate } from '@/lib/planning/listPlacement'
 import { supersededPlanningWrites, type PlanningWritePayload } from '@/lib/planning/planningWrite'
 import type {
   Intervention,
@@ -245,20 +245,28 @@ export async function cacheInterventions(items: Intervention[]): Promise<void> {
 }
 
 /**
- * The work orders on the day, and the ones still in the open pool.
+ * The work orders on a given day, and the ones still in the open pool.
  *
- * Both scan the cache rather than using the `by-source` index. The index splits
- * on provenance, which is not what separates the two lists — having a day is —
- * and IndexedDB cannot index the absence of a field anyway. The cache holds a
- * single day, so the scan is over a handful of records.
+ * The cache can no longer be assumed to hold a single day's worth of records:
+ * the week view writes a job for whichever day it was dropped on into this
+ * same store (`WeekView.persistDay` → `upsertIntervention`), so a foreign
+ * day's record can sit here right next to today's. `getPlannedInterventions`
+ * therefore takes the day it is being asked about and filters on
+ * `plannedDate` — matching on `isOnADay` alone, as it used to, would read a
+ * Thursday job back as today's the moment both happen to share the cache.
  *
+ * `getOpenInterventions` needs no date: a pool work order has no day by
+ * definition, so it can never belong to the wrong one.
+ *
+ * Both still scan the cache rather than using the `by-source` index — the
+ * index splits on provenance, which was never what separates the two lists.
  * The index itself is left in place: dropping it would mean a schema version
  * bump and an upgrade path on every technician's phone, for no gain.
  */
-export async function getPlannedInterventions(): Promise<Intervention[]> {
+export async function getPlannedInterventions(dateStr: string): Promise<Intervention[]> {
   const db = await getDB()
   const all = await db.getAll('interventions')
-  return all.filter(isOnADay).map(normalizeIntervention)
+  return all.filter(item => isOnDate(item, dateStr)).map(normalizeIntervention)
 }
 
 export async function getOpenInterventions(): Promise<Intervention[]> {
@@ -505,24 +513,6 @@ export async function renamePendingWorkOrderPhoto(photoId: string, newFileName: 
 export async function enqueuePendingWrite(write: Omit<PendingWrite, 'id' | 'attempts'>): Promise<void> {
   const db = await getDB()
   await db.add('pendingWrites', { ...write, attempts: 0 })
-}
-
-export async function removePendingWritesByType(
-  type: PendingWrite['type'] | readonly PendingWrite['type'][],
-): Promise<void> {
-  const wanted = Array.isArray(type) ? type : [type]
-
-  const db = await getDB()
-  const tx = db.transaction('pendingWrites', 'readwrite')
-  const items = await tx.store.getAll()
-
-  await Promise.all(
-    items
-      .filter(item => wanted.includes(item.type) && typeof item.id === 'number')
-      .map(item => tx.store.delete(item.id!)),
-  )
-
-  await tx.done
 }
 
 /**

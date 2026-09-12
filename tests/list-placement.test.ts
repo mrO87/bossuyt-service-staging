@@ -8,7 +8,7 @@
  * server stored it correctly, and after a reload it sat back in the pool.
  */
 import { describe, expect, it } from 'vitest'
-import { isInThePool, isOnADay } from '@/lib/planning/listPlacement'
+import { isInThePool, isOnADay, isOnDate } from '@/lib/planning/listPlacement'
 import type { Intervention, InterventionStatus } from '@/types'
 
 function bon(fields: Partial<Intervention>): Intervention {
@@ -80,5 +80,40 @@ describe('isInThePool', () => {
     for (const item of everyday) {
       expect(isOnADay(item)).toBe(!isInThePool(item))
     }
+  })
+})
+
+describe('isOnDate', () => {
+  // The bug this guards against: the week view can write a job for ANY day of
+  // the week into the same IndexedDB cache the day view reads (WeekView's
+  // persistDay calls upsertIntervention on a `plannedDate` that may be any day
+  // — see lib/idb.ts's getPlannedInterventions). isOnADay alone cannot tell
+  // today's record from Thursday's; isOnDate has to.
+
+  it('includes a work order planned on the asked-for day', () => {
+    expect(isOnDate(bon({ plannedDate: '2026-09-17T00:00:00.000Z' }), '2026-09-17')).toBe(true)
+  })
+
+  it('excludes a work order planned on another day', () => {
+    expect(isOnDate(bon({ plannedDate: '2026-09-18T00:00:00.000Z' }), '2026-09-17')).toBe(false)
+  })
+
+  it('excludes a work order with no day at all', () => {
+    expect(isOnDate(bon({}), '2026-09-17')).toBe(false)
+  })
+
+  it('matches regardless of the time of day the instant carries', () => {
+    // plannedDate is not always exact midnight (mock data carries real times of
+    // day) — only the UTC calendar day should decide the match.
+    expect(isOnDate(bon({ plannedDate: '2026-09-17T08:30:00.000Z' }), '2026-09-17')).toBe(true)
+    expect(isOnDate(bon({ plannedDate: '2026-09-17T23:30:00.000Z' }), '2026-09-17')).toBe(true)
+  })
+
+  it('does not spill into the neighbouring UTC day at the boundary', () => {
+    // The last instant still inside 17 September UTC must not match the 18th,
+    // and the first instant of the 18th must not match the 17th — the same
+    // exclusive upper bound getDayBounds uses on the server.
+    expect(isOnDate(bon({ plannedDate: '2026-09-17T23:59:59.999Z' }), '2026-09-18')).toBe(false)
+    expect(isOnDate(bon({ plannedDate: '2026-09-18T00:00:00.000Z' }), '2026-09-17')).toBe(false)
   })
 })
