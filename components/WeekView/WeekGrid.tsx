@@ -196,26 +196,23 @@ const MIN_BLOCK_HEIGHT = 9
  * Een dag die vóór 06:30 vertrekt of na 18:00 doorloopt (Task 1 laat dat toe —
  * overuren worden getekend, niet geweigerd) zou zonder deze correctie buiten de
  * kolom vallen en door de overflow-hidden buitenrand onzichtbaar en
- * onaantikbaar worden. Geklemd blijft het blok zichtbaar met een minimumhoogte,
- * tegen de rand waar het hoort.
+ * onaantikbaar worden.
+ *
+ * Eerst wordt het blok geknipt tot wat er binnen het venster zichtbaar is, dan
+ * krijgt dat een minimumhoogte. Die minimumhoogte schuift het blok vervolgens
+ * terug het venster in — nooit tegen een vaste rand plakken, want een blok
+ * dat net ná het venster begint (zichtbaar stuk kleiner dan de minimumhoogte,
+ * maar niet volledig erbuiten) hoort dan nog steeds onderaan, niet bovenaan.
+ * Eén regel dekt zo alle gevallen: volledig binnen, deels eraf, of volledig
+ * erbuiten.
  */
 function clampBlockGeometry(rawTop: number, rawBottom: number, totalPx: number): { top: number; height: number } {
-  const paddedBottom = Math.max(rawBottom, rawTop + MIN_BLOCK_HEIGHT)
+  const visibleTop = Math.max(0, Math.min(rawTop, totalPx))
+  const visibleBottom = Math.max(0, Math.min(Math.max(rawBottom, rawTop), totalPx))
+  const height = Math.min(totalPx, Math.max(MIN_BLOCK_HEIGHT, visibleBottom - visibleTop))
+  const top = Math.min(visibleTop, totalPx - height)
 
-  let top = Math.max(0, Math.min(rawTop, totalPx))
-  let bottom = Math.max(0, Math.min(paddedBottom, totalPx))
-
-  if (bottom - top < MIN_BLOCK_HEIGHT) {
-    if (rawTop >= totalPx) {
-      bottom = totalPx
-      top = totalPx - MIN_BLOCK_HEIGHT
-    } else {
-      top = 0
-      bottom = MIN_BLOCK_HEIGHT
-    }
-  }
-
-  return { top, height: bottom - top }
+  return { top, height }
 }
 
 /**
