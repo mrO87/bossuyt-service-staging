@@ -10,6 +10,7 @@
  */
 import type { Intervention } from '@/types'
 import type { User } from '@/types'
+import { toLocalDateStr } from './weekDays'
 
 export interface PlanningWritePayload extends Record<string, unknown> {
   technicianId: string
@@ -28,13 +29,6 @@ export interface PlanningWritePayload extends Record<string, unknown> {
  * sync with `PendingWrite['type']`.
  */
 export const PLANNING_WRITE_TYPES = ['update_planning', 'update_sequence'] as const
-
-export function toLocalDateStr(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
 
 /**
  * The version the server will compare against: the highest already on the

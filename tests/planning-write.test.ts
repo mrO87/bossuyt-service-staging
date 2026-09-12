@@ -16,7 +16,6 @@ import {
   buildPlanningWrite,
   planningVersionFor,
   supersededPlanningWrites,
-  toLocalDateStr,
 } from '@/lib/planning/planningWrite'
 import type { Intervention } from '@/types'
 
@@ -118,17 +117,9 @@ describe('buildPlanningWrite', () => {
   })
 })
 
-describe('toLocalDateStr', () => {
-  it('uses the local day, not UTC', () => {
-    // A day that starts at 00:30 local in a +02:00 summer is still that day.
-    expect(toLocalDateStr(new Date(2026, 8, 14, 0, 30))).toBe('2026-09-14')
-    expect(toLocalDateStr(new Date(2026, 8, 14, 23, 30))).toBe('2026-09-14')
-  })
-
-  it('pads single digits', () => {
-    expect(toLocalDateStr(new Date(2026, 0, 5))).toBe('2026-01-05')
-  })
-})
+// toLocalDateStr is pinned once, in tests/week-days.test.ts — this module now
+// imports lib/planning/weekDays.ts's implementation rather than defining its
+// own, so testing it again here would only duplicate that coverage.
 
 function pending(type: string, technicianId: string, date: string) {
   return { type, payload: { technicianId, date } }
