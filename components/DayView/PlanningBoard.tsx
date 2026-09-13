@@ -29,6 +29,7 @@ import type { MovableItem } from '@/components/DayTimeline/types'
 import { resolveDropIntent } from '@/lib/planning/dropIntent'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
+import { syncPendingWrites } from '@/lib/sync'
 import type { Settings } from '@/lib/hooks/useSettings'
 import type { Intervention, InterventionStatus, User } from '@/types'
 import { OpenPool } from './OpenPool'
@@ -100,8 +101,14 @@ export function PlanningBoard({
     // die net vanuit de werkbon een datum kreeg), is het meteen raak.
     const leaving = moved && !nextDay.some(i => i.id === moved.id) ? moved : null
 
-    await enqueuePlanningWrite(
-      buildPlanningWrite({
+    // De wachtrij meteen leegmaken, niet wachten op iets anders.
+    //
+    // Dit stond er niet, en dat kostte echt werk: op een dag die niet vandaag
+    // is leest de dagweergave rechtstreeks bij de server en raakt IndexedDB
+    // niet aan — dus maakte niemand de wachtrij leeg. Je sleepte een bon naar
+    // de pool, wisselde van dag, en de server stuurde de oude toestand terug.
+    // De wijziging was niet weg, ze was alleen nooit verstuurd.
+    const queued = buildPlanningWrite({
         day: nextDay,
         actor: currentUser,
         technicianId: currentUser.id,
@@ -112,8 +119,16 @@ export function PlanningBoard({
         // describes the pool, not this day, so it must not raise the day's.
         arrivingIds: moved ? [moved.id] : undefined,
         serverDay: leaving ? [...nextDay, leaving] : undefined,
-      }),
-    )
+    })
+
+    await enqueuePlanningWrite(queued)
+
+    // Offline is geen fout: dan blijft hij in de wachtrij staan en gaat hij mee
+    // zodra er weer verbinding is.
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const result = await syncPendingWrites().catch(() => null)
+      if (result?.notice) setRefusal(result.notice)
+    }
   }, [currentUser, selectedDate])
 
   async function handleDragEnd(event: DragEndEvent) {

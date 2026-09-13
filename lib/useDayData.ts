@@ -95,7 +95,17 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
         setError(result.success ? null : result.error ?? 'Synchronisatie mislukt')
         setLoading(false)
       } else {
-        // Past/future date: fetch directly, skip IDB
+        // Een dag die niet vandaag is: rechtstreeks bij de server ophalen.
+        //
+        // Eerst de wachtrij leegmaken. Zonder dat overschreef deze oproep wat
+        // je net gesleept had: de wijziging stond in de wachtrij, niemand
+        // verstuurde ze, en de server gaf keurig de oude toestand terug.
+        // Het scherm zet dan zelf je werk terug.
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          await syncPendingWrites().catch(() => null)
+          if (isCancelled) return
+        }
+
         try {
           const res = await fetch(`/api/sync/today?technicianId=${technicianId}&date=${dateStr}`)
           if (isCancelled) return
