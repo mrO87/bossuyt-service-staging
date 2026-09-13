@@ -718,6 +718,9 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
           appointment: false,
           actorId: currentUser.id,
           actorRole: currentUser.role,
+          // Wiens week hier getoond wordt. Een bon uit de pool draagt nog geen
+          // technieker; zonder dit zou hij een dag krijgen die niemand ziet.
+          technicianId: currentUser.id,
         },
       })
       await flushQueue(fromDate)

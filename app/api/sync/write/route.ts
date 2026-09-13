@@ -45,6 +45,7 @@ type PlacementPayload = {
   appointment?: boolean
   actorId?: string
   actorRole?: User['role']
+  technicianId?: string | null
 }
 
 /**
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
       date: payload.date,
       startMinutes: payload.startMinutes ?? null,
       appointment: Boolean(payload.appointment),
+      technicianId: payload.technicianId ?? null,
     })
 
     if (!result.ok) {

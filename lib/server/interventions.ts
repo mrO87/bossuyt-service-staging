@@ -751,6 +751,12 @@ export async function updatePlacement(input: {
   date: string | null
   startMinutes: number | null
   appointment: boolean
+  /**
+   * Wiens dag dit is, wanneer de bon er nog geen drager heeft. Het scherm weet
+   * dat — het toont iemands week — en de server kan het niet raden. Blijft hij
+   * weg, dan draagt wie hem plaatst hem zelf.
+   */
+  technicianId?: string | null
 }): Promise<PlacementResult> {
   const [current] = await db
     .select({ id: workOrders.id, status: workOrders.status, plannedDate: workOrders.plannedDate })
@@ -777,14 +783,26 @@ export async function updatePlacement(input: {
       ),
     )
 
+  // Een bon uit de open pool draagt nog geen technieker. Kreeg hij hier een
+  // datum zonder dat iemand hem droeg, dan verdween hij uit élke weergave: niet
+  // meer in de pool, want hij heeft een dag — en op niemands dag, want er is
+  // geen toewijzing. Precies het stil kwijtraken dat de opkuis moet voorkomen,
+  // maar dan langs de voordeur.
+  //
+  // Wie hem plaatst, draagt hem: in de praktijk plant één persoon, en dat is
+  // dezelfde die hier de actor is. Een meegegeven `technicianId` gaat voor, want
+  // het scherm weet wiens week het toont.
+  const carrier = lead?.technicianId ?? input.technicianId ?? input.actor.id
+  const needsAssignment = input.date !== null && !lead
+
   const minutes = input.date === null ? null : sanitizeStartMinutes(input.startMinutes)
   const dayStart = input.date === null ? null : getDayBounds(input.date).start
 
   // Achteraan op de doeldag, en met een versienummer boven dat van die dag.
   let plannedOrder = 1
   let nextVersion = 1
-  if (input.date !== null && lead) {
-    const day = await getTodayInterventions(lead.technicianId, input.date)
+  if (input.date !== null) {
+    const day = await getTodayInterventions(carrier, input.date)
     plannedOrder = day.planned.reduce((highest, intervention) => {
       const order = intervention.technicians.find(t => t.isLead)?.plannedOrder ?? 0
       return Math.max(highest, order)
@@ -824,6 +842,14 @@ export async function updatePlacement(input: {
             eq(workOrderAssignments.technicianId, lead.technicianId),
           ),
         )
+    } else if (needsAssignment) {
+      await tx.insert(workOrderAssignments).values({
+        workOrderId: input.workOrderId,
+        technicianId: carrier,
+        isLead: true,
+        accepted: true,
+        plannedOrder,
+      })
     }
 
     await tx.insert(workOrderEvents).values({
@@ -832,7 +858,7 @@ export async function updatePlacement(input: {
       eventType: 'planning_changed',
       payload: {
         actorRole: input.actor.role,
-        technicianId: lead?.technicianId ?? null,
+        technicianId: input.date === null ? (lead?.technicianId ?? null) : carrier,
         date: input.date,
         to: input.date === null ? 'pool' : 'day',
         via: 'placement',

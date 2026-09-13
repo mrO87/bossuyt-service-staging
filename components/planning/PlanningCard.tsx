@@ -153,6 +153,9 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
           appointment: next.appointment,
           actorId: currentUser.id,
           actorRole: currentUser.role,
+          // Een bon uit de pool heeft nog geen drager. Zonder iemand zou hij
+          // een datum krijgen en uit elke weergave verdwijnen.
+          technicianId: intervention.technicians.find(t => t.isLead)?.technicianId ?? currentUser.id,
         },
       })
       if (typeof navigator === 'undefined' || navigator.onLine) {
