@@ -7,6 +7,60 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
+## Bijwerking 13 september — v1.66: drie deuren naar buiten, en een stille 409
+
+v1.64 zette het venster vast tijdens het slepen. Dat loste het springen op en
+sloot tegelijk de pool af: die staat bóven het rooster, en met een blok in je
+hand kon je er niet meer naartoe scrollen. Er was ook geen manier om een bon
+naar een andere week te krijgen. De gebruiker koos drie wegen tegelijk, met de
+bedoeling op de telefoon te ontdekken welke hij echt gebruikt.
+
+1. **`components/WeekView/PoolBar.tsx`** — `fixed inset-x-0 bottom-0 z-40`, dus
+   altijd in beeld zonder te scrollen (nagemeten op 400×800: y=756). Is zelf een
+   droppable; tikken schuift een paneel open met de wachtende bonnen, elk
+   draggable. Tijdens het slepen verandert de tekst in wat loslaten doet.
+2. **`components/WeekView/WeekEdges.tsx`** — twee stroken van 32 px links en
+   rechts, `opacity-0` tenzij er gesleept wordt. Loslaten verschuift de bon een
+   week, naar dezelfde weekdag (`shiftDateStr`, op 12:00 gerekend zodat de
+   zomertijd hem niet een dag verzet). Dit is het goedkoopste van de drie om
+   later weer weg te halen als het niet gebruikt wordt.
+3. **`components/planning/PlanningCard.tsx`** — datum, uur en de afspraakknop in
+   de werkbon zelf. Haalt de doeldag op en draait `computeDaySchedule`, zodat de
+   botsingsmelding wóórdelijk dezelfde is als op het rooster; er is één
+   tijdmotor, geen tweede waarheid. Gestart = vergrendeld
+   (`canLeaveTheDay`), uitdrukkelijk zo gevraagd.
+
+Het datamodel is niet gewijzigd: `planned_date` was altijd al een echte datum.
+Alleen de weekweergave dacht in kolommen.
+
+### De tweede schrijfweg
+
+`updatePlacement` in `lib/server/interventions.ts` schrijft één bon: datum, uur,
+afspraak. Naast `savePlanningSnapshot`, die een hele dag beschrijft. Route:
+`update_placement` in `app/api/sync/write/route.ts`, 409 met
+`WORK_ORDER_LOCKED` / `WORK_ORDER_MISSING`. `lib/sync.ts` laat een geweigerde
+`update_placement` vallen met een melding in plaats van eeuwig opnieuw te
+proberen — anders blokkeert één vergrendelde bon de hele wachtrij.
+
+### De bug die dat blootlegde — kost tijd om terug te vinden
+
+Slepen naar de pool gaf een **409**: op het scherm stond de bon in de pool, in
+de database op zijn dag. Stil verlies, geen foutmelding.
+
+Bij het vrijgeven stuurt het scherm de dag **zonder** de vertrekkende bon, en
+het versienummer werd uit diezelfde lijst gehaald. De server vergelijkt met het
+hoogste van de dag, **inclusief** de vertrekker. Droeg die het hoogste nummer,
+dan stuurde de client een lager getal en kreeg hij een conflict dat niet bestond.
+
+Het lag er al lang, onzichtbaar, omdat `savePlanningSnapshot` alle bonnen van
+een dag tegelijk ophoogt: die nummers waren altijd gelijk. `updatePlacement`
+hoogt er één op, en daarmee werd het meteen raak.
+
+`buildPlanningWrite` neemt nu `serverDay` apart van `day`
+(`lib/planning/planningWrite.ts`). Vastgelegd in `tests/planning-write.test.ts`.
+**Let op bij elke nieuwe schrijfweg die één bon ophoogt:** dezelfde val staat
+open zodra client en server een andere lijst als "de dag" lezen.
+
 ## Bijwerking 13 september — v1.65: twee dingen die v1.64 blootlegde
 
 1. **De oude dag bewoog mee bij een verhuizing.** Zodra een sleep begint klikt

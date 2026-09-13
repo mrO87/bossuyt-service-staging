@@ -15,6 +15,56 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.66',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Een blauw poolbalkje onderaan het scherm',
+        body:
+          'Sinds het venster tijdens het slepen stilstaat, kon je de pool niet meer '
+          + 'bereiken: die stond bovenaan de pagina en je kon er niet meer naartoe '
+          + 'scrollen met een blok in je hand. De pool zit nu in een balkje dat onderaan '
+          + 'het scherm blijft plakken, altijd in beeld. Tijdens het slepen licht het op '
+          + 'en zegt het wat er gebeurt als je loslaat. Tik erop en het schuift open met '
+          + 'de wachtende bonnen erin, die je van daaruit weer op een dag legt.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Naar de vorige of volgende week slepen',
+        body:
+          'Aan de linker- en rechterkant van het weekrooster verschijnen tijdens het '
+          + 'slepen twee smalle stroken. Laat je een bon op een van de twee los, dan '
+          + 'springt hij een week terug of vooruit, naar dezelfde weekdag. Buiten het '
+          + 'slepen zijn ze onzichtbaar, zodat ze geen plaats innemen op een telefoon.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De geplande dag en het uur staan nu ook in de werkbon zelf',
+        body:
+          'Bovenaan een werkbon staat voortaan een datumveld en een uurveld, met een knop '
+          + 'om dat uur als afgesproken te markeren. Zo verplaats je een bon naar eender '
+          + 'welke dag zonder hem te slepen, ook buiten de week die je op het rooster ziet. '
+          + 'Botst het uur met de rest van die dag, dan lees je daar dezelfde melding als '
+          + 'op het rooster: de app rekent de doeldag door met dezelfde motor, zodat de '
+          + 'twee schermen nooit iets anders kunnen beweren. Een gestarte bon is '
+          + 'vergrendeld en blijft staan waar hij staat.',
+      },
+      {
+        label: 'Fix',
+        title: 'Een bon naar de pool slepen kwam soms niet aan',
+        body:
+          'Je sleepte een bon naar de pool, op het scherm stond hij daar ook, maar in de '
+          + 'database bleef hij op zijn dag staan. Bij het vrijgeven stuurde de app het '
+          + 'volgnummer van de bonnen die bleven, terwijl de server kijkt naar het hoogste '
+          + 'van de hele dag — inclusief de bon die net vertrok. Dat verschil viel nooit '
+          + 'op zolang een hele dag altijd in een keer werd weggeschreven. Nu een enkele '
+          + 'bon zijn eigen nummer kan ophogen, werd het meteen raak. De app stuurt nu het '
+          + 'nummer van de dag zoals de server hem nog kent.',
+      },
+    ],
+  },
+  {
     version: 'v1.65',
     date: '13 september 2026',
     changes: [
@@ -1648,7 +1698,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.65'
+const CURRENT_RELEASE_VERSION = 'v1.66'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
