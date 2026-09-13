@@ -114,6 +114,15 @@ export interface PendingWrite {
     | 'update_planning'
     | 'update_sequence'
     | 'update_estimate'
+    /**
+     * Waar één werkbon staat: dag, uur, en of dat uur afgesproken is.
+     *
+     * Naast 'update_planning', niet in plaats ervan. Die beschrijft een hele
+     * dag en heeft die dag dus nodig; deze spreekt over één bon en kan daarom
+     * ook een dag bereiken die nergens geladen is — de werkbonpagina, of een
+     * sleep naar volgende week.
+     */
+    | 'update_placement'
     | 'save_draft'
     | 'upload_work_order_photo'
     | 'delete_work_order_photo'

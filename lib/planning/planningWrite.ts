@@ -75,13 +75,29 @@ export function buildPlanningWrite(input: {
   date: Date
   /** Work orders joining this day from elsewhere; see `planningVersionFor`. */
   arrivingIds?: readonly string[]
+  /**
+   * De dag zoals de server hem nú kent, als die verschilt van de dag die we
+   * willen wegschrijven.
+   *
+   * Dat zijn twee verschillende lijsten, en dat was niet zichtbaar zolang ze
+   * toevallig hetzelfde versienummer droegen. Bij het vrijgeven van een bon is
+   * `day` de dag zónder hem, terwijl de server hem nog wél meetelt in zijn max.
+   * Had die vertrekkende bon het hoogste nummer, dan stuurde de client een
+   * lager getal en kreeg hij een 409 voor een conflict dat niet bestond — de
+   * bon bleef dan op het scherm in de pool staan en in de database op zijn dag.
+   *
+   * Het bleef verborgen omdat savePlanningSnapshot alle bonnen van een dag
+   * tegelijk ophoogt. `update_placement` hoogt er één op, en daarmee werd het
+   * meteen raak.
+   */
+  serverDay?: Intervention[]
 }): PlanningWritePayload {
   return {
     technicianId: input.technicianId,
     actorId: input.actor.id,
     actorRole: input.actor.role,
     date: toLocalDateStr(input.date),
-    planningVersion: planningVersionFor(input.day, input.arrivingIds),
+    planningVersion: planningVersionFor(input.serverDay ?? input.day, input.arrivingIds),
     orderedWorkOrderIds: input.day.map(intervention => intervention.id),
     startTimes: input.day.map(intervention => ({
       workOrderId: intervention.id,

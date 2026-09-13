@@ -644,3 +644,127 @@ export async function savePlanningSnapshot(input: {
     open: updated.open,
   }
 }
+
+export type PlacementResult =
+  | { ok: true; planningVersion: number }
+  | { ok: false; reason: 'locked' | 'not_found' }
+
+/**
+ * Waar één werkbon staat: welke dag, welk uur, en of dat uur afgesproken is.
+ *
+ * De tweede deur naast savePlanningSnapshot, en ze bestaat om één reden: die
+ * eerste beschrijft een **hele dag** ("deze bonnen, in deze volgorde") en heeft
+ * die dag dus nodig. De werkbonpagina kent de andere bonnen van 24 september
+ * niet, en een sleep naar volgende week evenmin — die dag is niet geladen. Een
+ * momentopname met één bon erin zou alle andere bonnen van die dag uit de
+ * planning gooien.
+ *
+ * Dit is daarom een uitspraak over één bon. De server zoekt zelf uit wat er op
+ * de doeldag al staat en hangt hem achteraan. Dezelfde vorm als
+ * `update_estimate`: één bon, één uitspraak, door dezelfde offline-wachtrij.
+ *
+ * **De versiegrendel geldt hier niet.** savePlanningSnapshot weigert een
+ * schrijfactie wanneer iemand die dag ondertussen wijzigde; dat kan deze niet,
+ * want de bon weet niets van de dag waar hij heen gaat. Laatste die het zegt
+ * wint — een bewuste keuze van de gebruiker, omdat er in de praktijk één
+ * persoon plant. Wat er wél tegenover staat: de bon krijgt op zijn nieuwe dag
+ * een versienummer hoger dan wat daar stond, zodat een momentopname die
+ * onderweg was voor die dag geweigerd wordt in plaats van de nieuwkomer
+ * stilletjes weer uit de planning te gooien.
+ *
+ * **De statusgrendel geldt onverkort.** Aan een bon waaraan gewerkt wordt,
+ * verzet niemand de dag of het uur — niet via slepen, niet via een weekrand,
+ * niet via het datumveld op de werkbon.
+ */
+export async function updatePlacement(input: {
+  actor: PlanningActor
+  workOrderId: string
+  date: string | null
+  startMinutes: number | null
+  appointment: boolean
+}): Promise<PlacementResult> {
+  const [current] = await db
+    .select({ id: workOrders.id, status: workOrders.status, plannedDate: workOrders.plannedDate })
+    .from(workOrders)
+    .where(eq(workOrders.id, input.workOrderId))
+
+  if (!current) return { ok: false, reason: 'not_found' }
+  if (!canLeaveTheDay(current.status)) return { ok: false, reason: 'locked' }
+
+  // De technieker die deze bon draagt. Uit de toewijzing gehaald en niet van de
+  // client aangenomen: wie de bon verzet, hoeft niet te weten van wie hij is.
+  const [lead] = await db
+    .select({ technicianId: workOrderAssignments.technicianId })
+    .from(workOrderAssignments)
+    .where(
+      and(
+        eq(workOrderAssignments.workOrderId, input.workOrderId),
+        eq(workOrderAssignments.isLead, true),
+      ),
+    )
+
+  const minutes = input.date === null ? null : sanitizeStartMinutes(input.startMinutes)
+  const dayStart = input.date === null ? null : getDayBounds(input.date).start
+
+  // Achteraan op de doeldag, en met een versienummer boven dat van die dag.
+  let plannedOrder = 1
+  let nextVersion = 1
+  if (input.date !== null && lead) {
+    const day = await getTodayInterventions(lead.technicianId, input.date)
+    plannedOrder = day.planned.reduce((highest, intervention) => {
+      const order = intervention.technicians.find(t => t.isLead)?.plannedOrder ?? 0
+      return Math.max(highest, order)
+    }, 0) + 1
+    nextVersion = day.planned.reduce(
+      (highest, intervention) => Math.max(highest, intervention.planningVersion ?? 1),
+      1,
+    ) + 1
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(workOrders)
+      .set({
+        plannedDate: dayStart,
+        // Een uur hoort bij een dag: negen uur op dinsdag is niet negen uur op
+        // woensdag. Gaat de bon naar de pool, dan gaat het uur mee weg.
+        plannedStartMinutes: minutes,
+        startIsAppointment: minutes === null ? false : input.appointment,
+        plannedByRole: input.actor.role,
+        planningVersion: nextVersion,
+        ...(input.date === null
+          ? (current.status === 'gepland' || current.status === 'onderweg'
+              ? { status: 'aangemaakt' as const }
+              : {})
+          : (current.status === 'aangemaakt' ? { status: 'gepland' as const } : {})),
+      })
+      .where(eq(workOrders.id, input.workOrderId))
+
+    if (lead) {
+      await tx
+        .update(workOrderAssignments)
+        .set({ plannedOrder })
+        .where(
+          and(
+            eq(workOrderAssignments.workOrderId, input.workOrderId),
+            eq(workOrderAssignments.technicianId, lead.technicianId),
+          ),
+        )
+    }
+
+    await tx.insert(workOrderEvents).values({
+      workOrderId: input.workOrderId,
+      actorId: input.actor.id,
+      eventType: 'planning_changed',
+      payload: {
+        actorRole: input.actor.role,
+        technicianId: lead?.technicianId ?? null,
+        date: input.date,
+        to: input.date === null ? 'pool' : 'day',
+        via: 'placement',
+      },
+    })
+  })
+
+  return { ok: true, planningVersion: nextVersion }
+}

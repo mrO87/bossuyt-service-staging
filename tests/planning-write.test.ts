@@ -175,3 +175,32 @@ describe('supersededPlanningWrites', () => {
     expect(supersededPlanningWrites([legacy], incoming)).toEqual([legacy])
   })
 })
+
+describe('buildPlanningWrite — de dag zoals de server hem kent', () => {
+  it('neemt de versie van de vertrekkende bon mee bij het vrijgeven', () => {
+    // Het scherm schrijft de dag zónder de vertrekkende bon weg, maar de server
+    // telt hem nog mee in zijn max. Droeg hij het hoogste nummer, dan stuurde
+    // de client een lager getal en kreeg hij een 409 voor een conflict dat niet
+    // bestond: op het scherm stond hij in de pool, in de database op zijn dag.
+    const payload = buildPlanningWrite({
+      day: [bon('blijft', 3)],
+      serverDay: [bon('blijft', 3), bon('vertrekt', 9)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+    })
+
+    expect(payload.planningVersion).toBe(9)
+    expect(payload.orderedWorkOrderIds).toEqual(['blijft'])
+  })
+
+  it('valt terug op de geschreven dag wanneer die twee hetzelfde zijn', () => {
+    const payload = buildPlanningWrite({
+      day: [bon('a', 4), bon('b', 4)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+    })
+    expect(payload.planningVersion).toBe(4)
+  })
+})

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import AvatarMenu from '@/components/AvatarMenu'
 import WerkbonForm from '@/components/WerkbonForm'
+import { PlanningCard } from '@/components/planning/PlanningCard'
 import { wazeLink } from '@/lib/routing/wazeLink'
 import { WazeIcon } from '@/components/icons/WazeIcon'
 import type { Intervention } from '@/types'
@@ -185,6 +186,8 @@ export default function InterventionPage() {
             <span className="text-xs font-normal text-ink-soft">opent in nieuw venster</span>
           </a>
         )}
+
+        <PlanningCard intervention={intervention} />
 
         <WerkbonForm
           key={`${intervention.id}-${initialActivityId ?? 'default'}`}

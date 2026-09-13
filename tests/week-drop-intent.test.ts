@@ -8,7 +8,7 @@
  * mislukt.
  */
 import { describe, expect, it } from 'vitest'
-import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
+import { dayDroppableId, resolveWeekDrop, weekEdgeDroppableId } from '@/lib/planning/weekDropIntent'
 import { POOL_DROPPABLE_ID } from '@/lib/planning/dropIntent'
 
 const MON = '2026-09-14'
@@ -206,5 +206,46 @@ describe('resolveWeekDrop — een uur zetten', () => {
       dayOf: { 'wo-1': undefined },
       deltaMinutes: 120,
     })).toEqual({ kind: 'schedule', workOrderId: 'wo-1', toDate: TUE })
+  })
+})
+
+/**
+ * De weekranden.
+ *
+ * Losgelaten op de strook links of rechts van het rooster: zeven dagen vroeger
+ * of later. Dat is de enige uitkomst die een dag oplevert die niet op het
+ * scherm staat — en dus de enige die niet via een momentopname van een dag kan
+ * wegschrijven, want die dag is niet geladen.
+ */
+describe('resolveWeekDrop — de weekranden', () => {
+  const onEdge = (edge: 'prev' | 'next', extra = {}) =>
+    resolveWeekDrop({ ...context, overId: weekEdgeDroppableId(edge), ...extra })
+
+  it('schuift een week vooruit', () => {
+    expect(onEdge('next')).toEqual({
+      kind: 'shift_week',
+      workOrderId: 'wo-1',
+      fromDate: MON,
+      toDate: '2026-09-21',
+    })
+  })
+
+  it('schuift een week terug', () => {
+    expect(onEdge('prev')).toMatchObject({ kind: 'shift_week', toDate: '2026-09-07' })
+  })
+
+  it('weigert een bon die al gestart is', () => {
+    // De versiegrendel gaat hier omheen, de statusgrendel niet: aan een bon
+    // waaraan gewerkt wordt, verzet niemand de dag.
+    const started = onEdge('next', { statusById: { 'wo-1': 'bezig' } })
+    expect(started.kind).toBe('none')
+    if (started.kind !== 'none') return
+    expect(started.reason).toBe('het werk is al begonnen')
+  })
+
+  it('doet niets met een bon uit de pool', () => {
+    // Een bon zonder dag heeft geen week om van weg te schuiven. Hem stilletjes
+    // op vandaag plus zeven zetten zou een datum verzinnen die niemand koos.
+    expect(onEdge('next', { dayOf: { 'wo-1': undefined } }).kind).toBe('none')
   })
 })

@@ -296,6 +296,18 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
           data.code === 'WORK_ORDER_LOCKED'
             ? 'Een werkbon was al gestart en blijft op de dag staan'
             : 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
+      } else if (res.status === 409 && write.type === 'update_placement') {
+        // Geweigerd omdat er intussen iets veranderd is, niet omdat er iets mis
+        // is met wat we stuurden — opnieuw proberen zou opnieuw verliezen, en
+        // de hele wachtrij erachter blijven blokkeren. Weggooien en het zeggen.
+        const data = await res.json().catch(() => ({})) as { code?: string }
+        await removePendingWrite(write.id!)
+        synced++
+        conflict = true
+        notice =
+          data.code === 'WORK_ORDER_LOCKED'
+            ? 'Een werkbon was al gestart en blijft staan waar hij staat'
+            : 'Een werkbon kon niet verplaatst worden'
       } else {
         failed++
         break  // stop on first failure — maintain order

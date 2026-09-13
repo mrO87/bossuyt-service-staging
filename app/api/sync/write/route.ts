@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { savePlanningSnapshot } from '@/lib/server/interventions'
+import { savePlanningSnapshot, updatePlacement } from '@/lib/server/interventions'
 import type { User } from '@/types'
 
 /**
@@ -34,10 +34,55 @@ type UpdatePlanningPayload = {
  */
 const ACCEPTED_TYPES = ['update_planning', 'update_sequence']
 
+/**
+ * Waar één werkbon staat. Zie updatePlacement voor waarom dit naast de
+ * momentopname bestaat en niet in plaats ervan.
+ */
+type PlacementPayload = {
+  workOrderId: string
+  date: string | null
+  startMinutes: number | null
+  appointment?: boolean
+  actorId?: string
+  actorRole?: User['role']
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json() as {
     type?: string
-    payload?: UpdatePlanningPayload
+    payload?: UpdatePlanningPayload & PlacementPayload
+  }
+
+  if (body.type === 'update_placement') {
+    const payload = body.payload as PlacementPayload | undefined
+    if (!payload?.workOrderId || payload.date === undefined) {
+      return NextResponse.json({ error: 'Invalid placement payload' }, { status: 400 })
+    }
+
+    const result = await updatePlacement({
+      actor: { id: payload.actorId ?? 'unknown', role: payload.actorRole ?? 'technician' },
+      workOrderId: payload.workOrderId,
+      date: payload.date,
+      startMinutes: payload.startMinutes ?? null,
+      appointment: Boolean(payload.appointment),
+    })
+
+    if (!result.ok) {
+      // 409 en niet 400: dit is geen fout in wat er gestuurd werd, maar een
+      // weigering op grond van wat er intussen gebeurd is. De wachtrij gooit
+      // een 409 weg in plaats van eeuwig opnieuw te proberen.
+      return NextResponse.json(
+        {
+          error: result.reason === 'locked'
+            ? 'Werkbon is al gestart en blijft staan waar hij staat'
+            : 'Werkbon bestaat niet',
+          code: result.reason === 'locked' ? 'WORK_ORDER_LOCKED' : 'WORK_ORDER_MISSING',
+        },
+        { status: 409 },
+      )
+    }
+
+    return NextResponse.json({ success: true, planningVersion: result.planningVersion })
   }
 
   if (!body.type || !ACCEPTED_TYPES.includes(body.type) || !body.payload) {

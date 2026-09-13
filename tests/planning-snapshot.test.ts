@@ -15,6 +15,7 @@ import {
   getPlanningVersion,
   getTodayInterventions,
   savePlanningSnapshot,
+  updatePlacement,
 } from '@/lib/server/interventions'
 import type { InterventionStatus } from '@/types'
 import type { CleanupIds } from './setup'
@@ -457,5 +458,162 @@ describe('savePlanningSnapshot', () => {
     if (!second.ok) return
     expect(second.planned.map(p => p.id)).toEqual(after.planned.map(p => p.id))
     expect(second.open.map(o => o.id)).toContain(leaving)
+  })
+})
+
+/**
+ * updatePlacement — één bon, waar hij staat.
+ *
+ * De tweede deur naast savePlanningSnapshot. Ze bestaat omdat die eerste een
+ * hele dag nodig heeft, en de werkbonpagina en een sleep naar volgende week die
+ * dag niet kennen.
+ */
+describe('updatePlacement', () => {
+  let ids: CleanupIds
+  let technicianId: string
+  let customerId: string
+  let siteId: string
+
+  const actor = { id: 'u1', role: 'technician' as const }
+  const DAY_A = '2026-09-14'
+  const DAY_B = '2026-09-28'      // twee weken later: nooit samen op één scherm
+
+  async function insert(fields: { plannedDate: Date | null; status: InterventionStatus }) {
+    const id = `wo-${randomUUID()}`
+    await testDb.insert(workOrders).values({
+      id, customerId, siteId, deviceId: null,
+      plannedDate: fields.plannedDate,
+      status: fields.status,
+      type: 'warm', source: 'reactive',
+      description: `Testbon ${id.slice(3, 11)}`,
+      estimatedMinutes: 90, isUrgent: false, visibleInPool: true, createdBy: 'test',
+    })
+    await testDb.insert(workOrderAssignments).values({
+      workOrderId: id, technicianId, isLead: true, accepted: false, plannedOrder: 1,
+    })
+    ids.work_order_ids!.push(id)
+    return id
+  }
+
+  async function stored(workOrderId: string) {
+    const [row] = await testDb
+      .select({
+        plannedDate: workOrders.plannedDate,
+        minutes: workOrders.plannedStartMinutes,
+        appointment: workOrders.startIsAppointment,
+        status: workOrders.status,
+        version: workOrders.planningVersion,
+      })
+      .from(workOrders)
+      .where(eq(workOrders.id, workOrderId))
+    return row
+  }
+
+  beforeEach(async () => {
+    ids = { work_order_ids: [], technician_ids: [], customer_ids: [], site_ids: [] }
+    technicianId = `tech-${randomUUID()}`
+    await testDb.insert(technicians).values({
+      id: technicianId, name: 'Plaatsingstechnieker', initials: 'PT',
+      email: `${technicianId}@example.test`, role: 'technician', active: true,
+    })
+    ids.technician_ids!.push(technicianId)
+
+    const suffix = randomUUID()
+    customerId = `customer-${suffix}`
+    siteId = `site-${suffix}`
+    await testDb.insert(customers).values({
+      id: customerId, name: `Testklant ${suffix.slice(0, 8)}`,
+      phone: '0123456789', address: 'Teststraat 1', city: 'Kuurne',
+    })
+    ids.customer_ids!.push(customerId)
+    await testDb.insert(sites).values({
+      id: siteId, customerId, name: `Testvestiging ${suffix.slice(0, 8)}`,
+      address: 'Teststraat 1', city: 'Kuurne',
+    })
+    ids.site_ids!.push(siteId)
+  })
+
+  afterEach(async () => { await cleanup(ids) })
+
+  it('zet een bon op een dag die nergens geladen is', async () => {
+    const bon = await insert({ plannedDate: new Date(`${DAY_A}T00:00:00.000Z`), status: 'gepland' })
+
+    const result = await updatePlacement({
+      actor, workOrderId: bon, date: DAY_B, startMinutes: null, appointment: false,
+    })
+
+    expect(result.ok).toBe(true)
+    const row = await stored(bon)
+    expect(row.plannedDate?.toISOString().slice(0, 10)).toBe(DAY_B)
+  })
+
+  it('neemt uur en speldje mee in dezelfde schrijfactie', async () => {
+    // "Klant vraagt donderdag om 14u" is één invulling, geen twee.
+    const bon = await insert({ plannedDate: null, status: 'aangemaakt' })
+
+    await updatePlacement({
+      actor, workOrderId: bon, date: DAY_B, startMinutes: 14 * 60, appointment: true,
+    })
+
+    expect(await stored(bon)).toMatchObject({ minutes: 14 * 60, appointment: true, status: 'gepland' })
+  })
+
+  it('laat het uur los bij een bon die naar de pool gaat', async () => {
+    const bon = await insert({ plannedDate: new Date(`${DAY_A}T00:00:00.000Z`), status: 'gepland' })
+    await updatePlacement({ actor, workOrderId: bon, date: DAY_A, startMinutes: 9 * 60, appointment: true })
+
+    await updatePlacement({ actor, workOrderId: bon, date: null, startMinutes: null, appointment: false })
+
+    expect(await stored(bon)).toMatchObject({
+      plannedDate: null, minutes: null, appointment: false, status: 'aangemaakt',
+    })
+  })
+
+  it('weigert een bon waaraan al gewerkt wordt', async () => {
+    // De versiegrendel gaat hier omheen, de statusgrendel niet — uitdrukkelijk
+    // zo gevraagd. Wie bezig is, blijft staan waar hij staat.
+    const bon = await insert({ plannedDate: new Date(`${DAY_A}T00:00:00.000Z`), status: 'bezig' })
+
+    const result = await updatePlacement({
+      actor, workOrderId: bon, date: DAY_B, startMinutes: null, appointment: false,
+    })
+
+    expect(result).toEqual({ ok: false, reason: 'locked' })
+    const row = await stored(bon)
+    expect(row.plannedDate?.toISOString().slice(0, 10)).toBe(DAY_A)
+  })
+
+  it('kent een bon die niet bestaat niet toe aan een dag', async () => {
+    const result = await updatePlacement({
+      actor, workOrderId: 'wo-bestaat-niet', date: DAY_B, startMinutes: null, appointment: false,
+    })
+    expect(result).toEqual({ ok: false, reason: 'not_found' })
+  })
+
+  it('hangt de nieuwkomer achteraan en geeft hem een hoger versienummer', async () => {
+    // Het versienummer is wat een momentopname die onderweg was voor die dag
+    // laat afketsen. Zonder dat zou zo'n schrijfactie de nieuwkomer stilletjes
+    // weer uit de planning gooien.
+    const zittend = await insert({ plannedDate: new Date(`${DAY_B}T00:00:00.000Z`), status: 'gepland' })
+    await testDb.update(workOrders).set({ planningVersion: 7 }).where(eq(workOrders.id, zittend))
+
+    const nieuw = await insert({ plannedDate: null, status: 'aangemaakt' })
+    await updatePlacement({ actor, workOrderId: nieuw, date: DAY_B, startMinutes: null, appointment: false })
+
+    const row = await stored(nieuw)
+    expect(row.version).toBeGreaterThan(7)
+
+    const day = await getTodayInterventions(technicianId, DAY_B)
+    expect(day.planned.map(p => p.id)).toEqual([zittend, nieuw])
+  })
+
+  it('weigert een uur dat geen uur is', async () => {
+    const bon = await insert({ plannedDate: new Date(`${DAY_A}T00:00:00.000Z`), status: 'gepland' })
+
+    await updatePlacement({
+      actor, workOrderId: bon, date: DAY_A, startMinutes: 99 * 60, appointment: true,
+    })
+
+    expect(await stored(bon)).toMatchObject({ minutes: null, appointment: false })
   })
 })

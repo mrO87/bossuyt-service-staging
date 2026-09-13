@@ -33,7 +33,8 @@ import {
 } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
 import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
-import { OpenPool } from '@/components/DayView/OpenPool'
+import { PoolBar } from './PoolBar'
+import { WeekEdges } from './WeekEdges'
 import type { Intervention } from '@/types'
 import type { ReactNode } from 'react'
 import { RESIZE_PREFIX, WeekGrid } from './WeekGrid'
@@ -116,8 +117,15 @@ export default function WeekView() {
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})
   const [pool, setPool] = useState<Intervention[]>([])
-  const [poolVisible, setPoolVisible] = useState(true)
+  const [poolVisible, setPoolVisible] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  /**
+   * Iets is gelukt, maar je ziet het niet meer staan.
+   *
+   * Apart van `refusal`, dat rood is. Een bon die naar volgende week schuift
+   * verdwijnt uit beeld; zonder een woord erover lijkt dat hetzelfde als kwijt.
+   */
+  const [notice, setNotice] = useState<string | null>(null)
   const [drag, setDrag] = useState<DragPreview | null>(null)
 
   const sensors = useSensors(
@@ -337,7 +345,19 @@ export default function WeekView() {
    * Eén dag wegschrijven. savePlanningSnapshot beschrijft altijd precies één
    * dag, dus een verplaatsing tussen twee dagen is twee van deze.
    */
-  async function persistDay(dateStr: string, list: Intervention[], moved?: Intervention) {
+  async function persistDay(
+    dateStr: string,
+    list: Intervention[],
+    moved?: Intervention,
+    /**
+     * De dag zoals de server hem nog kent, wanneer die verschilt van `list`.
+     *
+     * Nodig bij het vrijgeven: `list` is de dag zónder de vertrekkende bon,
+     * terwijl de server hem nog meetelt in zijn versienummer. Zie de
+     * toelichting bij buildPlanningWrite.
+     */
+    serverDay?: Intervention[],
+  ) {
     await Promise.all(list.map((i, index) => updateInterventionSequence(i.id, index + 1)))
     if (moved) await upsertIntervention(moved)
     await enqueuePlanningWrite(
@@ -350,6 +370,7 @@ export default function WeekView() {
         // day in a move) — its planningVersion describes where it came from,
         // not this day, and must not raise this day's version.
         arrivingIds: moved ? [moved.id] : undefined,
+        serverDay,
       }),
     )
 
@@ -461,6 +482,7 @@ export default function WeekView() {
    */
   async function togglePin(workOrderId: string) {
     setRefusal(null)
+    setNotice(null)
     const dateStr = dayOf[workOrderId]
     if (!dateStr) return
 
@@ -484,6 +506,7 @@ export default function WeekView() {
   /** Het uur weghalen: vanaf nu weer berekend, zoals elke andere bon. */
   async function clearHour(workOrderId: string) {
     setRefusal(null)
+    setNotice(null)
     const dateStr = dayOf[workOrderId]
     if (!dateStr) return
     await changeHour(dateStr, workOrderId, {
@@ -614,8 +637,55 @@ export default function WeekView() {
     })
   }
 
+  /**
+   * Een bon naar een dag sturen die hier niet geladen is.
+   *
+   * Gaat door `update_placement` en niet door een momentopname: die beschrijft
+   * een hele dag, en van volgende week weten we niet wat erop staat. De server
+   * zoekt dat zelf uit en hangt hem achteraan.
+   *
+   * Op het scherm verdwijnt hij gewoon uit deze week — dat is ook wat er
+   * gebeurt. De melding onderaan zegt waar hij naartoe is, want een bon die
+   * zonder woord verdwijnt, is een bon die je kwijt bent.
+   */
+  async function moveToDate(workOrderId: string, fromDate: string, toDate: string) {
+    const previousDay = byDate[fromDate] ?? []
+    const moving = previousDay.find(i => i.id === workOrderId)
+    if (!moving) return
+
+    const rest = previousDay.filter(i => i.id !== workOrderId)
+    setByDate(current => ({ ...current, [fromDate]: rest }))
+
+    try {
+      await upsertIntervention({
+        ...moving,
+        plannedDate: `${toDate}T00:00:00.000Z`,
+        plannedStartMinutes: undefined,
+        startIsAppointment: false,
+      })
+      await enqueuePendingWrite({
+        type: 'update_placement',
+        createdAt: new Date().toISOString(),
+        payload: {
+          workOrderId,
+          date: toDate,
+          startMinutes: null,
+          appointment: false,
+          actorId: currentUser.id,
+          actorRole: currentUser.role,
+        },
+      })
+      await flushQueue(fromDate)
+      setNotice(`${moving.customerName} staat nu op ${dayLabel(toDate)}.`)
+    } catch {
+      setByDate(current => ({ ...current, [fromDate]: previousDay }))
+      setRefusal('Verplaatsen is niet gelukt. Probeer het opnieuw.')
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     setRefusal(null)
+    setNotice(null)
     const preview = drag
     setDrag(null)
     setFrozenAlerts(null)
@@ -660,6 +730,16 @@ export default function WeekView() {
       return
     }
 
+    // Naar een week die niet op het scherm staat.
+    //
+    // Dit is de enige uitkomst die niet via een momentopname kan: die beschrijft
+    // een hele dag, en de dag van volgende week is niet geladen. Vandaar de
+    // tweede deur — zie updatePlacement.
+    if (intent.kind === 'shift_week') {
+      await moveToDate(intent.workOrderId, intent.fromDate, intent.toDate)
+      return
+    }
+
     // Op zijn eigen dag losgelaten: geen verplaatsing, maar een uur. Waar je
     // hem neerzet, daar staat hij — ook als dat niet kan. Dan komt er arcering
     // over het onmogelijke stuk en blijft het aan de gebruiker.
@@ -698,7 +778,7 @@ export default function WeekView() {
       setPool(current => [released, ...current])
 
       try {
-        await persistDay(intent.fromDate, rest, released)
+        await persistDay(intent.fromDate, rest, released, previousDay)
       } catch {
         // Nog niets is gelukt: zet de dag en de pool terug zoals ze waren.
         setByDate(current => ({ ...current, [intent.fromDate]: previousDay }))
@@ -756,7 +836,7 @@ export default function WeekView() {
     setByDate(current => ({ ...current, [intent.fromDate]: without }))
 
     try {
-      await persistDay(intent.fromDate, without)
+      await persistDay(intent.fromDate, without, undefined, fromList)
     } catch {
       // Nog niets is gelukt: zet de oude dag terug zoals hij was.
       setByDate(current => ({ ...current, [intent.fromDate]: fromList }))
@@ -838,7 +918,7 @@ export default function WeekView() {
         </button>
       </div>
 
-      <main className="px-4 py-4 pb-24">
+      <main className="px-4 py-4 pb-32">
         <label className="mb-2 flex items-center gap-3 text-xs text-ink-soft">
           Hoogte per uur
           <input
@@ -900,6 +980,12 @@ export default function WeekView() {
             </div>
           )}
 
+          {notice && (
+            <div className="mb-3 rounded-xl border border-brand-blue/30 bg-brand-blue/10 px-3 py-2 text-xs text-ink">
+              {notice}
+            </div>
+          )}
+
           {/*
             De botsingen. Ze blijven staan tot de gebruiker ze oplost — de app
             schuift niets vanzelf op, want dan glijdt een bon weg onder je
@@ -945,25 +1031,31 @@ export default function WeekView() {
             </div>
           ))}
 
-          <WeekGrid
-            days={days}
-            schedules={schedules}
-            interventionsById={interventionsById}
-            pixelsPerHour={pixelsPerHour}
-            selectedDate={new Date()}
-            onOpenIntervention={id => router.push(`/interventions/${id}`)}
-            onTogglePin={id => { void togglePin(id) }}
-            onClearHour={id => { void clearHour(id) }}
-            renderDayColumn={(day, index, column) => (
-              <DayDroppable dateStr={toLocalDateStr(day)}>{column}</DayDroppable>
-            )}
-          />
+          {/* De randen liggen over het rooster, dus ze hebben er een
+              positiepunt omheen nodig. */}
+          <div className="relative">
+            <WeekGrid
+              days={days}
+              schedules={schedules}
+              interventionsById={interventionsById}
+              pixelsPerHour={pixelsPerHour}
+              selectedDate={new Date()}
+              onOpenIntervention={id => router.push(`/interventions/${id}`)}
+              onTogglePin={id => { void togglePin(id) }}
+              onClearHour={id => { void clearHour(id) }}
+              renderDayColumn={(day, index, column) => (
+                <DayDroppable dateStr={toLocalDateStr(day)}>{column}</DayDroppable>
+              )}
+            />
+            <WeekEdges visible={Boolean(drag)} />
+          </div>
 
-          <OpenPool
+          <PoolBar
             interventions={pool}
-            visible={poolVisible}
-            onToggleVisible={() => setPoolVisible(v => !v)}
-            onOpen={id => router.push(`/interventions/${id}`)}
+            open={poolVisible}
+            onToggle={() => setPoolVisible(v => !v)}
+            dragging={Boolean(drag)}
+            onOpenIntervention={id => router.push(`/interventions/${id}`)}
           />
         </DndContext>
       </main>

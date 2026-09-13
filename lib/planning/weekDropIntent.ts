@@ -9,16 +9,35 @@
  */
 import { canLeaveTheDay, POOL_DROPPABLE_ID } from './dropIntent'
 import { snapToStep } from './pinnedHour'
+import { shiftDateStr } from './weekDays'
 import type { InterventionStatus } from '@/types'
 
 const DAY_PREFIX = 'weekday:'
+const EDGE_PREFIX = 'weekedge:'
 
 export function dayDroppableId(dateStr: string): string {
   return `${DAY_PREFIX}${dateStr}`
 }
 
+/**
+ * De stroken links en rechts van het rooster.
+ *
+ * Ze bestaan alleen tijdens het slepen, want anders nemen ze plaats in voor
+ * iets wat zelden gebeurt. Het zijn de enige doelwitten die een dag opleveren
+ * die niet op het scherm staat.
+ */
+export function weekEdgeDroppableId(edge: 'prev' | 'next'): string {
+  return `${EDGE_PREFIX}${edge}`
+}
+
 function dateFromDroppable(id: string): string | null {
   return id.startsWith(DAY_PREFIX) ? id.slice(DAY_PREFIX.length) : null
+}
+
+function edgeFromDroppable(id: string): 'prev' | 'next' | null {
+  if (!id.startsWith(EDGE_PREFIX)) return null
+  const edge = id.slice(EDGE_PREFIX.length)
+  return edge === 'prev' || edge === 'next' ? edge : null
 }
 
 export type WeekDropIntent =
@@ -27,6 +46,13 @@ export type WeekDropIntent =
   | { kind: 'move'; workOrderId: string; fromDate: string; toDate: string }
   /** Blijft op zijn dag staan, maar krijgt een uur: waar je hem neerzet. */
   | { kind: 'set_hour'; workOrderId: string; date: string; startMinutes: number }
+  /**
+   * Zeven dagen vroeger of later — een dag die niet op het scherm staat.
+   *
+   * Daarom draagt deze uitkomst een volledige datum en geen richting: wie hem
+   * wegschrijft, kent die dag niet en kan er dus geen momentopname van maken.
+   */
+  | { kind: 'shift_week'; workOrderId: string; fromDate: string; toDate: string }
   | { kind: 'none'; reason: string }
 
 /**
@@ -77,6 +103,21 @@ export function resolveWeekDrop(context: WeekDropContext): WeekDropIntent {
   // De grendel geldt overal waar een bon zijn dag zou verlaten — hem verbergen
   // is comfort, dit is de regel.
   const mustStay = Boolean(fromDate) && !canLeaveTheDay(statusById[activeId])
+
+  const edge = edgeFromDroppable(overId)
+  if (edge) {
+    // Een bon zonder dag heeft geen week om van weg te schuiven; hem op vandaag
+    // plus zeven zetten zou een datum verzinnen die niemand gekozen heeft.
+    if (!fromDate) return { kind: 'none', reason: 'staat nog op geen enkele dag' }
+    if (mustStay) return { kind: 'none', reason: 'het werk is al begonnen' }
+
+    return {
+      kind: 'shift_week',
+      workOrderId: activeId,
+      fromDate,
+      toDate: shiftDateStr(fromDate, edge === 'next' ? 7 : -7),
+    }
+  }
 
   if (overId === POOL_DROPPABLE_ID || poolIds.includes(overId)) {
     if (!fromDate) return { kind: 'none', reason: 'staat al in de pool' }
