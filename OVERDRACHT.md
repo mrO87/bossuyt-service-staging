@@ -7,11 +7,37 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
-## Bijwerking 12 september — v1.61, een bon op een uur zetten
+## Bijwerking 13 september — v1.62 draait op staging
 
-**Gebouwd en nagemeten in een echte browser, nog niet uitgerold.** 461 tests
-groen (was 415), typecheck/lint/build schoon. Ontwerp en de drie beslissingen
-die eronder lagen: `docs/superpowers/specs/2026-09-12-vast-uur-ontwerp.md`.
+**v1.61 én v1.62 zijn uitgerold** (`curl .../api/version` zegt v1.62, sha
+72d60a8). 464 tests groen, typecheck/lint/build schoon.
+
+v1.62 vult aan wat v1.61 van het ontwerp liet liggen: het label `kan niet` op de
+arcering, en uitrekken met een handvat onderaan het blok (schrijft naar
+`estimatedMinutes`, via dezelfde wachtrij als het duurbolletje).
+
+**Twee dingen die pas zichtbaar werden door het blok uit te vergroten:**
+
+1. **Het uurblokje liep over de speldjesknop.** Met een aparte knop van 16 px
+   bleef er zo'n 21 px over voor tekst, en "08:39" past daar niet in. Afkappen
+   maakte er "0..." van. Opgelost door het uur zélf de knop te maken — dat
+   bespaart de hele kolom en leest directer. Het kruisje om een uur weg te halen
+   staat nu rechtsboven, want de onderrand is het rekhandvat.
+2. **Markeren als afspraak sprong naar het kwartier.** 08:39 werd 08:45.
+   Slepen klikt in omdat dat helpt mikken; markeren bevestigt wat er staat, en
+   dan mag er niets verschuiven. `togglePin` rondt nu af op de minuut.
+
+**Een misverstand dat rechtgezet is** (en dat in de code, de release-notities én
+het spec stond): het speldje werd beschreven als iets dat "kortste volgorde"
+tegenhoudt. Die knop bestaat niet in deze app, en het speldje is ook geen
+grendel. Het **meldt** dat een uur met de klant afgesproken is — een bericht aan
+de volgende persoon die de planning openslaat. Niets in de code vertakt erop, en
+dat is het ontwerp en niet een gat erin.
+
+## v1.61 — een bon op een uur zetten
+
+Ontwerp en de drie beslissingen die eronder lagen:
+`docs/superpowers/specs/2026-09-12-vast-uur-ontwerp.md`.
 
 Dit is de eerste keer dat de app een uur **onthoudt**. Tot nu toe werd elk uur
 berekend uit het vertrekuur; nu mag een bon zijn eigen uur meebrengen. Twee
