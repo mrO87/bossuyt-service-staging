@@ -15,6 +15,51 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.61',
+    date: '12 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Een bon op een uur zetten',
+        body:
+          'Sleep een werkbon in de weekweergave omhoog of omlaag en hij staat op dat uur — '
+          + 'op het kwartier. Vanaf dat uur wordt de rest teruggerekend: hoe laat je moet '
+          + 'vertrekken, en hoeveel rijden er tussen de klanten zit die daardoor naast '
+          + 'elkaar komen te staan. Tot nu toe berekende de app elk uur zelf; dit is het '
+          + 'eerste uur dat ze onthoudt.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Het speldje: dit is een afspraak',
+        body:
+          'Het uurtje links op elk blok is groen zolang het berekend wordt, en rood zodra '
+          + 'het vastligt. Met het speldje maak je van een uur een afspraak. Dat verandert '
+          + 'niets aan hoe de bon zich laat verslepen — dat blijft even vrij — het zegt '
+          + 'alleen dat dit uur blijft staan wanneer de app straks zelf een kortste '
+          + 'volgorde voorstelt. Het kruisje rechtsonder haalt een uur weer weg.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Wat niet kan, wordt getoond in plaats van rechtgezet',
+        body:
+          'Zet je een bon op een uur waarop je er onmogelijk kunt zijn, dan komt er rode '
+          + 'arcering over precies dat stuk en blijft die staan. De app schuift niets '
+          + 'vanzelf op: dat is geprobeerd en het maakte vrij plaatsen onmogelijk — elke '
+          + 'bon werd naar de vorige toe gezogen en gleed weg onder je vinger. De melding '
+          + 'noemt de drie uitwegen: de vorige job inkorten, deze later zetten, of het '
+          + 'vaste uur weghalen.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een uur hoort bij een dag',
+        body:
+          'Sleep je een bon naar een andere dag of terug naar de pool, dan laat hij zijn '
+          + 'uur los en wordt het weer berekend. Negen uur op dinsdag is niet negen uur op '
+          + 'woensdag: de rit ernaartoe vertrekt van een andere plaats in een andere dag.',
+      },
+    ],
+  },
+  {
     version: 'v1.60',
     date: '12 september 2026',
     changes: [
@@ -1470,7 +1515,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.60'
+const CURRENT_RELEASE_VERSION = 'v1.61'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

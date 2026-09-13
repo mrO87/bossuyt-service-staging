@@ -1,6 +1,6 @@
 # Ontwerp — een bon op een uur zetten
 
-Datum: 12 september 2026 · Status: **vastgelegd in prototype, nog niet gebouwd**
+Datum: 12 september 2026 · Status: **gebouwd in v1.61**
 
 Uitgewerkt en met de hand getest in een wegwerp-prototype, in negen rondes.
 Wat hier staat is wat na die rondes overeind bleef — inclusief drie varianten
@@ -92,9 +92,35 @@ Gevolgen om over na te denken vóór er iets gebouwd wordt:
 
 ---
 
-## 7. Nog te beslissen
+## 7. Beslist bij het bouwen (12 september 2026)
 
-- Is 15 minuten de juiste stap? (5 en 30 zijn niet getest)
-- Moet de app een conflict kunnen **weigeren**, of alleen tonen?
-- Wat gebeurt er met een vastgezet uur als de dag verschoven wordt naar een
-  andere datum?
+| vraag | keuze |
+|---|---|
+| Is 15 minuten de juiste stap? | **15.** Op 54 px/uur is dat ~13 px — met een duim te raken. Vijf werd afgewogen en niet gekozen: nog geen 5 px per stap, dan wordt mikken trillen. `SNAP_MINUTES` in `lib/planning/pinnedHour.ts`. |
+| Conflict weigeren of tonen? | **Alleen tonen.** Het uur wordt bewaard zoals elke andere schrijfactie. Weigeren zou een technieker zonder bereik pas uren later te horen krijgen dat zijn wijziging geweigerd is, en de wachtrij zou vastlopen achter een schrijfactie die nooit kan slagen. |
+| Wat bij een dagwissel? | **Alles wist.** Naar een andere dag of naar de pool: het uur en het speldje gaan weg, het uur wordt weer berekend. Negen uur op dinsdag is niet negen uur op woensdag — de rit ernaartoe vertrekt van een andere plaats in een andere dag. Staat in `savePlanningSnapshot`, niet alleen in het scherm, zodat geen enkele weg eromheen loopt. |
+
+### Wat er gebouwd is
+
+- `work_orders.planned_start_minutes` + `start_is_appointment` — migratie in
+  `scripts/migrations/2026-09-12-pinned-hour.sql`, met de hand toegepast op
+  `bossuyt_staging` en `bossuyt_test`
+- `computeDaySchedule` neemt een uur als invoer en geeft `conflicts` terug
+- `lib/planning/pinnedHour.ts` — de stap, wat een geldig uur is, de volgorde
+  die het uur volgt, en de tekst van de melding
+- `resolveWeekDrop` kent een vierde uitkomst: `set_hour`
+- Weekweergave: verticaal slepen, speldje, kruisje, arcering, melding
+
+### Wat er bewust niet in zit
+
+- **De dagweergave toont het uur, maar niet de botsing.** Ze rekent met
+  dezelfde motor en dus met hetzelfde uur, maar heeft geen tijdas om arcering
+  op te tekenen. Een onmogelijk uur is daar alleen te zien aan twee kaarten met
+  overlappende uren. De melding staat in de weekweergave.
+- **Rollen.** De vraag uit sectie 6 — mag een technieker zijn eigen uren
+  vastzetten — is niet beantwoord en niet gegrendeld: vandaag mag iedereen het,
+  net als bij elke andere planningswijziging. `plannedByRole` wordt geschreven,
+  dus de grendel wordt later één `if` op één plek.
+- **Uitrekken om `estimatedMinutes` te wijzigen.** Dat kan al via de duur op de
+  kaart (`EstimateBadge`, v1.58). Een tweede gebaar op een blok van 62 px erbij
+  is niet gebouwd.

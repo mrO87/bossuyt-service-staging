@@ -1,9 +1,72 @@
-# Overdracht — 11 september 2026 (avond)
+# Overdracht — 11 september 2026 (avond), bijgewerkt 12 september
 
 Vervangt de vorige overdracht. Punt 1 (slepen tussen pool en planning) is
 gebouwd; wat er nog open staat en waarom staat hieronder.
 
 Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
+
+---
+
+## Bijwerking 12 september — v1.61, een bon op een uur zetten
+
+**Gebouwd en nagemeten in een echte browser, nog niet uitgerold.** 461 tests
+groen (was 415), typecheck/lint/build schoon. Ontwerp en de drie beslissingen
+die eronder lagen: `docs/superpowers/specs/2026-09-12-vast-uur-ontwerp.md`.
+
+Dit is de eerste keer dat de app een uur **onthoudt**. Tot nu toe werd elk uur
+berekend uit het vertrekuur; nu mag een bon zijn eigen uur meebrengen. Twee
+kolommen in `work_orders`: `planned_start_minutes` (waar hij staat) en
+`start_is_appointment` (het speldje — of dat een afspraak is). De migratie staat
+in `scripts/migrations/2026-09-12-pinned-hour.sql` en is met de hand toegepast op
+**allebei** de databases (`bossuyt_staging` en `bossuyt_test`).
+
+### Twee dingen die alleen de draaiende site liet zien
+
+Geen van beide is uit redeneren gekomen; allebei uit slepen in een echte
+browser. Ze staan hier omdat ze elkaar verbergen.
+
+1. **De weekweergave stuurde haar wachtrij nooit weg.** De dagweergave leegt hem
+   bij het openen (`useDayData`), dus vroeg of laat vertrok alles — maar de
+   weekweergave *leest* van de server. Wie daar iets versleept en herlaadt
+   zonder ooit de dagweergave te openen, zag zijn wijziging terugspringen naar
+   wat de server nog dacht. Opgelost met `flushQueue` in `WeekView.tsx`.
+
+2. **Twee handelingen na elkaar gaven een 409.** Na een geslaagde schrijfactie
+   verhoogt de server het versienummer van de dag; dit scherm hield het oude
+   vast. Het uur zetten lukte, het speldje erna werd geweigerd en weggegooid,
+   en niets zei waarom. `flushQueue` neemt nu alleen het versienummer over —
+   niet de hele dag, want dat zou een sleep die ondertussen begonnen is ongedaan
+   maken.
+
+Punt 2 was onzichtbaar zolang punt 1 bestond: zonder synchronisatie verhoogde de
+server nooit iets tijdens het slepen.
+
+### Wat met de hand nagemeten is
+
+Lokale dev-server op poort 3005 tegen `bossuyt_staging`, Playwright met een
+muis. Slepen zet een uur (08:39 → 09:45, ingeklikt op het kwartier), het
+overleeft een herlaadbeurt, het speldje komt in de database, de arcering loopt
+van 09:00 tot 10:22 bij een bon die op 09:00 staat en er ten vroegste om 10:22
+kan zijn, en de knop "Vast uur weghalen" laat de melding verdwijnen. De
+testuren zijn daarna weer uit de database gehaald.
+
+**Nog niet met een echte vinger op een echt scherm** — hetzelfde gat als bij
+v1.60. Verticaal slepen over 62 px is met een muis gemeten, niet met een duim.
+
+### Let op bij het verder bouwen
+
+- De **dagweergave toont het uur maar niet de botsing**: ze rekent met dezelfde
+  motor en dus met hetzelfde uur, maar heeft geen tijdas om arcering op te
+  tekenen. Twee kaarten met overlappende uren is daar het enige teken.
+- `savePlanningSnapshot` leest een **ontbrekend** `startTimes`-veld als "deze
+  client weet niets van uren" en laat de uren met rust. Een telefoon die een
+  week offline stond, herspeelt schrijfacties van vóór v1.61; die mogen niets
+  wissen. Een **lege lijst** is iets anders: een dag waarop niets vaststaat.
+- De kolom `planned_order` en de volgorde die `getTodayInterventions`
+  teruggeeft, lopen niet altijd gelijk — bij het testen kwam een bon met
+  `planned_order = 2` als eerste uit de API. Dat is niet onderzocht en heeft
+  niets met dit werk te maken, maar het bepaalt wél welke bon "de eerste job"
+  is, en de eerste job kan per definitie niet botsen.
 
 ---
 
