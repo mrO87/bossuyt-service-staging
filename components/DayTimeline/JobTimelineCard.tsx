@@ -96,8 +96,31 @@ export function JobTimelineCard({
                     <p className="font-bold text-sm leading-tight text-ink truncate">
                       {intervention.customerName}
                     </p>
+                    {/*
+                      Het uur, en of het vastligt.
+
+                      Rood betekent hier hetzelfde als in de weekweergave: dit
+                      uur is met de klant afgesproken. Oranje is het berekende
+                      uur, dat meeschuift als er iets vóór deze bon verandert.
+                      Zonder dit onderscheid stond in de dagplanning een uur dat
+                      er precies hetzelfde uitzag of het nu een afspraak was of
+                      een uitkomst — en de technieker die deze lijst 's ochtends
+                      afloopt, is degene die het verschil moet kennen.
+                    */}
                     {typeof startMinutes === 'number' && (
-                      <p className="text-[11px] font-bold tabular-nums text-brand-orange">
+                      <p
+                        className={[
+                          'text-[11px] font-bold tabular-nums',
+                          intervention.startIsAppointment
+                            ? 'rounded bg-brand-red px-1 text-white'
+                            : 'text-brand-orange',
+                        ].join(' ')}
+                        title={
+                          intervention.startIsAppointment
+                            ? 'Afgesproken met de klant'
+                            : 'Berekend uur — schuift mee'
+                        }
+                      >
                         {String(Math.floor(startMinutes / 60)).padStart(2, '0')}:
                         {String(startMinutes % 60).padStart(2, '0')}
                       </p>

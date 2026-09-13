@@ -26,7 +26,37 @@ const VIEWS: Array<{ id: PlanningView; label: string; hint: string; href: string
   { id: 'week', label: 'Weekplanning', hint: 'zeven dagen naast elkaar', href: '/planning/week' },
 ]
 
-export function ViewSwitcher({ current }: { current: PlanningView }) {
+/**
+ * De dag waar de gebruiker naar keek, meegegeven aan de andere weergave.
+ *
+ * Zonder dit begon elke weergave opnieuw bij vandaag: stond je in de
+ * dagplanning op volgende dinsdag en wisselde je naar de week, dan kreeg je de
+ * week van vandaag te zien en was je je plaats kwijt. Op een zondag is dat
+ * extra verwarrend, want dan ligt de hele getoonde week al achter je.
+ */
+export function dateFromSearch(): Date | null {
+  // Op de server bestaat er geen adresbalk; deze routes worden statisch
+  // gebouwd. Dan geldt gewoon vandaag, en de browser vult het aan.
+  if (typeof window === 'undefined') return null
+
+  const asked = new URLSearchParams(window.location.search).get('date')
+  if (!asked) return null
+
+  // Middag, niet middernacht: een datum op middernacht kan met een uurverschil
+  // of een zomertijdsprong in de vorige dag vallen.
+  const parsed = new Date(`${asked}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function withDate(href: string, date: Date | undefined): string {
+  if (!date) return href
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${href}?date=${y}-${m}-${d}`
+}
+
+export function ViewSwitcher({ current, date }: { current: PlanningView; date?: Date }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -87,7 +117,7 @@ export function ViewSwitcher({ current }: { current: PlanningView }) {
                 role="menuitem"
                 onClick={() => {
                   setOpen(false)
-                  if (!isCurrent) router.push(view.href)
+                  if (!isCurrent) router.push(withDate(view.href, date))
                 }}
                 className={`flex w-full min-h-11 flex-col items-start px-3 py-2 text-left active:bg-brand-mid/60 ${
                   isCurrent ? 'bg-brand-mid/40' : ''

@@ -7,6 +7,29 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
+## Bijwerking 13 september — v1.64: drie dingen uit de telefoontest
+
+De gebruiker heeft v1.63 op een echte telefoon gebruikt. Drie punten:
+
+1. **Het venster sprong weg tijdens het slepen.** Twee oorzaken, allebei
+   gevolgen van het meerekenen uit v1.63. `layoutShiftCompensation` van dnd-kit
+   scrollt de pagina wanneer de inhoud verschuift — bedacht voor lijsten die
+   stilstaan, en bij ons verschuift de dag met opzet. En de botsingsmelding
+   staat bóven het rooster, dus eentje die tijdens het slepen verscheen duwde
+   het rooster zo'n 90 px omlaag. Nu: `autoScroll.canScroll` laat alleen nog de
+   horizontale strook scrollen (die moet blijven werken, anders is een dag
+   buiten beeld onbereikbaar), en de meldingen blijven bevroren zolang er
+   gesleept wordt. Bevriezen en niet verbergen — verbergen zou het rooster
+   laten springen zodra je een bon aanraakt waar al een melding bij stond.
+2. **De weekweergave begon altijd bij vandaag.** De wisselaar ging naar
+   `/planning/week` zonder datum. Nu geven beide weergaven `?date=` mee
+   (`dateFromSearch` / `withDate` in `ViewSwitcher.tsx`). **Let op:** de week
+   waarin vandaag valt tonen blijft het gedrag — op een zondag is dat dus een
+   week die al voorbij is. Uitdrukkelijk zo gelaten op vraag van de gebruiker.
+3. **Een afgesproken uur is nu ook rood in de dagplanning** (`JobTimelineCard`).
+   Dat sluit het gat dat in het v1.61-ontwerp als "bewust niet in zit" stond:
+   de dagweergave toonde het uur wel, maar niet dat het vastlag.
+
 ## Bijwerking 13 september (later) — v1.63: meerekenen tijdens het slepen
 
 De weekweergave rekende alleen bij het loslaten. Nu volgt de hele dag de vinger:

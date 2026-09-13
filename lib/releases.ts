@@ -15,6 +15,41 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.64',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'Het scherm springt niet meer weg terwijl je sleept',
+        body:
+          'Tijdens het verschuiven van een bon kon de pagina plots opschuiven onder je '
+          + 'vinger, precies terwijl je aan het mikken was. Twee oorzaken: de app '
+          + 'scrollde mee om het blok onder je vinger te houden terwijl de dag zelf al '
+          + 'meebewoog, en een botsingsmelding die tijdens het slepen verscheen duwde het '
+          + 'hele rooster naar beneden. Het venster staat nu stil zolang je vasthoudt; de '
+          + 'rode arcering op het rooster verschijnt wél gewoon mee, want die verandert de '
+          + 'indeling niet. Zijwaarts vegen naar een dag buiten beeld blijft werken.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De dag reist mee als je van weergave wisselt',
+        body:
+          'Stond je in de dagplanning op dinsdag en koos je de weekplanning, dan kreeg je '
+          + 'toch de week van vandaag te zien. Nu opent de week op de dag waar je stond, '
+          + 'en omgekeerd opent de dagplanning op de week die je bekeek.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een afgesproken uur is ook in de dagplanning rood',
+        body:
+          'Zet je in de weekplanning een uur vast als afspraak met de klant, dan zag je '
+          + 'dat in de dagplanning nergens terug — daar stond hetzelfde oranje uurtje als '
+          + 'bij een berekend uur. Nu staat een afgesproken uur in het rood naast de '
+          + 'klantnaam, met dezelfde betekenis als in de week: hier is iets beloofd.',
+      },
+    ],
+  },
+  {
     version: 'v1.63',
     date: '13 september 2026',
     changes: [
@@ -1585,7 +1620,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.63'
+const CURRENT_RELEASE_VERSION = 'v1.64'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

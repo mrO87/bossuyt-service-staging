@@ -18,7 +18,7 @@ import { useTasks } from '@/lib/task-store'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { useDayData } from '@/lib/useDayData'
 import { toLocalDateStr } from '@/lib/planning/weekDays'
-import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
+import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
 import { PlanningBoard } from './PlanningBoard'
 
 // ---------- helpers ----------
@@ -47,7 +47,10 @@ function BossuyLogo() {
 export default function DayView() {
   const router = useRouter()
   const today = new Date()
-  const [selectedDate, setSelectedDate] = useState(today)
+  // De dag die de weekweergave meegaf, als die er is — zie ViewSwitcher.
+  // Zonder dit begint elke weergave opnieuw bij vandaag en ben je je plaats
+  // kwijt zodra je wisselt.
+  const [selectedDate, setSelectedDate] = useState(() => dateFromSearch() ?? today)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [newWorkOrderOpen, setNewWorkOrderOpen] = useState(false)
@@ -84,7 +87,7 @@ export default function DayView() {
           <BossuyLogo />
           <div>
             <p className="font-bold text-base leading-tight tracking-wide text-white">bossuyt</p>
-            <ViewSwitcher current="dag" />
+            <ViewSwitcher current="dag" date={selectedDate} />
           </div>
         </div>
         <div className="flex items-center gap-3">

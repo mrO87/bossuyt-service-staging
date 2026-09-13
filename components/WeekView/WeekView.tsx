@@ -32,7 +32,7 @@ import {
   upsertIntervention,
 } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
-import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
+import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
 import { OpenPool } from '@/components/DayView/OpenPool'
 import type { Intervention } from '@/types'
 import type { ReactNode } from 'react'
@@ -93,7 +93,10 @@ export default function WeekView() {
   const { settings } = useSettings()
   const { currentUser } = useTasks()
 
-  const [anchor, setAnchor] = useState(() => new Date())
+  // De dag die de dagweergave meegaf, als die er is — zie ViewSwitcher. Zonder
+  // dit begon de week altijd bij vandaag, welke dag je in de dagplanning ook
+  // open had staan.
+  const [anchor, setAnchor] = useState(() => dateFromSearch() ?? new Date())
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})
   const [pool, setPool] = useState<Intervention[]>([])
@@ -259,6 +262,27 @@ export default function WeekView() {
           entry.depart !== null && entry.depart < departureMinutes),
     [days, schedules, departureMinutes],
   )
+
+  /**
+   * De meldingen bevriezen zolang er gesleept wordt.
+   *
+   * Ze staan boven het rooster, dus eentje die verschijnt of verdwijnt duwt het
+   * hele rooster omhoog of omlaag — onder je vinger, precies terwijl je aan het
+   * mikken bent. Op een telefoon voelt dat alsof de pagina wegspringt.
+   *
+   * Wegnemen tijdens het slepen is geen oplossing: dan springt het rooster bij
+   * het aanraken van een bon waar al een melding bij stond. Daarom blijft
+   * staan wat er stond, tot je loslaat. Het live signaal gaat niet verloren —
+   * de arcering op het rooster zelf verschijnt en verdwijnt wél mee, en die
+   * verandert de indeling niet.
+   */
+  const [frozenAlerts, setFrozenAlerts] = useState<{
+    conflicts: typeof conflicts
+    earlyDepartures: typeof earlyDepartures
+  } | null>(null)
+
+  const shownConflicts = frozenAlerts?.conflicts ?? conflicts
+  const shownEarlyDepartures = frozenAlerts?.earlyDepartures ?? earlyDepartures
 
   const dayOf = useMemo(() => {
     const map: Record<string, string | undefined> = {}
@@ -481,6 +505,9 @@ export default function WeekView() {
    * toelichting bij DragPreview voor waarom dat moet.
    */
   function handleDragStart(event: DragStartEvent) {
+    // Leg de meldingen vast zoals ze nú staan; zie frozenAlerts.
+    setFrozenAlerts({ conflicts, earlyDepartures })
+
     const activeId = String(event.active.id)
     const resizing = activeId.startsWith(RESIZE_PREFIX)
     const id = resizing ? activeId.slice(RESIZE_PREFIX.length) : activeId
@@ -528,6 +555,7 @@ export default function WeekView() {
     setRefusal(null)
     const preview = drag
     setDrag(null)
+    setFrozenAlerts(null)
 
     // Uitrekken eindigt in dezelfde afhandeling als verslepen, want het is
     // dezelfde sleepmotor. Het id zegt welk van de twee het was, en dit moet
@@ -721,7 +749,7 @@ export default function WeekView() {
       <header className="flex items-center gap-3 bg-brand-dark px-4 py-3">
         <div>
           <p className="text-sm font-bold leading-tight text-white">bossuyt</p>
-          <ViewSwitcher current="week" />
+          <ViewSwitcher current="week" date={days[0]} />
         </div>
       </header>
 
@@ -766,6 +794,27 @@ export default function WeekView() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          // Laat de pagina niet scrollen onder je vinger.
+          //
+          // Twee standaardgedragingen van dnd-kit werken hier tegen ons, en
+          // allebei zijn ze bedacht voor lijsten die stilstaan tijdens een
+          // sleep. `layoutShiftCompensation` scrollt de pagina wanneer de
+          // inhoud verschuift, om het gesleepte ding onder de vinger te houden.
+          // Bij ons verschuift de inhoud met opzet bij elke kwartierstap, dus
+          // die compensatie stond voortdurend aan: het venster sprong weg
+          // terwijl je aan het mikken was.
+          //
+          // `canScroll` laat alleen de horizontale strook met de dagkolommen
+          // nog scrollen. Die moet blijven werken — anders is een dag die
+          // buiten beeld valt niet meer te bereiken — maar het venster zelf
+          // staat stil zolang je vasthoudt.
+          autoScroll={{
+            layoutShiftCompensation: false,
+            canScroll: element =>
+              element !== document.scrollingElement
+              && element !== document.documentElement
+              && element !== document.body,
+          }}
           // Blijf de dagkolommen opmeten terwijl er gesleept wordt.
           //
           // Standaard meet dnd-kit ze één keer op, bij het begin van de sleep.
@@ -779,7 +828,7 @@ export default function WeekView() {
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
-          onDragCancel={() => setDrag(null)}
+          onDragCancel={() => { setDrag(null); setFrozenAlerts(null) }}
         >
           {refusal && (
             <div className="mb-3 rounded-xl border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-xs text-ink">
@@ -794,7 +843,7 @@ export default function WeekView() {
             drie de uitwegen, en de derde staat er ook als knop bij: die is
             anders nergens te vinden zonder de bon aan te raken.
           */}
-          {conflicts.map(conflict => (
+          {shownConflicts.map(conflict => (
             <div
               key={`${conflict.date}-${conflict.interventionId}`}
               role="alert"
@@ -814,7 +863,7 @@ export default function WeekView() {
             </div>
           ))}
 
-          {earlyDepartures.map(({ day, depart }) => (
+          {shownEarlyDepartures.map(({ day, depart }) => (
             <div
               key={toLocalDateStr(day)}
               className="mb-3 rounded-xl border-l-4 border-brand-orange bg-brand-orange/10 px-3 py-2 text-xs text-ink"
