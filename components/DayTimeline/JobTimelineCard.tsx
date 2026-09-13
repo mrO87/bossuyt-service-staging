@@ -19,6 +19,7 @@ import {
   typeLabel,
 } from '@/components/planning/interventionLabels'
 import { EstimateBadge } from '@/components/planning/EstimateBadge'
+import { customerLabel } from '@/lib/customerLabel'
 
 function Chip({ className, label }: { className: string; label: string }) {
   return (
@@ -94,7 +95,7 @@ export function JobTimelineCard({
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2">
                     <p className="font-bold text-sm leading-tight text-ink truncate">
-                      {intervention.customerName}
+                      {customerLabel(intervention.customerName)}
                     </p>
                     {/*
                       Het uur, en of het vastligt.

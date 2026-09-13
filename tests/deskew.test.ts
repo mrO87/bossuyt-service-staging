@@ -179,3 +179,22 @@ describe('defaultCorners', () => {
     expect(() => solveHomography(defaultCorners(800, 1200), square)).not.toThrow()
   })
 })
+
+describe('defaultCorners — standaard de hele foto', () => {
+  it('begint op de vier hoeken van de foto zelf', () => {
+    // De camera van een telefoon snijdt de bon al bij. Een standaardrand zou
+    // die randen juist afsnijden, en dan moet je vier hoeken terugslepen naar
+    // waar ze al hoorden te staan.
+    expect(defaultCorners(1000, 2000)).toEqual([
+      { x: 0, y: 0 },
+      { x: 1000, y: 0 },
+      { x: 1000, y: 2000 },
+      { x: 0, y: 2000 },
+    ])
+  })
+
+  it('laat een rand nog altijd toe wanneer je er een meegeeft', () => {
+    const [topLeft] = defaultCorners(1000, 2000, 0.1)
+    expect(topLeft).toEqual({ x: 100, y: 200 })
+  })
+})

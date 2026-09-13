@@ -20,6 +20,36 @@ export const RELEASES: ReleaseEntry[] = [
     changes: [
       {
         label: 'Fix',
+        title: 'Een foto uploaden strandde meteen',
+        body:
+          'Koos je een foto in plaats van een PDF, dan verscheen er een technische fout '
+          + '("The source width is 0") en kwam je niet verder. De app gaf het geheugen van '
+          + 'de afbeelding vrij vlak vóór ze de afmetingen nodig had, en las daarna nul bij '
+          + 'nul pixels uit. Foto uploaden werkt weer.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Het selectievak begint op de hele foto',
+        body:
+          'Bij het aanduiden van de hoeken lag er standaard een kader dat acht procent naar '
+          + 'binnen sprong. Wie zijn foto op de gsm al rechtzet en bijsnijdt, kreeg zo net de '
+          + 'randen van de bon afgesneden en moest vier hoeken terugslepen. Het kader begint '
+          + 'nu op de hoeken van de foto zelf; versleep ze alleen nog als het nodig is.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een bon zonder klantnaam kan nu ook binnen',
+        body:
+          'Op een papieren servicebon blijft het naamvak soms leeg. De app hield zo een bon '
+          + 'tegen om iets wat er gewoon niet op stond. De naam is niet langer verplicht — '
+          + 'het rode merkje "niet gevonden" naast het veld zegt al dat hij ontbreekt, en je '
+          + 'kan hem zelf invullen als je hem kent. Adres en gemeente blijven wél nodig: '
+          + 'zonder die twee kan niemand ergens naartoe rijden. In de planning staat bij zo '
+          + 'een bon "Naam ontbreekt", zodat een leeg blok nooit als een fout in de app '
+          + 'gelezen wordt.',
+      },
+      {
+        label: 'Fix',
         title: 'De zijbalken pakken maandag niet meer af',
         body:
           'Een bon naar maandag verplaatsen of er een uur op zetten lukte niet: hij '

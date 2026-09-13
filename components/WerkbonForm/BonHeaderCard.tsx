@@ -1,5 +1,6 @@
 import type { Intervention } from '@/types'
 import Section from './Section'
+import { customerLabel } from '@/lib/customerLabel'
 
 interface Props {
   intervention: Intervention
@@ -48,7 +49,7 @@ export default function BonHeaderCard({ intervention, bonNumberPreview }: Props)
         </div>
       </div>
       <Row label="Klant n°" value={klantNr} />
-      <Row label="Naam" value={intervention.customerName} />
+      <Row label="Naam" value={customerLabel(intervention.customerName)} />
       <Row label="Adres" value={`${intervention.siteAddress}, ${intervention.siteCity}`} />
       <Row label="Contact" value={intervention.contactName} />
       <Row label="Tel & GSM" value={phones} />

@@ -192,7 +192,12 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
     id:             customerId,
     number:         customerId ? optionalString(c, 'number') : requiredString(c, 'number', 'customer.number'),
     invoiceNumber:  optionalString(c, 'invoice_number'),
-    name:           customerId ? optionalString(c, 'name') : requiredString(c, 'name', 'customer.name'),
+    // Niet verplicht, ook niet voor een nieuwe klant: op een papieren bon
+    // blijft het naamvak soms gewoon leeg, en dat is geen leesfout — er
+    // staat niets. Adres en gemeente blijven wél verplicht: zonder die twee
+    // kan niemand ergens naartoe rijden. Zie `customerLabel` voor hoe een
+    // klant zonder naam op het scherm verschijnt.
+    name:           optionalString(c, 'name'),
     address:        customerId ? optionalString(c, 'address') : requiredString(c, 'address', 'customer.address'),
     postalCode:     optionalString(c, 'postal_code'),
     city:           customerId ? optionalString(c, 'city') : requiredString(c, 'city', 'customer.city'),
@@ -335,13 +340,13 @@ async function findOrCreateCustomer(tx: Tx, input: CreateWorkOrderCustomer): Pro
   // Creating rather than referencing: the descriptive fields are mandatory here.
   // The parser enforces this for a body with no id; the guard makes it explicit
   // to the type checker and gives a clear error if a caller ever bypasses it.
-  if (!input.name || !input.address || !input.city) {
-    throw new ValidationError('customer.name', 'Naam, adres en gemeente zijn verplicht voor een nieuwe klant')
+  if (!input.address || !input.city) {
+    throw new ValidationError('customer.address', 'Adres en gemeente zijn verplicht voor een nieuwe klant')
   }
 
   // Bound to locals: the guard above narrows these, but that narrowing does not
   // survive into the closure below, because `input` is a mutable binding.
-  const name = input.name
+  const name = input.name ?? ''
   const address = input.address
   const city = cityLine(input.postalCode, input.city)
 

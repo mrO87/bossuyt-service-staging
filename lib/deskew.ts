@@ -213,13 +213,19 @@ function pixelAt(source: RgbaImage, x: number, y: number, channel: number): numb
 }
 
 /**
- * A sensible starting quadrilateral: a rectangle inset from the edges of the
- * photo, in the same clockwise order as everything else here.
+ * Het vierkant waarmee het hoekenscherm begint: standaard de hele foto.
  *
- * People frame a document roughly centred with a bit of desk around it, so this
- * lands close enough that most uploads need a nudge rather than four drags.
+ * Hier stond eerst een rand van 8% naar binnen, met het idee dat mensen een bon
+ * ergens midden op een bureau fotograferen. Maar de camera van een telefoon
+ * doet dat werk zelf al: wie de foto daar rechtzet en bijsnijdt, levert een
+ * beeld aan waarvan de bon de héle foto is. Een standaardrand sneed daar dan
+ * juist de randen af, en je moest vier hoeken terugslepen naar waar ze al
+ * hoorden te staan.
+ *
+ * `inset` blijft bestaan voor wie hem wil meegeven; alleen de standaard is nu
+ * nul. De volgorde blijft met de klok mee, zoals overal in dit bestand.
  */
-export function defaultCorners(width: number, height: number, inset = 0.08): Point[] {
+export function defaultCorners(width: number, height: number, inset = 0): Point[] {
   const dx = width * inset
   const dy = height * inset
 

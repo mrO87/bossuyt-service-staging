@@ -119,15 +119,21 @@ export default function CornerPicker({ file, onDone, onCancel }: Props) {
     try {
       const bitmap = await createImageBitmap(file)
 
+      // De maten eerst vastleggen. `bitmap.close()` geeft het geheugen vrij en
+      // zet width en height op nul — daarna uitlezen gaf letterlijk "The source
+      // width is 0" en elke foto strandde op dat scherm. De tekening op het
+      // canvas blijft na close() gewoon staan; alleen de bitmap zelf is weg.
+      const { width, height } = bitmap
+
       const sourceCanvas = document.createElement('canvas')
-      sourceCanvas.width = bitmap.width
-      sourceCanvas.height = bitmap.height
+      sourceCanvas.width = width
+      sourceCanvas.height = height
       const sourceContext = sourceCanvas.getContext('2d')
       if (!sourceContext) throw new Error('Canvas niet beschikbaar')
       sourceContext.drawImage(bitmap, 0, 0)
       bitmap.close()
 
-      const source = sourceContext.getImageData(0, 0, bitmap.width, bitmap.height)
+      const source = sourceContext.getImageData(0, 0, width, height)
       const warped = warpToA4(source, corners)
 
       const outputCanvas = document.createElement('canvas')

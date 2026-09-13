@@ -18,6 +18,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { POOL_DROPPABLE_ID } from '@/lib/planning/dropIntent'
 import { formatMinutes, typeBorderClass } from '@/components/planning/interventionLabels'
 import type { Intervention } from '@/types'
+import { customerLabel } from '@/lib/customerLabel'
 
 export function PoolBar({
   interventions,
@@ -115,7 +116,7 @@ function PoolCard({
     >
       <span
         {...listeners}
-        aria-label={`${intervention.customerName} verslepen`}
+        aria-label={`${customerLabel(intervention.customerName)} verslepen`}
         className="flex w-3 shrink-0 touch-none cursor-grab items-center justify-center rounded bg-black/25 active:cursor-grabbing"
         style={noSelect}
       >
@@ -129,7 +130,7 @@ function PoolCard({
         style={noSelect}
       >
         <span className="block truncate text-[11px] font-bold leading-tight">
-          {intervention.customerName}
+          {customerLabel(intervention.customerName)}
         </span>
         <span className="block truncate font-mono text-[9.5px] text-white/70">
           {intervention.siteCity}

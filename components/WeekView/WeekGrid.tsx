@@ -14,6 +14,7 @@ import { draggableIdFor, type DayScheduleResult, type ScheduleBlock } from '@/li
 import { scheduleForDate, clockToMinutes } from '@/lib/planning/workSchedule'
 import { formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
 import type { Intervention } from '@/types'
+import { customerLabel } from '@/lib/customerLabel'
 
 export const VIEW_START_MINUTES = 6 * 60 + 30
 export const VIEW_END_MINUTES = 18 * 60
@@ -444,12 +445,12 @@ function Block({
         boxShadow: isDragging || isResizing ? '0 8px 20px -6px rgb(0 0 0 / .5)' : undefined,
         ...noSelect,
       }}
-      title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
+      title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${customerLabel(intervention.customerName)}, ${intervention.siteCity}`}
     >
       {/* Het handvat. Smal, maar over de volle hoogte, zodat een duim het raakt. */}
       <span
         {...listeners}
-        aria-label={`${intervention.customerName} verslepen`}
+        aria-label={`${customerLabel(intervention.customerName)} verslepen`}
         className="flex w-3 shrink-0 touch-none cursor-grab items-center justify-center bg-black/25 active:cursor-grabbing"
         style={noSelect}
       >
@@ -502,7 +503,7 @@ function Block({
         >
           {height >= 26 && (
             <span className="block truncate text-[9.5px] font-semibold leading-tight">
-              {intervention.customerName}
+              {customerLabel(intervention.customerName)}
             </span>
           )}
         </button>

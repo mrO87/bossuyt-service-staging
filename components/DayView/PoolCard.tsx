@@ -12,6 +12,7 @@ import type { ReactNode } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Intervention } from '@/types'
+import { customerLabel } from '@/lib/customerLabel'
 
 export function PoolCard({
   intervention,
@@ -48,7 +49,7 @@ export function PoolCard({
         type="button"
         {...attributes}
         {...listeners}
-        aria-label={`Sleep ${intervention.customerName} naar de planning`}
+        aria-label={`Sleep ${customerLabel(intervention.customerName)} naar de planning`}
         className="w-8 shrink-0 flex items-center justify-center bg-stroke/50 active:bg-stroke cursor-grab touch-none"
       >
         <span className="text-ink-soft text-lg select-none">⋮⋮</span>
@@ -61,7 +62,7 @@ export function PoolCard({
         <div className="mb-1 flex items-start gap-2">
           {alertNote}
           <div className="min-w-0">
-            <p className="font-bold text-sm leading-tight text-ink">{intervention.customerName}</p>
+            <p className="font-bold text-sm leading-tight text-ink">{customerLabel(intervention.customerName)}</p>
             <p className="text-xs text-ink-soft">{intervention.siteCity}</p>
           </div>
         </div>

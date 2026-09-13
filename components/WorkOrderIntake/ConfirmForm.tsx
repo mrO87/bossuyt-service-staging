@@ -113,7 +113,10 @@ export default function ConfirmForm({
     // A brand-new customer has to describe itself; an existing one is an id.
     if (!matched) {
       if (!draft.customerNumber.trim()) out.push('Klant nr')
-      if (!draft.customerName.trim()) out.push('Naam')
+      // De naam staat hier bewust niet bij. Op een papieren bon blijft dat vak
+      // soms leeg; dat is geen leesfout van de app maar een leeg vak op papier.
+      // Het rode merkje "niet gevonden" naast het veld zegt dat al — de bon
+      // tegenhouden om iets wat de admin niet invulde, helpt niemand.
       if (!draft.address.trim()) out.push('Adres')
       if (!draft.city.trim()) out.push('Gemeente')
     }
@@ -271,7 +274,7 @@ export default function ConfirmForm({
                   />
                 </SourceField>
 
-                <SourceField label="Naam" required source={sources.customerName} error={missing('customerName') ?? fieldError('customer.name')}>
+                <SourceField label="Naam" source={sources.customerName} error={fieldError('customer.name')}>
                   <input
                     className={inputClass}
                     value={draft.customerName}
