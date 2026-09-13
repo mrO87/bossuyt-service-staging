@@ -9,6 +9,7 @@ export default function Section({
   id,
   actionLabel,
   onActionClick,
+  headerExtra,
 }: {
   title: string
   children: React.ReactNode
@@ -18,6 +19,14 @@ export default function Section({
   id?: string
   actionLabel?: string
   onActionClick?: () => void
+  /**
+   * Iets rechts in het donkere kopbalkje, naast de titel.
+   *
+   * Voor knopjes die bij de kaart horen maar niet bij de inhoud — zoals de
+   * originele bon openen. Een eigen regel eronder zou een hele balk kosten voor
+   * iets waar je zelden op tikt.
+   */
+  headerExtra?: React.ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
 
@@ -58,9 +67,16 @@ export default function Section({
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-4 py-3 bg-brand-dark">
-          <div className="w-1 h-4 rounded-full bg-brand-orange" />
-          <p className="font-bold text-sm tracking-wide text-white">{title}</p>
+        <div className="flex items-center gap-2 bg-brand-dark py-2 pl-4 pr-2.5">
+          <div className="w-1 h-4 rounded-full bg-brand-orange shrink-0" />
+          {/*
+            De titel kort in, de knopjes niet. "SERVICE BON | BON DE SERVICE" is
+            lang, en op een telefoon van 400 px zou hij de knopjes van het scherm
+            duwen. Drie puntjes op de titel is goedkoper dan een knop die je
+            niet meer kan raken.
+          */}
+          <p className="min-w-0 flex-1 truncate font-bold text-sm tracking-wide text-white">{title}</p>
+          {headerExtra}
         </div>
       )}
 

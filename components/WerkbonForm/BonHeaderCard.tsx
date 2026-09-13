@@ -1,5 +1,6 @@
 import type { Intervention } from '@/types'
 import Section from './Section'
+import { BonFileButton, kindForPath } from './BonFileButton'
 import { customerLabel } from '@/lib/customerLabel'
 
 interface Props {
@@ -33,7 +34,20 @@ export default function BonHeaderCard({ intervention, bonNumberPreview }: Props)
     .join(' · ')
 
   return (
-    <Section title="SERVICE BON | BON DE SERVICE">
+    <Section
+      title="SERVICE BON | BON DE SERVICE"
+      headerExtra={
+        // Geen origineel, geen knopje. Een bon die met de hand is ingetikt heeft
+        // er geen, en een knop die niets opent is erger dan geen knop.
+        intervention.scanPath
+          ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <BonFileButton kind={kindForPath(intervention.scanPath)} href={intervention.scanPath} />
+            </div>
+          )
+          : undefined
+      }
+    >
       <div className="grid grid-cols-2 gap-x-4 mb-3">
         <div>
           <p className="text-[10px] uppercase tracking-wide text-ink-soft">Ticket n°</p>

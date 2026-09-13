@@ -175,18 +175,6 @@ export default function InterventionPage() {
           </a>
         )}
 
-        {intervention.scanPath && (
-          <a
-            href={intervention.scanPath}
-            target="_blank"
-            rel="noreferrer"
-            className="mb-3 flex items-center justify-between rounded-xl border border-stroke bg-white px-3 py-3 text-sm font-semibold text-ink"
-          >
-            <span>Originele bon bekijken</span>
-            <span className="text-xs font-normal text-ink-soft">opent in nieuw venster</span>
-          </a>
-        )}
-
         <PlanningCard intervention={intervention} />
 
         <WerkbonForm
