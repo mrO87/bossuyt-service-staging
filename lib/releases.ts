@@ -34,8 +34,9 @@ export const RELEASES: ReleaseEntry[] = [
         title: 'Naar de vorige of volgende week slepen',
         body:
           'Aan de linker- en rechterkant van het weekrooster verschijnen tijdens het '
-          + 'slepen twee smalle stroken van 20 px — smal genoeg om de uurkolom niet te '
-          + 'verbergen. Laat je een bon op een van de twee los, dan '
+          + 'slepen twee smalle doorschijnende stroken. Je leest de uurkolom er gewoon '
+          + 'doorheen, want je mikt op een uur en niet alleen op een dag; zodra een '
+          + 'strook het doelwit is kleurt hij vol oranje. Laat je een bon erop los, dan '
           + 'springt hij een week terug of vooruit, naar dezelfde weekdag. Buiten het '
           + 'slepen zijn ze onzichtbaar, zodat ze geen plaats innemen op een telefoon.',
       },
@@ -49,8 +50,9 @@ export const RELEASES: ReleaseEntry[] = [
           + 'welke dag zonder hem te slepen, ook buiten de week die je op het rooster ziet. '
           + 'Botst het uur met de rest van die dag, dan lees je daar dezelfde melding als '
           + 'op het rooster: de app rekent de doeldag door met dezelfde motor, zodat de '
-          + 'twee schermen nooit iets anders kunnen beweren. Een gestarte bon is '
-          + 'vergrendeld en blijft staan waar hij staat.',
+          + 'twee schermen nooit iets anders kunnen beweren. Een gestarte of afgewerkte '
+          + 'bon toont dezelfde regel, maar uitgeschakeld, met de reden erbij: dag en '
+          + 'uur liggen dan vast.',
       },
       {
         label: 'Fix',
