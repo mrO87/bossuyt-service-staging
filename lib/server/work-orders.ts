@@ -8,7 +8,7 @@
 import { randomUUID } from 'crypto'
 import { and, eq, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { customers, contacts, devices, sites, workOrderAssignments, workOrders } from '@/lib/db/schema'
+import { customers, contacts, devices, sites, technicians, workOrderAssignments, workOrders } from '@/lib/db/schema'
 import { withAudit, type Tx } from '@/lib/db/with-audit'
 import { geocodeAddress } from '@/lib/routing/NominatimGeocoder'
 import type { InterventionSource, InterventionStatus, InterventionType } from '@/types'
@@ -590,7 +590,28 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
       throw new DuplicateTicketError(input.ticketNumber, raced.id)
     }
 
-    const technicianIds = input.technicianIds ?? []
+    // Wie een bon aanmaakt, draagt hem — tenzij de oproep uitdrukkelijk iemand
+    // anders noemt.
+    //
+    // Zolang er één account is, is dat account de technieker. Een bon zonder
+    // drager staat nergens: hij valt uit de pool zodra hij een dag krijgt en
+    // verschijnt op niemands dag, want er is geen toewijzing. Dat is precies
+    // hoe een werkbon stil verdwijnt.
+    //
+    // Alleen wanneer de maker ook echt een technieker is: `created_by` kan een
+    // id zijn dat niet in die tabel staat, en dan zou de verwijzing de hele
+    // aanmaak terugdraaien — een bon verliezen om een toewijzing is erger dan
+    // een bon zonder toewijzing. Wanneer Keycloak erover komt, kiest de
+    // oproeper zelf wie hem draagt en gaat `technician_ids` weer voor.
+    let technicianIds = input.technicianIds ?? []
+    if (technicianIds.length === 0 && input.createdBy) {
+      const [maker] = await tx
+        .select({ id: technicians.id })
+        .from(technicians)
+        .where(eq(technicians.id, input.createdBy))
+      if (maker) technicianIds = [maker.id]
+    }
+
     if (technicianIds.length > 0) {
       await tx.insert(workOrderAssignments).values(
         technicianIds.map((technicianId, index) => ({
