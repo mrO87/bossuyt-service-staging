@@ -136,6 +136,14 @@ export interface PendingWriteResult {
   failed: number
   notice?: string
   conflict?: boolean
+  /**
+   * De bonnen zoals de server ze na de laatste geslaagde planningsschrijfactie
+   * kent, met hun nieuwe versienummers.
+   *
+   * Voor een scherm dat niet uit IndexedDB leest: zonder dit houdt het de oude
+   * nummers vast en botst de vólgende sleep.
+   */
+  fresh?: Intervention[]
 }
 
 export interface TaskCommand {

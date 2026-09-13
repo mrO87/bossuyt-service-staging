@@ -204,3 +204,57 @@ describe('buildPlanningWrite — de dag zoals de server hem kent', () => {
     expect(payload.planningVersion).toBe(4)
   })
 })
+
+/**
+ * De vertrekkende bon draagt het versienummer van de dag.
+ *
+ * Dit ging twee keer mis, en de tweede keer omdat twee reparaties elkaar
+ * ophieven: `serverDay` zette de vertrekker terug in de lijst waaruit de versie
+ * komt, en `arrivingIds` haalde hem er meteen weer uit. Elke vrijgave stuurde
+ * daardoor versie 1, wat pas opviel toen de dagen zelf boven 1 stonden.
+ */
+describe('buildPlanningWrite — vrijgeven telt de vertrekker mee', () => {
+  it('stuurt de versie van de vertrekker, niet 1', () => {
+    const payload = buildPlanningWrite({
+      day: [],
+      serverDay: [bon('vertrekt', 12)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+      // De aanroeper mag de vertrekker hier niet in zetten; deze test legt vast
+      // wat er gebeurt als hij het tóch doet.
+      arrivingIds: [],
+    })
+
+    expect(payload.planningVersion).toBe(12)
+    expect(payload.orderedWorkOrderIds).toEqual([])
+  })
+
+  it('laat zien waarom een vertrekker nooit in arrivingIds mag', () => {
+    // Precies de combinatie die de bug maakte: hij staat in serverDay én in
+    // arrivingIds, en dan blijft er niets over om de versie uit te halen.
+    const payload = buildPlanningWrite({
+      day: [],
+      serverDay: [bon('vertrekt', 12)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+      arrivingIds: ['vertrekt'],
+    })
+
+    expect(payload.planningVersion).toBe(1)
+  })
+
+  it('sluit een aankomende bon wél uit, ook naast een dag met een hoge versie', () => {
+    const payload = buildPlanningWrite({
+      day: [bon('blijft', 9), bon('komt', 1)],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+      arrivingIds: ['komt'],
+    })
+
+    expect(payload.planningVersion).toBe(9)
+    expect(payload.orderedWorkOrderIds).toEqual(['blijft', 'komt'])
+  })
+})

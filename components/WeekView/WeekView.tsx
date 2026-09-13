@@ -411,10 +411,11 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
         actor: currentUser,
         technicianId: currentUser.id,
         date: new Date(`${dateStr}T12:00:00`),
-        // `moved` only ever arrives from elsewhere (the pool, or the other
-        // day in a move) — its planningVersion describes where it came from,
-        // not this day, and must not raise this day's version.
-        arrivingIds: moved ? [moved.id] : undefined,
+        // Alleen wie áánkomt telt als aankomend — zie de uitleg in
+        // PlanningBoard. Een vertrekkende bon draagt juist het versienummer dat
+        // de server nog van deze dag kent; die buitensluiten maakte van elke
+        // vrijgave een schrijfactie met versie 1.
+        arrivingIds: moved && serverDay ? undefined : (moved ? [moved.id] : undefined),
         serverDay,
       }),
     )

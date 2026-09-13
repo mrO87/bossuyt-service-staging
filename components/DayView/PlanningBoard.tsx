@@ -113,11 +113,19 @@ export function PlanningBoard({
         actor: currentUser,
         technicianId: currentUser.id,
         date: selectedDate,
-        // `moved` is only ever a work order arriving from the pool (schedule)
-        // or leaving to it (unschedule, already absent from nextDay) — never
-        // one already resident that a reorder merely reshuffled. Its version
-        // describes the pool, not this day, so it must not raise the day's.
-        arrivingIds: moved ? [moved.id] : undefined,
+        // Alleen wie áánkomt telt als aankomend.
+        //
+        // `moved` is de bon die verhuist, en dat kan twee kanten op. Komt hij
+        // van de pool, dan beschrijft zijn versienummer de pool en niet deze
+        // dag — dat moet er dus buiten blijven. Maar vertrékt hij, dan is zijn
+        // nummer juist het enige dat de server nog van deze dag kent, en dan
+        // moet het er wél in.
+        //
+        // Hier stond `moved` in beide gevallen, en daarmee hief deze regel de
+        // `serverDay` hieronder precies op: die zette de vertrekker terug in de
+        // lijst, deze haalde hem er weer uit. Gevolg: elke vrijgave stuurde
+        // versie 1. Zolang de dag zelf nog op 1 stond viel dat niet op.
+        arrivingIds: moved && !leaving ? [moved.id] : undefined,
         serverDay: leaving ? [...nextDay, leaving] : undefined,
     })
 
@@ -128,6 +136,29 @@ export function PlanningBoard({
     if (typeof navigator === 'undefined' || navigator.onLine) {
       const result = await syncPendingWrites().catch(() => null)
       if (result?.notice) setRefusal(result.notice)
+
+      // De nieuwe versienummers overnemen, en alleen die.
+      //
+      // Elke geslaagde schrijfactie hoogt het versienummer van de dag op. Nam
+      // het scherm dat niet over, dan stuurde de vólgende sleep het oude nummer
+      // en botste hij — en juist bij het plannen sleep je vaak een paar keer
+      // heen en weer om rijtijden te vergelijken. Dan strandde alles na de
+      // eerste.
+      //
+      // Alleen het nummer, niet de hele bon: wat op het scherm staat is wat je
+      // net gesleept hebt, en dat mag niet terugspringen naar het antwoord van
+      // een oproep die onderweg was.
+      if (result?.fresh?.length) {
+        const versions = new Map(result.fresh.map(i => [i.id, i.planningVersion]))
+        const adopt = (list: Intervention[]) => list.map(intervention => {
+          const version = versions.get(intervention.id)
+          return version === undefined || version === intervention.planningVersion
+            ? intervention
+            : { ...intervention, planningVersion: version }
+        })
+        setDay(adopt)
+        setPool(adopt)
+      }
     }
   }, [currentUser, selectedDate])
 

@@ -182,6 +182,8 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
   let failed = 0
   let notice: string | undefined
   let conflict = false
+  /** De dag zoals de server hem na de laatste geslaagde schrijfactie kent. */
+  let fresh: Intervention[] | undefined
 
   for (const write of pending) {
     try {
@@ -274,6 +276,12 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         }
         if (data.planned && data.open) {
           await cacheInterventions([...data.planned, ...data.open])
+          // Ook teruggeven aan wie ons aanriep. Een scherm dat niet uit
+          // IndexedDB leest — de dagplanning op een andere dag dan vandaag —
+          // houdt anders de oude versienummers vast, en dan botst de vólgende
+          // sleep. Wie snel een paar keer heen en weer sleept om rijtijden te
+          // vergelijken, loopt daar meteen tegenaan.
+          fresh = [...data.planned, ...data.open]
         }
         await removePendingWrite(write.id!)
         synced++
@@ -324,7 +332,7 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
     }
   }
 
-  return { synced, failed, notice, conflict }
+  return { synced, failed, notice, conflict, fresh }
 }
 
 type UploadWorkOrderPhotoPayload = {
