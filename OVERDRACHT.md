@@ -7,6 +7,43 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
+## Bijwerking 13 september — v1.67: geen werkbon meer kwijtraken
+
+Twee regels, één doel. Ze staan samen in `lib/planning/pastDays.ts`, los van de
+database, zodat server en scherm dezelfde grens gebruiken en die grens te
+testen is zonder de klok te verzetten (`tests/past-days.test.ts`).
+
+1. **Een vergeten bon keert terug naar de pool.**
+   `releaseForgottenWorkOrders()` in `lib/server/interventions.ts`, aangeroepen
+   vanuit `app/api/sync/today/route.ts` — dus in het leespad, niet als
+   nachtelijke taak. Bewust: een taak kan stilvallen zonder dat iemand het
+   merkt, en dan is het stil kwijtraken van bonnen precies terug. Dit herstelt
+   zichzelf bij de eerstvolgende blik op de planning. Het versienummer gaat mee
+   omhoog, zodat een telefoon die de oude dag nog vasthoudt botst in plaats van
+   de bon terug te schrijven.
+2. **Niets landt in het verleden.** Vier deuren, alle vier dicht:
+   `resolveWeekDrop` (slepen, weekrand én uur zetten — als één buitenlaag over
+   `decideWeekDrop`, want de grens slaat op vier van de zes uitkomsten
+   tegelijk), `updatePlacement`, `savePlanningSnapshot`, en het datumveld op de
+   werkbon. De route geeft 409 met `WORK_ORDER_PAST`; `lib/sync.ts` gooit zo'n
+   schrijfactie weg met een melding in plaats van eeuwig opnieuw te proberen.
+
+**Vandaag telt niet als verleden.** Een dag die nog bezig is blijft bruikbaar.
+
+**De tijdzone is uitdrukkelijk gezet.** `todayInBelgium()` gebruikt
+`Europe/Brussels` en niet de klok van de container (UTC). Zonder dat zou de
+server tussen middernacht en twee uur nog gisteren zeggen, en dan gold een bon
+van vandaag 's nachts als verleden.
+
+**Let op bij het lezen van oude tests:** `tests/week-drop-intent.test.ts` geeft
+nu een vaste `today` mee. Zonder dat hing de uitkomst af van de dag waarop de
+tests draaien — één test ging meteen rood omdat een week terugschuiven in het
+verleden landde.
+
+**Gevolg voor de staging-data:** de opkuis heeft 13 bonnen uit april en
+september naar de pool gehaald, want die stonden in het verleden zonder werk.
+De pool ging van 1 naar 14. Dat is het bedoelde gedrag, geen ongeluk.
+
 ## Bijwerking 13 september — v1.66: drie deuren naar buiten, en een stille 409
 
 v1.64 zette het venster vast tijdens het slepen. Dat loste het springen op en

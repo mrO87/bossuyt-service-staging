@@ -3,6 +3,7 @@ import type { Intervention, InterventionTechnician, User } from '@/types'
 import { db } from '@/lib/db'
 import { canLeaveTheDay } from '@/lib/planning/dropIntent'
 import { sanitizeStartMinutes } from '@/lib/planning/pinnedHour'
+import { isPastDay, RETURNS_TO_POOL, todayInBelgium } from '@/lib/planning/pastDays'
 import { workOrderIntakes } from '@/lib/db/schema'
 import {
   contacts,
@@ -298,6 +299,67 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
   )
 }
 
+/**
+ * Vergeten werkbonnen terugzetten in de pool.
+ *
+ * Een bon op een dag die voorbij is en waaraan nooit gewerkt is, is niet
+ * gedaan. Bleef hij daar staan, dan zag niemand hem ooit nog: de dagplanning
+ * toont vandaag, de weekplanning toont de week waar je in kijkt, en de pool
+ * toont enkel bonnen zonder dag. Zo raakt werk zoek.
+ *
+ * Dit draait in het leespad — telkens de app een dag ophaalt — en niet als
+ * nachtelijke taak. Dat is met opzet: een taak kan stilvallen zonder dat
+ * iemand het merkt, en dan is het stil kwijtraken van bonnen precies terug.
+ * Deze opkuis herstelt zichzelf bij de eerstvolgende blik op de planning.
+ *
+ * Het versienummer gaat mee omhoog. Een telefoon die de oude dag nog in handen
+ * heeft, schrijft anders de bon gewoon terug op zijn voorbije dag; met een
+ * hoger nummer botst die schrijfactie en wint de opkuis.
+ *
+ * Geeft terug hoeveel bonnen er verhuisd zijn, zodat een oproep die niets doet
+ * ook niets kost om vast te stellen.
+ */
+export async function releaseForgottenWorkOrders(
+  today: string = todayInBelgium(),
+): Promise<number> {
+  const startOfToday = getDayBounds(today).start
+
+  const released = await db
+    .update(workOrders)
+    .set({
+      plannedDate: null,
+      // Het uur hoort bij de dag; gaat de dag weg, dan gaat het uur mee.
+      plannedStartMinutes: null,
+      startIsAppointment: false,
+      status: 'aangemaakt',
+      planningVersion: sql`${workOrders.planningVersion} + 1`,
+    })
+    .where(
+      and(
+        lt(workOrders.plannedDate, startOfToday),
+        inArray(workOrders.status, [...RETURNS_TO_POOL]),
+      ),
+    )
+    .returning({ id: workOrders.id })
+
+  if (released.length > 0) {
+    await db.insert(workOrderEvents).values(
+      released.map(row => ({
+        workOrderId: row.id,
+        actorId: 'system',
+        eventType: 'planning_changed' as const,
+        payload: {
+          to: 'pool',
+          via: 'forgotten',
+          reason: 'de geplande dag was voorbij en er was niet aan gewerkt',
+        },
+      })),
+    )
+  }
+
+  return released.length
+}
+
 export async function getTodayInterventions(
   technicianId: string,
   date: string,
@@ -432,7 +494,7 @@ export type PlanningSnapshotResult =
   | { ok: true;  planningVersion: number; planned: Intervention[]; open: Intervention[] }
   | {
       ok: false
-      reason: 'conflict' | 'locked'
+      reason: 'conflict' | 'locked' | 'past'
       lockedWorkOrderIds?: string[]
       planningVersion: number
       planned: Intervention[]
@@ -476,7 +538,7 @@ export async function savePlanningSnapshot(input: {
   const currentPlanningVersion = await getPlanningVersion(input.technicianId, input.date)
   const latest = await getTodayInterventions(input.technicianId, input.date)
 
-  const refuse = (reason: 'conflict' | 'locked', lockedWorkOrderIds?: string[]) => ({
+  const refuse = (reason: 'conflict' | 'locked' | 'past', lockedWorkOrderIds?: string[]) => ({
     ok: false as const,
     reason,
     lockedWorkOrderIds,
@@ -484,6 +546,13 @@ export async function savePlanningSnapshot(input: {
     planned: latest.planned,
     open: latest.open,
   })
+
+  // Dezelfde grens als bij updatePlacement, want dit is de andere deur naar
+  // dezelfde kolom. Een dag beschrijven die voorbij is heeft geen betekenis
+  // meer: de opkuis zou hem bij de eerstvolgende blik toch leeghalen.
+  if (isPastDay(input.date)) {
+    return refuse('past')
+  }
 
   if (input.planningVersion !== currentPlanningVersion) {
     return refuse('conflict')
@@ -647,7 +716,7 @@ export async function savePlanningSnapshot(input: {
 
 export type PlacementResult =
   | { ok: true; planningVersion: number }
-  | { ok: false; reason: 'locked' | 'not_found' }
+  | { ok: false; reason: 'locked' | 'not_found' | 'past' }
 
 /**
  * Waar één werkbon staat: welke dag, welk uur, en of dat uur afgesproken is.
@@ -690,6 +759,11 @@ export async function updatePlacement(input: {
 
   if (!current) return { ok: false, reason: 'not_found' }
   if (!canLeaveTheDay(current.status)) return { ok: false, reason: 'locked' }
+
+  // Een dag die voorbij is, is geen plan. Hier geweigerd en niet alleen op het
+  // scherm: de wachtrij van een telefoon die gisteren offline stond, komt
+  // vandaag binnen met de datum van toen.
+  if (input.date !== null && isPastDay(input.date)) return { ok: false, reason: 'past' }
 
   // De technieker die deze bon draagt. Uit de toewijzing gehaald en niet van de
   // client aangenomen: wie de bon verzet, hoeft niet te weten van wie hij is.

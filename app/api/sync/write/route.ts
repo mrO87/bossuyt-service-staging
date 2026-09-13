@@ -47,6 +47,26 @@ type PlacementPayload = {
   actorRole?: User['role']
 }
 
+/**
+ * Waarom een verplaatsing geweigerd kan worden, en wat de gebruiker daarover
+ * te horen krijgt. Als tabel en niet als geneste vraagtekens: er staat nu een
+ * derde reden bij, en een vierde hoort er gewoon bij te kunnen.
+ */
+const PLACEMENT_REFUSALS = {
+  locked: {
+    error: 'Werkbon is al gestart en blijft staan waar hij staat',
+    code: 'WORK_ORDER_LOCKED',
+  },
+  not_found: {
+    error: 'Werkbon bestaat niet',
+    code: 'WORK_ORDER_MISSING',
+  },
+  past: {
+    error: 'Die dag is voorbij — een werkbon kan alleen vandaag of later staan',
+    code: 'WORK_ORDER_PAST',
+  },
+} as const
+
 export async function POST(req: NextRequest) {
   const body = await req.json() as {
     type?: string
@@ -73,10 +93,8 @@ export async function POST(req: NextRequest) {
       // een 409 weg in plaats van eeuwig opnieuw te proberen.
       return NextResponse.json(
         {
-          error: result.reason === 'locked'
-            ? 'Werkbon is al gestart en blijft staan waar hij staat'
-            : 'Werkbon bestaat niet',
-          code: result.reason === 'locked' ? 'WORK_ORDER_LOCKED' : 'WORK_ORDER_MISSING',
+          error: PLACEMENT_REFUSALS[result.reason].error,
+          code: PLACEMENT_REFUSALS[result.reason].code,
         },
         { status: 409 },
       )
@@ -123,6 +141,19 @@ export async function POST(req: NextRequest) {
     })
 
     if (!result.ok) {
+      if (result.reason === 'past') {
+        return NextResponse.json(
+          {
+            error: 'Die dag is voorbij — een werkbon kan alleen vandaag of later staan',
+            code: 'WORK_ORDER_PAST',
+            planningVersion: result.planningVersion,
+            planned: result.planned,
+            open: result.open,
+          },
+          { status: 409 },
+        )
+      }
+
       const locked = result.reason === 'locked'
       return NextResponse.json(
         {

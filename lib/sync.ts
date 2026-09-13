@@ -284,7 +284,7 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         // The server holds the truth. Take its version of the day, drop our
         // write — retrying it would only lose again — and say what happened.
         const data = await res.json() as {
-          code?: 'PLANNING_CONFLICT' | 'WORK_ORDER_LOCKED'
+          code?: 'PLANNING_CONFLICT' | 'WORK_ORDER_LOCKED' | 'WORK_ORDER_PAST'
           planned: Intervention[]
           open: Intervention[]
         }
@@ -295,7 +295,11 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         notice =
           data.code === 'WORK_ORDER_LOCKED'
             ? 'Een werkbon was al gestart en blijft op de dag staan'
-            : 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
+            : data.code === 'WORK_ORDER_PAST'
+              // Komt vooral voor bij een telefoon die een nacht offline stond:
+              // de wijziging was van gisteren, de dag is intussen voorbij.
+              ? 'Die dag is intussen voorbij — de werkbon staat weer in de pool'
+              : 'Planning gewijzigd, gelieve je planning opnieuw te ordenen'
       } else if (res.status === 409 && write.type === 'update_placement') {
         // Geweigerd omdat er intussen iets veranderd is, niet omdat er iets mis
         // is met wat we stuurden — opnieuw proberen zou opnieuw verliezen, en
@@ -307,7 +311,9 @@ export async function syncPendingWrites(): Promise<PendingWriteResult> {
         notice =
           data.code === 'WORK_ORDER_LOCKED'
             ? 'Een werkbon was al gestart en blijft staan waar hij staat'
-            : 'Een werkbon kon niet verplaatst worden'
+            : data.code === 'WORK_ORDER_PAST'
+              ? 'Die dag is voorbij — een werkbon kan alleen vandaag of later staan'
+              : 'Een werkbon kon niet verplaatst worden'
       } else {
         failed++
         break  // stop on first failure — maintain order

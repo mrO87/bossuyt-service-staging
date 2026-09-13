@@ -21,7 +21,7 @@ import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedul
 import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@/lib/planning/daySchedule'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
-import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
+import { dayDroppableId, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
 import { conflictMessage, orderByHour, snapDuration, snapToStep } from '@/lib/planning/pinnedHour'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import {
@@ -726,6 +726,12 @@ export default function WeekView() {
     if (intent.kind === 'none') {
       if (intent.reason === 'het werk is al begonnen') {
         setRefusal('Deze werkbon is al gestart — zijn uur ligt vast en hij blijft op de dag staan.')
+      }
+      if (intent.reason === PAST_DAY_REASON) {
+        setRefusal(
+          'Die dag is voorbij. Een werkbon kan alleen op vandaag of later staan — '
+          + 'sleep hem naar de pool als hij nog gepland moet worden.',
+        )
       }
       return
     }

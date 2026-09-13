@@ -10,6 +10,7 @@
 import { canLeaveTheDay, POOL_DROPPABLE_ID } from './dropIntent'
 import { snapToStep } from './pinnedHour'
 import { shiftDateStr } from './weekDays'
+import { isPastDay, todayInBelgium } from './pastDays'
 import type { InterventionStatus } from '@/types'
 
 const DAY_PREFIX = 'weekday:'
@@ -65,6 +66,12 @@ export type WeekDropIntent =
 const MIN_DRAG_MINUTES = 5
 
 export interface WeekDropContext {
+  /**
+   * Vandaag, als `YYYY-MM-DD`. Meegegeven en niet zelf opgezocht, zodat een
+   * test een dag kan kiezen zonder de klok te verzetten. Blijft hij weg, dan
+   * is het gewoon vandaag in België.
+   */
+  today?: string
   activeId: string
   overId: string | null
   /** De dag waarop elke werkbon nu staat; ontbreekt hij, dan zit hij in de pool. */
@@ -92,7 +99,48 @@ export interface WeekDropContext {
   deltaMinutes?: number
 }
 
+/** Wat er in de uitkomst staat als je op een dag mikt die voorbij is. */
+export const PAST_DAY_REASON = 'die dag is voorbij'
+
+/**
+ * De dag waarop deze uitkomst een bon zou neerzetten, of `null` wanneer ze dat
+ * niet doet. Terug naar de pool heeft geen dag, en dat is precies de uitweg die
+ * wél moet blijven werken.
+ */
+function landingDay(intent: WeekDropIntent): string | null {
+  switch (intent.kind) {
+    case 'schedule':
+    case 'move':
+    case 'shift_week':
+      return intent.toDate
+    case 'set_hour':
+      return intent.date
+    default:
+      return null
+  }
+}
+
+/**
+ * Waar je een bon loslaat, en wat dat betekent.
+ *
+ * Twee lagen: `decideWeekDrop` beslist wat de sleep betekent, en deze laag
+ * weigert het wanneer het op een voorbije dag zou landen. Gescheiden omdat de
+ * eerste laag al zes uitkomsten heeft en de grens van "voorbij" op vier ervan
+ * tegelijk slaat — die vier keer los afvangen is vier kansen om er één te
+ * vergeten. Naar de pool slepen blijft altijd toegestaan: dat is de uitweg.
+ */
 export function resolveWeekDrop(context: WeekDropContext): WeekDropIntent {
+  const intent = decideWeekDrop(context)
+  const day = landingDay(intent)
+
+  if (day !== null && isPastDay(day, context.today ?? todayInBelgium())) {
+    return { kind: 'none', reason: PAST_DAY_REASON }
+  }
+
+  return intent
+}
+
+function decideWeekDrop(context: WeekDropContext): WeekDropIntent {
   const { activeId, overId, dayOf, poolIds, statusById, startMinutesOf, deltaMinutes } = context
 
   if (!overId) return { kind: 'none', reason: 'losgelaten naast de lijst' }

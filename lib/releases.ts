@@ -15,6 +15,36 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.67',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Een vergeten werkbon keert vanzelf terug naar de pool',
+        body:
+          'Stond een bon op een dag die voorbij is en is er nooit aan gewerkt, dan was '
+          + 'hij onvindbaar: de dagplanning toont vandaag, de weekplanning toont de week '
+          + 'waar je in kijkt, en de pool toont alleen bonnen zonder dag. Zo raakte werk '
+          + 'stil zoek. Nu zet de app zulke bonnen terug in de pool, telkens iemand de '
+          + 'planning opent. Onderweg telt daarbij als niet-gedaan — wie gisteren vertrok '
+          + 'maar geen afgewerkte bon heeft, heeft hem niet gedaan. Een afgewerkte, '
+          + 'geannuleerde of op onderdelen wachtende bon blijft staan waar hij staat.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Een werkbon kan niet meer in het verleden gezet worden',
+        body:
+          'Een datum van gisteren is nooit een plan — het is een tikfout of een verkeerd '
+          + 'gemikte sleep. Slepen naar een voorbije dag, een week terugschuiven naar een '
+          + 'week die al om is, en het datumveld op de werkbon weigeren dat nu alle drie, '
+          + 'met uitleg erbij. Ook de server weigert het, want de wachtrij van een '
+          + 'telefoon die een nacht offline stond komt binnen met de datum van toen. '
+          + 'Vandaag blijft wél toegestaan, ook als het al namiddag is. En naar de pool '
+          + 'slepen kan altijd: dat is juist de uitweg.',
+      },
+    ],
+  },
+  {
     version: 'v1.66',
     date: '13 september 2026',
     changes: [
@@ -1702,7 +1732,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.66'
+const CURRENT_RELEASE_VERSION = 'v1.67'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

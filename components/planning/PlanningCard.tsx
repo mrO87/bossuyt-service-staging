@@ -24,6 +24,7 @@ import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
 import { canLeaveTheDay } from '@/lib/planning/dropIntent'
+import { isPastDay, pastDayMessage, todayInBelgium } from '@/lib/planning/pastDays'
 import { enqueuePendingWrite, upsertIntervention } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
 import type { Intervention } from '@/types'
@@ -63,6 +64,7 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const today = todayInBelgium()
   const locked = !canLeaveTheDay(intervention.status)
 
   // "Er wordt aan gewerkt" klopt niet voor een bon van vorig jaar. Het slot is
@@ -164,6 +166,13 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
   }
 
   function changeDate(value: string) {
+    if (value && isPastDay(value, today)) {
+      // Niet stil negeren: het veld zou dan terugspringen zonder uitleg.
+      setError(pastDayMessage(value))
+      return
+    }
+    setError(null)
+
     // Een uur hoort bij een dag: negen uur op dinsdag is niet negen uur op
     // woensdag, want de rit ernaartoe vertrekt van een andere plaats. Dezelfde
     // regel als bij het slepen.
@@ -207,6 +216,10 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
           id={`planning-date-${intervention.id}`}
           type="date"
           aria-label="Geplande dag"
+          // De datumkiezer van de telefoon grijst voorbije dagen uit. Comfort,
+          // geen regel: wie de datum intikt komt er nog langs, en daarom staat
+          // dezelfde grens ook in changeDate en nog eens op de server.
+          min={today}
           disabled={locked}
           value={date}
           onChange={event => changeDate(event.target.value)}

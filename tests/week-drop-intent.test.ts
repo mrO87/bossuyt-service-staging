@@ -8,7 +8,7 @@
  * mislukt.
  */
 import { describe, expect, it } from 'vitest'
-import { dayDroppableId, resolveWeekDrop, weekEdgeDroppableId } from '@/lib/planning/weekDropIntent'
+import { dayDroppableId, PAST_DAY_REASON, resolveWeekDrop, weekEdgeDroppableId } from '@/lib/planning/weekDropIntent'
 import { POOL_DROPPABLE_ID } from '@/lib/planning/dropIntent'
 
 const MON = '2026-09-14'
@@ -20,6 +20,11 @@ const context = {
   dayOf: { 'wo-1': MON } as Record<string, string | undefined>,
   poolIds: [] as string[],
   statusById: { 'wo-1': 'gepland' as const },
+  // Vandaag staat hier vast, ver genoeg vóór MON dat ook een week terugschuiven
+  // nog in de toekomst valt. Zonder dit hing de uitkomst van deze tests af van
+  // de dag waarop ze draaien: de regel die voorbije dagen weigert kijkt naar de
+  // echte klok, en dan gaat dit bestand vanzelf rood op een willekeurige datum.
+  today: '2026-09-01',
 }
 
 describe('dayDroppableId', () => {
@@ -247,5 +252,83 @@ describe('resolveWeekDrop — de weekranden', () => {
     // Een bon zonder dag heeft geen week om van weg te schuiven. Hem stilletjes
     // op vandaag plus zeven zetten zou een datum verzinnen die niemand koos.
     expect(onEdge('next', { dayOf: { 'wo-1': undefined } }).kind).toBe('none')
+  })
+})
+
+/**
+ * Geen enkele sleep mag in het verleden landen.
+ *
+ * De vier uitkomsten die een bon op een dag zetten worden alle vier geweigerd;
+ * de uitweg naar de pool blijft open, want dat is juist waar een vergeten bon
+ * heen moet.
+ */
+describe('resolveWeekDrop — geen enkele dag in het verleden', () => {
+  const VANDAAG = '2026-09-14'
+
+  it('weigert een verplaatsing naar een dag die voorbij is', () => {
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: { 'wo-1': '2026-09-16' },
+      overId: dayDroppableId('2026-09-13'),
+    })
+    expect(intent).toEqual({ kind: 'none', reason: PAST_DAY_REASON })
+  })
+
+  it('weigert een bon uit de pool op een dag die voorbij is', () => {
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: {},
+      overId: dayDroppableId('2026-09-13'),
+    })
+    expect(intent).toEqual({ kind: 'none', reason: PAST_DAY_REASON })
+  })
+
+  it('weigert een week terugschuiven wanneer die week voorbij is', () => {
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: { 'wo-1': '2026-09-16' },
+      overId: weekEdgeDroppableId('prev'),
+    })
+    expect(intent).toEqual({ kind: 'none', reason: PAST_DAY_REASON })
+  })
+
+  it('weigert ook een uur zetten op een dag die voorbij is', () => {
+    // Je kan naar vorige week bladeren en daar een blok verslepen. Dat is
+    // dezelfde fout, alleen binnen één kolom.
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: { 'wo-1': '2026-09-10' },
+      overId: dayDroppableId('2026-09-10'),
+      startMinutesOf: { 'wo-1': 8 * 60 },
+      deltaMinutes: 60,
+    })
+    expect(intent).toEqual({ kind: 'none', reason: PAST_DAY_REASON })
+  })
+
+  it('laat vandaag wél toe', () => {
+    // De grens ligt bij gisteren. Een dag die nog bezig is blijft bruikbaar.
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: { 'wo-1': '2026-09-16' },
+      overId: dayDroppableId(VANDAAG),
+    })
+    expect(intent).toMatchObject({ kind: 'move', toDate: VANDAAG })
+  })
+
+  it('laat een bon van een voorbije dag wél naar de pool', () => {
+    // De uitweg moet openblijven: dat is precies waar een vergeten bon heen
+    // moet, en de opkuis doet hetzelfde vanzelf.
+    const intent = resolveWeekDrop({
+      ...context,
+      today: VANDAAG,
+      dayOf: { 'wo-1': '2026-09-10' },
+      overId: POOL_DROPPABLE_ID,
+    })
+    expect(intent).toMatchObject({ kind: 'unschedule', fromDate: '2026-09-10' })
   })
 })

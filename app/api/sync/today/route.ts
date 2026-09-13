@@ -11,7 +11,7 @@
  * Een lege dag is nu leeg. Dat is minder gezellig en het is waar.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { getTodayInterventions } from '@/lib/server/interventions'
+import { getTodayInterventions, releaseForgottenWorkOrders } from '@/lib/server/interventions'
 
 export async function GET(req: NextRequest) {
   const technicianId = req.nextUrl.searchParams.get('technicianId')
@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Eerst de vergeten bonnen terugzetten, dan pas lezen — anders toont deze
+    // oproep nog de oude toestand en ziet de gebruiker de opkuis pas de
+    // volgende keer. Doet niets wanneer er niets te doen valt.
+    await releaseForgottenWorkOrders()
+
     const data = await getTodayInterventions(technicianId, date)
     return NextResponse.json(data)
   } catch (error) {
