@@ -105,7 +105,19 @@ type DragPreview =
       minutes: number
     }
 
-export default function WeekView() {
+/**
+ * Een `?date=`-waarde naar een datum, of `null` als er niets bruikbaars staat.
+ *
+ * Middag en niet middernacht: op middernacht kan een uurverschil of een
+ * zomertijdsprong de datum in de vorige dag laten vallen.
+ */
+function parseDateParam(value: string | null): Date | null {
+  if (!value) return null
+  const parsed = new Date(`${value}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export default function WeekView({ initialDate = null }: { initialDate?: string | null }) {
   const router = useRouter()
   const { settings } = useSettings()
   const { currentUser } = useTasks()
@@ -113,7 +125,12 @@ export default function WeekView() {
   // De dag die de dagweergave meegaf, als die er is — zie ViewSwitcher. Zonder
   // dit begon de week altijd bij vandaag, welke dag je in de dagplanning ook
   // open had staan.
-  const [anchor, setAnchor] = useState(() => dateFromSearch() ?? new Date())
+  // Van de server meegegeven, niet uit de adresbalk gelezen: dan tekenen
+  // server en browser dezelfde week. `dateFromSearch` blijft de terugval voor
+  // wie hier landt zonder dat de pagina die datum kon doorgeven.
+  const [anchor, setAnchor] = useState(
+    () => parseDateParam(initialDate) ?? dateFromSearch() ?? new Date(),
+  )
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})
   const [pool, setPool] = useState<Intervention[]>([])
