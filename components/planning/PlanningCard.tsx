@@ -65,10 +65,18 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
 
   const locked = !canLeaveTheDay(intervention.status)
 
+  // "Er wordt aan gewerkt" klopt niet voor een bon van vorig jaar. Het slot is
+  // hetzelfde, de reden niet.
+  const lockReason =
+    intervention.status === 'afgewerkt' ? 'Afgewerkt'
+      : intervention.status === 'geannuleerd' ? 'Geannuleerd'
+        : intervention.status === 'wacht_onderdelen' ? 'Wacht op onderdelen'
+          : 'Bezig'
+
   // De dag ophalen om de botsing te kunnen tonen. Alleen lezen; wat hier
   // geschreven wordt, gaat door de wachtrij.
   useEffect(() => {
-    if (!date) { setDay([]); return }
+    if (!date || locked) { setDay([]); return }
     let cancelled = false
 
     async function load() {
@@ -85,7 +93,7 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
 
     void load()
     return () => { cancelled = true }
-  }, [date, intervention.technicians, currentUser.id])
+  }, [date, locked, intervention.technicians, currentUser.id])
 
   /**
    * Wat deze bon zou doen op die dag, met dit uur.
@@ -179,97 +187,100 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
 
   return (
     <section className="mb-3 rounded-xl border border-stroke bg-white px-3 py-2">
+      {/*
+        Eén rij: dag, uur, vinkje — meer staat er niet, en er staat ook geen
+        opschrift boven. De regel eronder noemt de dag al, dus het opschrift
+        kostte alleen breedte. Die breedte is krap: een telefoon die in
+        12-uursnotatie staat maakt het uurveld een stuk breder, en dan moet de
+        rij nog altijd passen.
+
+        Ook een vergrendelde bon krijgt deze rij, alleen uitgeschakeld. Ze
+        helemaal weglaten gaf elke afgewerkte bon een ander vak dan de rest,
+        en dan moet je twee keer leren waar de dag staat.
+
+        Het vinkje staat er altijd, ook zonder uur — dan uitgeschakeld.
+        Verschijnen en verdwijnen zou de rij van breedte doen wisselen terwijl
+        je hem invult.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id={`planning-date-${intervention.id}`}
+          type="date"
+          aria-label="Geplande dag"
+          disabled={locked}
+          value={date}
+          onChange={event => changeDate(event.target.value)}
+          className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink disabled:opacity-50"
+        />
+
+        {/* Geen vaste breedte: hoe breed een uurveld moet zijn hangt af van de
+            taalinstelling van de telefoon — 24 uur is smaller dan 12 uur met
+            AM/PM. Een maat die hier past, knipt daar het uur af. */}
+        <input
+          id={`planning-hour-${intervention.id}`}
+          type="time"
+          step={900}
+          aria-label="Geplande uur"
+          disabled={locked || !date}
+          value={minutes === null ? '' : hhmm(minutes)}
+          onChange={event => changeHour(event.target.value)}
+          className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink disabled:opacity-50"
+        />
+
+        <label
+          className={[
+            'flex h-9 items-center gap-1.5 pr-1 text-xs',
+            locked || minutes === null ? 'text-ink-faint' : 'text-ink-soft',
+          ].join(' ')}
+        >
+          <input
+            type="checkbox"
+            checked={appointment}
+            disabled={locked || minutes === null}
+            onChange={toggleAppointment}
+            aria-label="Vast uur afgesproken met de klant"
+            className="h-5 w-5 accent-brand-red disabled:opacity-50"
+          />
+          vast
+        </label>
+
+        {saving && <span className="text-[10px] text-ink-faint">bewaren…</span>}
+      </div>
+
       {locked ? (
-        <p className="text-xs text-ink-soft">
-          <span className="font-semibold text-ink">Vergrendeld</span>
-          {' '}— er wordt al aan deze bon gewerkt.
+        <p className="mt-1.5 text-[11px] text-ink-soft">
+          <span className="font-semibold text-ink">{lockReason}</span>
+          {' '}— dag en uur liggen vast.
+        </p>
+      ) : date && clash ? (
+        // De enige plek waar de kaart groeit. Een botsing is het moment waarop
+        // de woorden hun ruimte verdienen: zonder de drie uitwegen weet je wel
+        // dát het niet kan, maar niet wat je eraan doet.
+        <p className="mt-1.5 rounded-md border-l-4 border-brand-red bg-brand-red/10 px-2 py-1.5 text-[11px] text-ink">
+          {conflictMessage(intervention.customerName)}
+          <span className="mt-0.5 block tabular-nums text-ink-soft">
+            Ten vroegste {hhmm(clash.earliestMinutes)}
+          </span>
         </p>
       ) : (
-        <>
-          {/*
-            Eén rij: dag, uur, vinkje — meer staat er niet, en er staat ook geen
-            opschrift boven. De regel eronder noemt de dag al, dus het opschrift
-            kostte alleen breedte. Die breedte is krap: een telefoon die in
-            12-uursnotatie staat maakt het uurveld een stuk breder, en dan moet
-            de rij nog altijd passen. Het vinkje staat er altijd, ook zonder
-            uur — dan uitgeschakeld. Verschijnen en verdwijnen zou de rij van
-            breedte doen wisselen terwijl je hem invult.
-          */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              id={`planning-date-${intervention.id}`}
-              type="date"
-              aria-label="Geplande dag"
-              value={date}
-              onChange={event => changeDate(event.target.value)}
-              className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink"
-            />
-
-            {/* Geen vaste breedte: hoe breed een uurveld moet zijn hangt af van de
-                taalinstelling van de telefoon — 24 uur is smaller dan 12 uur met
-                AM/PM. Een maat die hier past, knipt daar het uur af. */}
-            <input
-              id={`planning-hour-${intervention.id}`}
-              type="time"
-              step={900}
-              aria-label="Geplande uur"
-              disabled={!date}
-              value={minutes === null ? '' : hhmm(minutes)}
-              onChange={event => changeHour(event.target.value)}
-              className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink disabled:opacity-40"
-            />
-
-            <label
-              className={[
-                'flex h-9 items-center gap-1.5 pr-1 text-xs',
-                minutes === null ? 'text-ink-faint' : 'text-ink-soft',
-              ].join(' ')}
-            >
-              <input
-                type="checkbox"
-                checked={appointment}
-                disabled={minutes === null}
-                onChange={toggleAppointment}
-                aria-label="Vast uur afgesproken met de klant"
-                className="h-5 w-5 accent-brand-red disabled:opacity-40"
-              />
-              vast
-            </label>
-
-            {saving && <span className="text-[10px] text-ink-faint">bewaren…</span>}
-          </div>
-
-          {date && clash ? (
-            // De enige plek waar de kaart groeit. Een botsing is het moment
-            // waarop de woorden hun ruimte verdienen: zonder de drie uitwegen
-            // weet je wel dát het niet kan, maar niet wat je eraan doet.
-            <p className="mt-1.5 rounded-md border-l-4 border-brand-red bg-brand-red/10 px-2 py-1.5 text-[11px] text-ink">
-              {conflictMessage(intervention.customerName)}
-              <span className="mt-0.5 block tabular-nums text-ink-soft">
-                Ten vroegste {hhmm(clash.earliestMinutes)}
-              </span>
-            </p>
-          ) : (
-            <p className="mt-1.5 text-[11px] text-ink-soft">
-              {!date
-                ? 'Nog geen dag — staat in de open pool.'
-                : mine
-                  ? (
-                    <>
-                      {dayLabel(date)}{' '}
-                      <span className="font-semibold tabular-nums text-ink">
-                        {hhmm(mine.startMinutes)}–{hhmm(mine.endMinutes)}
-                      </span>
-                      {' '}{minutes === null ? 'berekend' : appointment ? 'afgesproken' : 'gekozen'}
-                    </>
-                  )
-                  : dayLabel(date)}
-            </p>
-          )}
-
-          {error && <p className="mt-1 text-[11px] text-brand-red">{error}</p>}
-        </>
+        <p className="mt-1.5 text-[11px] text-ink-soft">
+          {!date
+            ? 'Nog geen dag — staat in de open pool.'
+            : mine
+              ? (
+                <>
+                  {dayLabel(date)}{' '}
+                  <span className="font-semibold tabular-nums text-ink">
+                    {hhmm(mine.startMinutes)}–{hhmm(mine.endMinutes)}
+                  </span>
+                  {' '}{minutes === null ? 'berekend' : appointment ? 'afgesproken' : 'gekozen'}
+                </>
+              )
+              : dayLabel(date)}
+        </p>
       )}
+
+      {error && <p className="mt-1 text-[11px] text-brand-red">{error}</p>}
     </section>
   )
 }

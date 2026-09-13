@@ -45,11 +45,18 @@ function Edge({
         'pointer-events-none absolute inset-y-0 z-30 flex w-5 items-center justify-center transition-opacity',
         edge === 'prev' ? 'left-0' : 'right-0',
         visible ? 'opacity-100' : 'opacity-0',
-        isOver ? 'bg-brand-orange' : 'bg-brand-dark/90',
+        // Doorschijnend zolang je er niet boven zit, zodat de uurkolom eronder
+        // leesbaar blijft — je mikt op een uur, niet alleen op een dag. Zodra de
+        // strook het doelwit is, wordt hij wel vol: dan moet er geen twijfel zijn.
+        isOver ? 'bg-brand-orange' : 'bg-brand-orange/20',
       ].join(' ')}
     >
       <span
-        className="whitespace-nowrap font-mono text-[9px] uppercase tracking-widest text-white"
+        className={[
+          'whitespace-nowrap font-mono text-[9px] uppercase tracking-widest',
+          // Wit op een lichte tint is onleesbaar; het opschrift kleurt mee.
+          isOver ? 'text-white' : 'text-brand-orange',
+        ].join(' ')}
         style={{ writingMode: 'vertical-rl', transform: edge === 'prev' ? 'rotate(180deg)' : undefined }}
       >
         {label}
