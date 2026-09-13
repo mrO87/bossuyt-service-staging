@@ -68,6 +68,25 @@ export interface DayScheduleResult {
   conflicts: ScheduleConflict[]
 }
 
+/**
+ * Het id waaronder een blok bij de sleepmotor bekend staat.
+ *
+ * Alleen een jobblok mag de werkbon-id dragen. Dat klinkt vanzelfsprekend, maar
+ * het arceringsblok draagt diezelfde `interventionId` — het ligt immers over die
+ * bon heen — en claimde daarmee hetzelfde id. Bij dnd-kit wint de laatste
+ * registratie, en dat was de arcering: een blok dat geen sleepelement heeft.
+ * Gevolg: een bon met een botsing liet zich helemaal niet meer verslepen,
+ * precies de bon die de melding je vraagt te verzetten.
+ *
+ * Twee dingen met één naam is het soort fout dat geen enkele test ziet zolang
+ * beide kanten op zich kloppen — zoals de splitsing op `source` versus
+ * `plannedDate` in v1.59. Daarom staat de regel hier, als functie, en niet als
+ * uitdrukking ergens in een component.
+ */
+export function draggableIdFor(block: ScheduleBlock): string {
+  return block.kind === 'job' && block.interventionId ? block.interventionId : block.id
+}
+
 /** Minuten tussen twee punten, of null wanneer dat niet te bepalen is. */
 export type TravelLookup = (
   from: Coordinates | undefined,

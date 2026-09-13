@@ -7,7 +7,12 @@
  * en de enige plek waar een fout van een minuut te zien is.
  */
 import { describe, expect, it } from 'vitest'
-import { computeDaySchedule, type ScheduleJob, type TravelLookup } from '@/lib/planning/daySchedule'
+import {
+  computeDaySchedule,
+  draggableIdFor,
+  type ScheduleJob,
+  type TravelLookup,
+} from '@/lib/planning/daySchedule'
 
 const HOME = { lat: 50.8582720, lon: 3.2584752 }
 const FAR = { lat: 51.1307205, lon: 4.4779880 }
@@ -295,5 +300,39 @@ describe('computeDaySchedule met een vastgezet uur', () => {
     ])
     expect(result.conflicts).toEqual([])
     expect(result.blocks.some(b => b.kind === 'clash')).toBe(false)
+  })
+})
+
+/**
+ * Elk blok een eigen naam bij de sleepmotor.
+ *
+ * Dit pint een fout vast die op de draaiende site zat en die geen enkele
+ * bestaande test kon zien: de arcering claimde het id van de bon waar ze
+ * overheen ligt, en daardoor was een bon mét botsing niet meer te verslepen.
+ */
+describe('draggableIdFor', () => {
+  const conflicting = () =>
+    day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 },
+    ])
+
+  it('gives a job block the work order id, so a drop knows what it moved', () => {
+    const job = conflicting().blocks.find(b => b.kind === 'job' && b.interventionId === 'b')!
+    expect(draggableIdFor(job)).toBe('b')
+  })
+
+  it('never lets the hatching claim the id of the job it covers', () => {
+    const result = conflicting()
+    const clash = result.blocks.find(b => b.kind === 'clash')!
+    const job = result.blocks.find(b => b.kind === 'job' && b.interventionId === 'b')!
+
+    expect(clash.interventionId).toBe('b')          // het hóórt bij die bon
+    expect(draggableIdFor(clash)).not.toBe(draggableIdFor(job))
+  })
+
+  it('gives every block on a day a name of its own', () => {
+    const ids = conflicting().blocks.map(draggableIdFor)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })

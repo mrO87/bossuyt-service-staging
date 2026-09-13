@@ -11,8 +11,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  DndContext, PointerSensor, TouchSensor, closestCenter, useDroppable, useSensor, useSensors,
-  type DragEndEvent,
+  DndContext, MeasuringStrategy, PointerSensor, TouchSensor, closestCenter, useDroppable,
+  useSensor, useSensors,
+  type DragEndEvent, type DragMoveEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
@@ -21,7 +22,7 @@ import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
-import { conflictMessage, orderByHour, snapDuration } from '@/lib/planning/pinnedHour'
+import { conflictMessage, orderByHour, snapDuration, snapToStep } from '@/lib/planning/pinnedHour'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import {
   enqueuePendingWrite,
@@ -50,6 +51,43 @@ const lookupTravel: TravelLookup = (from, to) => {
   return leg.provider === 'unknown' ? null : leg.minutes
 }
 
+/** Waar elk blok stond toen de vinger neerkwam. */
+type SpanMap = Record<string, { startMinutes: number; endMinutes: number } | undefined>
+
+/**
+ * Wat er onder de vinger gebeurt, terwijl hij nog niet losgelaten is.
+ *
+ * Dit is de enige toestand in dit scherm die niets met de database te maken
+ * heeft: ze bestaat tussen aanraken en loslaten, en verdwijnt daarna. De
+ * berekende dag leest ze mee, zodat het rooster meebeweegt in plaats van te
+ * wachten tot er iets bewaard is.
+ *
+ * `baseline` is de momentopname van bij het begin. Elke verschuiving wordt
+ * daartegen afgemeten en nooit tegen wat er nú staat — dat laatste beweegt
+ * immers mee, en dan zou het blok onder je vinger wegrennen omdat het zijn
+ * eigen verplaatsing er telkens opnieuw bij optelt.
+ */
+type DragPreview =
+  | {
+      kind: 'move'
+      id: string
+      date: string
+      /** Het uur waar het blok stond toen de sleep begon. */
+      fromMinutes: number
+      /** Het uur waar het nu staat, ingeklikt op het kwartier. */
+      startMinutes: number
+      baseline: SpanMap
+    }
+  | {
+      kind: 'resize'
+      id: string
+      date: string
+      /** De duur waarmee de sleep begon. */
+      fromMinutes: number
+      /** De duur die de vinger nu aangeeft, ingeklikt op het kwartier. */
+      minutes: number
+    }
+
 export default function WeekView() {
   const router = useRouter()
   const { settings } = useSettings()
@@ -61,6 +99,7 @@ export default function WeekView() {
   const [pool, setPool] = useState<Intervention[]>([])
   const [poolVisible, setPoolVisible] = useState(true)
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [drag, setDrag] = useState<DragPreview | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -102,25 +141,58 @@ export default function WeekView() {
   const departureMinutes = useMemo(() => clockToMinutes(settings.startTime), [settings.startTime])
 
   const schedules: DayScheduleResult[] = useMemo(
-    () => days.map(day =>
-      computeDaySchedule({
+    () => days.map(day => {
+      const dateStr = toLocalDateStr(day)
+      let list = byDate[dateStr] ?? []
+
+      // Tijdens het slepen rekent de dag mee onder de vinger: de rijtijden
+      // verspringen, de vertrektijd schuift op, de arcering verschijnt. Zonder
+      // dit sleep je blind en zie je pas na het loslaten wat je gedaan hebt.
+      //
+      // De volgorde volgt mee, want de rekenkern loopt de dag af in
+      // lijstvolgorde. Ze wordt bepaald tegen de momentopname van bij het
+      // begin van de sleep en niet tegen wat er nú getekend staat — anders
+      // vergelijkt het blok zich met een positie die door hemzelf verschoven
+      // is, en dan wisselen twee bonnen van plaats en weer terug bij elke
+      // vingerbeweging.
+      if (drag?.kind === 'move' && drag.date === dateStr && list.some(i => i.id === drag.id)) {
+        const ordered = orderByHour(
+          list.map(i => {
+            const start = i.id === drag.id
+              ? drag.startMinutes
+              : drag.baseline[i.id]?.startMinutes ?? 0
+            return { id: i.id, startMinutes: start, endMinutes: start + (i.estimatedMinutes ?? 0) }
+          }),
+        )
+        const byId = new Map(list.map(i => [i.id, i]))
+        list = ordered
+          .map(id => byId.get(id))
+          .filter((i): i is Intervention => Boolean(i))
+      }
+
+      return computeDaySchedule({
         departureMinutes,
         origin,
-        jobs: (byDate[toLocalDateStr(day)] ?? []).map(i => ({
+        jobs: list.map(i => ({
           id: i.id,
-          estimatedMinutes: i.estimatedMinutes,
+          estimatedMinutes: drag?.kind === 'resize' && drag.id === i.id
+            ? drag.minutes
+            : i.estimatedMinutes,
           at: typeof i.siteLat === 'number' && typeof i.siteLon === 'number'
             ? { lat: i.siteLat, lon: i.siteLon }
             : undefined,
           // Het enige uur dat deze app onthoudt. Ontbreekt het, dan rekent de
-          // motor het uit zoals hij altijd deed.
-          startMinutes: i.plannedStartMinutes ?? null,
+          // motor het uit zoals hij altijd deed. Tijdens een sleep telt het uur
+          // waar de vinger nu staat, nog vóór er iets bewaard is.
+          startMinutes: drag?.kind === 'move' && drag.id === i.id
+            ? drag.startMinutes
+            : i.plannedStartMinutes ?? null,
         })),
         travelBetween: lookupTravel,
         breakMinutes: UNPAID_BREAK_MINUTES,
-      }),
-    ),
-    [days, byDate, departureMinutes, origin],
+      })
+    }),
+    [days, byDate, departureMinutes, origin, drag],
   )
 
   const interventionsById = useMemo(() => {
@@ -367,7 +439,7 @@ export default function WeekView() {
    * bij in het model; dit is een tweede manier om aan een bestaande schatting
    * te komen, met een gebaar in plaats van een getal.
    */
-  async function resizeJob(workOrderId: string, deltaMinutes: number) {
+  async function resizeJob(workOrderId: string, next: number) {
     const dateStr = dayOf[workOrderId]
     if (!dateStr) return
 
@@ -375,7 +447,6 @@ export default function WeekView() {
     const target = previousDay.find(i => i.id === workOrderId)
     if (!target) return
 
-    const next = snapDuration((target.estimatedMinutes ?? 0) + deltaMinutes)
     if (next === target.estimatedMinutes) return
 
     const updated: Intervention = { ...target, estimatedMinutes: next }
@@ -398,8 +469,65 @@ export default function WeekView() {
     }
   }
 
+  /** Van pixels naar minuten, met dezelfde schaal waarmee getekend is. */
+  function toMinutes(pixels: number): number {
+    return (pixels * 60) / pixelsPerHour
+  }
+
+  /**
+   * De vinger komt neer: leg vast waar alles stond.
+   *
+   * Alles wat hierna gebeurt wordt tegen deze momentopname afgemeten. Zie de
+   * toelichting bij DragPreview voor waarom dat moet.
+   */
+  function handleDragStart(event: DragStartEvent) {
+    const activeId = String(event.active.id)
+    const resizing = activeId.startsWith(RESIZE_PREFIX)
+    const id = resizing ? activeId.slice(RESIZE_PREFIX.length) : activeId
+
+    const date = dayOf[id]
+    if (!date) return          // uit de pool gesleept: er is nog geen uur om te tonen
+
+    if (resizing) {
+      const minutes = (byDate[date] ?? []).find(i => i.id === id)?.estimatedMinutes ?? 0
+      setDrag({ kind: 'resize', id, date, fromMinutes: minutes, minutes })
+      return
+    }
+
+    const from = spanOf[id]?.startMinutes
+    if (from === undefined) return
+
+    setDrag({ kind: 'move', id, date, fromMinutes: from, startMinutes: from, baseline: { ...spanOf } })
+  }
+
+  /**
+   * De vinger beweegt.
+   *
+   * De toestand wordt alleen bijgewerkt wanneer het ingeklikte kwartier écht
+   * verandert — zo'n 13 px op de standaardhoogte. Daardoor tekent het scherm
+   * een handvol keer per sleep opnieuw in plaats van bij elke pixel, en dat is
+   * wat dit op een telefoon bruikbaar houdt. Het prototype leerde die les op de
+   * harde manier: de eerste versie bouwde bij elke beweging de hele kalender
+   * opnieuw op en liep meteen vast.
+   */
+  function handleDragMove(event: DragMoveEvent) {
+    setDrag(current => {
+      if (!current) return current
+
+      if (current.kind === 'resize') {
+        const minutes = snapDuration(current.fromMinutes + toMinutes(event.delta.y))
+        return minutes === current.minutes ? current : { ...current, minutes }
+      }
+
+      const startMinutes = snapToStep(current.fromMinutes + toMinutes(event.delta.y))
+      return startMinutes === current.startMinutes ? current : { ...current, startMinutes }
+    })
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     setRefusal(null)
+    const preview = drag
+    setDrag(null)
 
     // Uitrekken eindigt in dezelfde afhandeling als verslepen, want het is
     // dezelfde sleepmotor. Het id zegt welk van de twee het was, en dit moet
@@ -407,7 +535,10 @@ export default function WeekView() {
     // uitrekken zegt dat niets.
     const activeId = String(event.active.id)
     if (activeId.startsWith(RESIZE_PREFIX)) {
-      await resizeJob(activeId.slice(RESIZE_PREFIX.length), (event.delta.y * 60) / pixelsPerHour)
+      // Bewaar precies wat er onder de vinger stond. Opnieuw uitrekenen uit de
+      // sleepafstand zou hetzelfde getal moeten geven, maar "zou moeten" is hoe
+      // een scherm en een database uit elkaar gaan lopen.
+      if (preview?.kind === 'resize') await resizeJob(preview.id, preview.minutes)
       return
     }
 
@@ -417,13 +548,18 @@ export default function WeekView() {
       dayOf,
       poolIds: pool.map(i => i.id),
       statusById,
+      // De momentopname van bij het begin van de sleep, niet wat er nú staat.
+      // `spanOf` beweegt tijdens het slepen mee met het voorbeeld, en daartegen
+      // afmeten zou de verplaatsing dubbel tellen: het blok zou bij het
+      // loslaten verder springen dan waar het onder je vinger stond.
       startMinutesOf: Object.fromEntries(
-        Object.entries(spanOf).map(([id, span]) => [id, span.startMinutes]),
+        Object.entries(preview?.kind === 'move' ? preview.baseline : spanOf)
+          .map(([id, span]) => [id, span?.startMinutes]),
       ),
       // Van pixels naar minuten met dezelfde schaal waarmee getekend is. Zonder
       // dit zou een sleep van een centimeter iets anders betekenen bij elke
       // stand van de hoogteschuif.
-      deltaMinutes: (event.delta.y * 60) / pixelsPerHour,
+      deltaMinutes: toMinutes(event.delta.y),
     })
 
     if (intent.kind === 'none') {
@@ -627,7 +763,24 @@ export default function WeekView() {
           <span className="tabular-nums">{pixelsPerHour} px</span>
         </label>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          // Blijf de dagkolommen opmeten terwijl er gesleept wordt.
+          //
+          // Standaard meet dnd-kit ze één keer op, bij het begin van de sleep.
+          // Dat ging goed zolang er tijdens een sleep niets opnieuw getekend
+          // werd — maar nu rekent de dag mee onder de vinger, en dan raakt die
+          // ene meting achterop: bij het loslaten vond dnd-kit geen kolom meer
+          // (`over` was null), het uur werd nergens heen geschreven en het blok
+          // sprong terug naar waar het stond. Nagemeten in de browser, want op
+          // het scherm zag het slepen er intussen perfect uit.
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setDrag(null)}
+        >
           {refusal && (
             <div className="mb-3 rounded-xl border border-brand-red/30 bg-brand-red/10 px-3 py-2 text-xs text-ink">
               {refusal}

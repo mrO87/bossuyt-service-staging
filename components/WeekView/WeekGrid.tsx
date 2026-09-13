@@ -10,8 +10,7 @@
 
 import type { ReactNode } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
-import type { DayScheduleResult, ScheduleBlock } from '@/lib/planning/daySchedule'
+import { draggableIdFor, type DayScheduleResult, type ScheduleBlock } from '@/lib/planning/daySchedule'
 import { scheduleForDate, clockToMinutes } from '@/lib/planning/workSchedule'
 import { formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
 import type { Intervention } from '@/types'
@@ -275,8 +274,22 @@ function Block({
   onClearHour: (id: string) => void
 }) {
   const isJob = block.kind === 'job' && Boolean(intervention)
+
+  // Alleen een jobblok mag de werkbon-id claimen.
+  //
+  // Het arceringsblok draagt diezelfde `interventionId` — het ligt immers over
+  // die bon heen — en registreerde zich daarmee als tweede sleepbaar ding onder
+  // hetzelfde id. De laatste registratie wint bij dnd-kit, en dat was de
+  // arcering: een blok dat meteen daarna `return` doet en `setNodeRef` dus
+  // nooit ergens op zet. Gevolg: dnd-kit had geen element om op te meten,
+  // vond geen enkele kolom onder de vinger, en een bon mét botsing liet zich
+  // helemaal niet verslepen — precies de bon die je volgens de melding moet
+  // verzetten. Gevonden door bij het loslaten te vragen wat dnd-kit in beeld
+  // had: `activeRect: null`.
+  const dragId = draggableIdFor(block)
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: block.interventionId ?? block.id,
+    id: dragId,
     disabled: !isJob,
   })
 
@@ -288,9 +301,9 @@ function Block({
     attributes: resizeAttributes,
     listeners: resizeListeners,
     setNodeRef: setResizeRef,
-    transform: resizeTransform,
+    isDragging: isResizing,
   } = useDraggable({
-    id: `${RESIZE_PREFIX}${block.interventionId ?? block.id}`,
+    id: `${RESIZE_PREFIX}${dragId}`,
     disabled: !isJob,
   })
 
@@ -417,14 +430,18 @@ function Block({
       ].join(' ')}
       style={{
         top,
-        // Tijdens het rekken volgt de onderrand de vinger. Zonder dit trek je
-        // aan iets dat pas verspringt als je loslaat, en dan mik je blind.
-        // Alleen de hoogte beweegt mee; het echte getal wordt pas bij het
-        // loslaten afgerond en weggeschreven.
-        height: Math.max(MIN_BLOCK_HEIGHT, height + (resizeTransform?.y ?? 0)),
-        transform: CSS.Translate.toString(transform),
-        opacity: isDragging ? 0.6 : 1,
-        zIndex: isDragging || resizeTransform ? 20 : undefined,
+        height,
+        // Alleen zijwaarts meebewegen met de vinger, nooit verticaal.
+        //
+        // De weekweergave rekent tijdens het slepen de hele dag mee, dus dit
+        // blok staat hier al getekend op het uur waar de vinger het zet — op
+        // het kwartier, zoals in het prototype. Daar nog eens de sleepafstand
+        // bij optellen zou het twee keer zo ver laten bewegen als je hand.
+        // Zijwaarts moet wél: dat is hoe je ziet naar welke dag je onderweg
+        // bent, en de dagkolom is daar het doelwit.
+        transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,
+        zIndex: isDragging || isResizing ? 20 : undefined,
+        boxShadow: isDragging || isResizing ? '0 8px 20px -6px rgb(0 0 0 / .5)' : undefined,
         ...noSelect,
       }}
       title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
