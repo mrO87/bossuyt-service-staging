@@ -7,7 +7,7 @@
  * en de enige plek waar een fout van een minuut te zien is.
  */
 import { describe, expect, it } from 'vitest'
-import { computeDaySchedule, type TravelLookup } from '@/lib/planning/daySchedule'
+import { computeDaySchedule, type ScheduleJob, type TravelLookup } from '@/lib/planning/daySchedule'
 
 const HOME = { lat: 50.8582720, lon: 3.2584752 }
 const FAR = { lat: 51.1307205, lon: 4.4779880 }
@@ -20,7 +20,7 @@ const travel: TravelLookup = (from, to) => {
   return from === HOME || to === HOME ? 60 : 20
 }
 
-function day(jobs: Array<{ id: string; estimatedMinutes?: number; at?: typeof HOME }>) {
+function day(jobs: ScheduleJob[]) {
   return computeDaySchedule({
     departureMinutes: 7 * 60,
     origin: HOME,
@@ -156,5 +156,144 @@ describe('computeDaySchedule', () => {
       { id: 'a', estimatedMinutes: 600, at: FAR },
     ])
     expect(result.backAtOriginMinutes).toBeGreaterThan(18 * 60)
+  })
+})
+
+/**
+ * Een bon op een uur zetten.
+ *
+ * Tot hier rekende deze motor élk uur uit het vertrekuur. Nu mag een job zijn
+ * eigen uur meebrengen — het uur waarop de gebruiker hem heeft neergezet.
+ * De regel uit het ontwerp: waar je hem neerzet, daar staat hij. De motor
+ * schuift nooit iets uit zichzelf op; botst het, dan zegt hij waar en waarom.
+ */
+describe('computeDaySchedule met een vastgezet uur', () => {
+  it('starts a pinned job on its hour, not where the calculation would put it', () => {
+    // Zonder uur zou deze job om 08:00 beginnen (07:00 + 60 min rijden).
+    const result = day([{ id: 'a', estimatedMinutes: 90, at: FAR, startMinutes: 10 * 60 }])
+    const job = result.blocks.find(b => b.kind === 'job')!
+    expect(job.startMinutes).toBe(10 * 60)
+    expect(job.endMinutes).toBe(11 * 60 + 30)
+  })
+
+  it('back-calculates the departure from the first job hour', () => {
+    // Om 10:00 bij een klant te staan die 60 min ver ligt, vertrek je om 09:00.
+    const result = day([{ id: 'a', estimatedMinutes: 90, at: FAR, startMinutes: 10 * 60 }])
+    expect(result.departFromOriginMinutes).toBe(9 * 60)
+    expect(result.blocks[0].kind).toBe('anchor')
+    expect(result.blocks[0].endMinutes).toBe(9 * 60)
+  })
+
+  it('leaves a plain departure when nothing is pinned', () => {
+    const result = day([{ id: 'a', estimatedMinutes: 90, at: FAR }])
+    expect(result.departFromOriginMinutes).toBe(7 * 60)
+  })
+
+  it('drives just in time, so the waiting gap stays empty space', () => {
+    // Job a: 08:00–09:00. Job b staat vast op 11:00 en ligt 20 min rijden weg.
+    // De rit hoort tegen b aan te liggen (10:10–10:30 na de pauze), niet tegen
+    // a — anders staat er een blok in een gat dat niemand kan uitleggen.
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 11 * 60 },
+    ])
+    const jobB = result.blocks.find(b => b.interventionId === 'b')!
+    const pause = result.blocks.find(b => b.kind === 'break')!
+    const legToB = result.blocks.filter(b => b.kind === 'travel')[1]
+
+    expect(jobB.startMinutes).toBe(11 * 60)
+    expect(pause.endMinutes).toBe(11 * 60)
+    expect(pause.startMinutes).toBe(10 * 60 + 30)
+    expect(legToB.endMinutes).toBe(10 * 60 + 30)
+    expect(legToB.startMinutes).toBe(10 * 60 + 10)
+  })
+
+  it('pushes everything after a pinned job later', () => {
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR, startMinutes: 10 * 60 },
+      { id: 'b', estimatedMinutes: 60, at: NEAR },
+    ])
+    const jobB = result.blocks.find(b => b.interventionId === 'b')!
+    // 11:00 einde a + 20 rijden + 30 pauze = 11:50.
+    expect(jobB.startMinutes).toBe(11 * 60 + 50)
+  })
+
+  it('hatches exactly the stretch that cannot happen', () => {
+    // a: 08:00–09:00. b staat vast op 09:15, maar je kunt er ten vroegste om
+    // 09:50 zijn (20 min rijden + 30 min pauze). Onmogelijk van 09:00 tot 09:50.
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 + 15 },
+    ])
+    expect(result.conflicts).toEqual([
+      {
+        interventionId: 'b',
+        fromMinutes: 9 * 60,
+        toMinutes: 9 * 60 + 50,
+        earliestMinutes: 9 * 60 + 50,
+      },
+    ])
+    const clash = result.blocks.find(b => b.kind === 'clash')!
+    expect(clash.interventionId).toBe('b')
+    expect(clash.startMinutes).toBe(9 * 60)
+    expect(clash.endMinutes).toBe(9 * 60 + 50)
+  })
+
+  it('starts the hatching at the pinned hour when it overlaps the previous job', () => {
+    // b staat vast op 08:30, midden in job a (08:00–09:00). Dan begint het
+    // onmogelijke stuk bij 08:30 en niet bij het einde van a.
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 8 * 60 + 30 },
+    ])
+    expect(result.conflicts[0].fromMinutes).toBe(8 * 60 + 30)
+  })
+
+  it('moves nothing by itself when there is a conflict', () => {
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 + 15 },
+    ])
+    const jobA = result.blocks.find(b => b.interventionId === 'a')!
+    const jobB = result.blocks.find(b => b.interventionId === 'b')!
+    expect(jobA.startMinutes).toBe(8 * 60)
+    expect(jobA.endMinutes).toBe(9 * 60)
+    expect(jobB.startMinutes).toBe(9 * 60 + 15)
+  })
+
+  it('calls the exact earliest moment no conflict', () => {
+    // Precies op de grens: 09:00 + 20 rijden + 30 pauze = 09:50.
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 + 50 },
+    ])
+    expect(result.conflicts).toEqual([])
+    expect(result.blocks.some(b => b.kind === 'clash')).toBe(false)
+  })
+
+  it('never calls the first job of the day a conflict — it only leaves earlier', () => {
+    // Er is niets waarmee de eerste job kan botsen. Vertrekken om 05:00 is een
+    // waarschuwing voor het rooster, geen onmogelijkheid voor de planning.
+    const result = day([{ id: 'a', estimatedMinutes: 60, at: FAR, startMinutes: 6 * 60 }])
+    expect(result.conflicts).toEqual([])
+    expect(result.departFromOriginMinutes).toBe(5 * 60)
+  })
+
+  it('reports a conflict per job, so the message can name the first one', () => {
+    const result = day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 },
+      { id: 'c', estimatedMinutes: 60, at: NEAR, startMinutes: 9 * 60 + 30 },
+    ])
+    expect(result.conflicts.map(c => c.interventionId)).toEqual(['b', 'c'])
+  })
+
+  it('leaves a day with nothing pinned exactly as it was', () => {
+    const result = day([
+      { id: 'a', estimatedMinutes: 90, at: FAR },
+      { id: 'b', estimatedMinutes: 45, at: NEAR },
+    ])
+    expect(result.conflicts).toEqual([])
+    expect(result.blocks.some(b => b.kind === 'clash')).toBe(false)
   })
 })

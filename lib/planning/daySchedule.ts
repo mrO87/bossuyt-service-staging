@@ -6,10 +6,10 @@
  * de eerste job. Daarna telkens hetzelfde — einde job, rijden, volgende job.
  * De dag loopt van de ingestelde startlocatie tot diezelfde locatie terug.
  *
- * Niets hiervan wordt opgeslagen. Een werkbon kent een dag en een volgorde; het
- * uur bestaat alleen zolang deze functie draait. Dat is met opzet: loopt een job
- * uit, dan schuift alles erachter mee, en een bon naar de pool slepen laat zijn
- * uur verdwijnen zonder dat er iets gewist hoeft te worden.
+ * Daarnaast mag een job zijn eigen uur meebrengen: het uur waarop de gebruiker
+ * hem heeft neergezet. Dan geldt dát, en de rest van de dag rekent eromheen.
+ * Deze functie schuift nooit iets uit zichzelf op — kan een uur niet, dan zegt
+ * ze waar en waarom, en laat ze het oplossen aan wie het neerzette.
  *
  * Apart van de weergave gehouden omdat de Gantt-weergave er straks op draait —
  * techniekers als rijen is deze functie, één keer per technieker.
@@ -17,15 +17,34 @@
 import type { Coordinates } from '@/lib/routing/IRoutingService'
 
 export interface ScheduleBlock {
-  kind: 'anchor' | 'travel' | 'job' | 'break'
+  /**
+   * 'clash' is geen stuk van de dag maar een aanwijzing erover: het ligt óver
+   * een job heen en tekent precies het stuk dat niet kan. Het staat in dezelfde
+   * lijst omdat het in dezelfde tijdas leeft — de weergave die de andere
+   * blokken plaatst, plaatst dit zonder iets nieuws te moeten leren.
+   */
+  kind: 'anchor' | 'travel' | 'job' | 'break' | 'clash'
   /** Uniek binnen de dag, bruikbaar als React-key en als sleep-id. */
   id: string
   startMinutes: number
   endMinutes: number
-  /** Alleen op job-blokken. */
+  /** Op job-blokken, en op het clash-blok dat erover ligt. */
   interventionId?: string
   /** Alleen op travel-blokken. Null wanneer de rit niet te meten was. */
   minutes?: number | null
+}
+
+/**
+ * Een uur dat niet kan: de bon begint vóór het moment waarop je er ten vroegste
+ * kunt zijn. `fromMinutes`–`toMinutes` is het stuk dat gearceerd wordt;
+ * `earliestMinutes` is dat vroegste haalbare begin, het getal waarmee een
+ * melding kan uitleggen hoeveel er tekortkomt.
+ */
+export interface ScheduleConflict {
+  interventionId: string
+  fromMinutes: number
+  toMinutes: number
+  earliestMinutes: number
 }
 
 export interface DayScheduleResult {
@@ -36,6 +55,17 @@ export interface DayScheduleResult {
   travelMinutes: number
   /** Ritten die niemand kon meten, meestal een adres dat nooit geocodeerd is. */
   unknownLegs: number
+  /**
+   * Wanneer je van de startlocatie weg moet, of null bij een lege dag.
+   *
+   * Normaal is dat het ingestelde vertrekuur. Staat de eerste job op een vast
+   * uur, dan wordt er teruggerekend: dat uur min de rit ernaartoe. Dat kan vóór
+   * het rooster uitkomen — de weergave waarschuwt daarvoor, deze functie
+   * weigert het niet.
+   */
+  departFromOriginMinutes: number | null
+  /** Leeg zolang elk vastgezet uur haalbaar is. */
+  conflicts: ScheduleConflict[]
 }
 
 /** Minuten tussen twee punten, of null wanneer dat niet te bepalen is. */
@@ -48,6 +78,15 @@ export interface ScheduleJob {
   id: string
   estimatedMinutes?: number
   at?: Coordinates
+  /**
+   * Het uur waarop de gebruiker deze bon heeft neergezet, in minuten sinds
+   * middernacht. Ontbreekt het, dan wordt het uur berekend zoals altijd.
+   *
+   * Of er een speldje op staat doet hier niet ter zake: het speldje zegt of het
+   * uur een afspraak is, en dat is een vraag voor "kortste volgorde" — niet
+   * voor de klok.
+   */
+  startMinutes?: number | null
 }
 
 export function computeDaySchedule(input: {
@@ -60,64 +99,73 @@ export function computeDaySchedule(input: {
   const { departureMinutes, origin, jobs, travelBetween, breakMinutes } = input
 
   const blocks: ScheduleBlock[] = []
+  const conflicts: ScheduleConflict[] = []
   let workMinutes = 0
   let travelMinutes = 0
   let unknownLegs = 0
 
   if (jobs.length === 0) {
-    return { blocks, backAtOriginMinutes: null, workMinutes, travelMinutes, unknownLegs }
+    return {
+      blocks,
+      backAtOriginMinutes: null,
+      workMinutes,
+      travelMinutes,
+      unknownLegs,
+      departFromOriginMinutes: null,
+      conflicts,
+    }
   }
-
-  let cursor = departureMinutes
-
-  // Het vertrekpunt krijgt een klein blok, zodat de kolom laat zien waar de dag
-  // begint in plaats van in het niets te openen.
-  blocks.push({ kind: 'anchor', id: 'origin-start', startMinutes: cursor - 10, endMinutes: cursor })
 
   // Eén pauze, vanaf twee jobs: de dagweergave tekent de pauze zelf al vanaf
   // twee jobs (insertMiddayBreak), en de twee mogen elkaar nooit tegenspreken.
   const breakBefore = jobs.length >= 2 ? Math.floor(jobs.length / 2) : -1
 
+  let cursor = departureMinutes
+  let departFromOrigin = departureMinutes
   let previous: Coordinates | undefined = origin
 
-  /** Zet één rit in de tijdlijn en schuift de klok op. Null blijft nul minuten. */
-  function pushTravelLeg(id: string, legMinutes: number | null) {
+  /**
+   * Zet één rit neer die eindigt op `endsAt`.
+   *
+   * Een rit wordt achterwaarts getekend vanaf het moment waarop je aankomt, niet
+   * voorwaarts vanaf het moment waarop je klaar bent. Zolang alles aan elkaar
+   * ligt is dat hetzelfde; zodra er een vast uur in de dag staat, is het het
+   * verschil tussen "rijden en dan wachten" en "wachten en dan rijden". Het
+   * tweede is wat er gebeurt.
+   */
+  function pushTravelLeg(id: string, legMinutes: number | null, endsAt: number) {
     if (legMinutes === null) {
       // Onbekend duurt nul. Een verzonnen duur zou de hele dag erachter
       // verschuiven, en dat is erger dan een gat dat zichzelf aanwijst.
       unknownLegs++
-      blocks.push({
-        kind: 'travel',
-        id,
-        startMinutes: cursor,
-        endMinutes: cursor,
-        minutes: null,
-      })
+      blocks.push({ kind: 'travel', id, startMinutes: endsAt, endMinutes: endsAt, minutes: null })
     } else if (legMinutes > 0) {
       blocks.push({
         kind: 'travel',
         id,
-        startMinutes: cursor,
-        endMinutes: cursor + legMinutes,
+        startMinutes: endsAt - legMinutes,
+        endMinutes: endsAt,
         minutes: legMinutes,
       })
-      cursor += legMinutes
       travelMinutes += legMinutes
     }
   }
 
   jobs.forEach((job, index) => {
     const legMinutes = travelBetween(previous, job.at)
-    pushTravelLeg(`travel-${index}`, legMinutes)
+    const leg = legMinutes ?? 0
+    const pause = index === breakBefore ? breakMinutes : 0
 
-    if (index === breakBefore) {
-      blocks.push({
-        kind: 'break',
-        id: 'break',
-        startMinutes: cursor,
-        endMinutes: cursor + breakMinutes,
-      })
-      cursor += breakMinutes
+    // Het vroegste moment waarop deze job kan beginnen: klaar met de vorige, de
+    // pauze gehad, en er naartoe gereden.
+    const earliest = cursor + leg + pause
+    const pinned = job.startMinutes ?? null
+    const start = pinned ?? earliest
+
+    pushTravelLeg(`travel-${index}`, legMinutes, start - pause)
+
+    if (pause > 0) {
+      blocks.push({ kind: 'break', id: 'break', startMinutes: start - pause, endMinutes: start })
     }
 
     const length = job.estimatedMinutes ?? 0
@@ -125,19 +173,69 @@ export function computeDaySchedule(input: {
       kind: 'job',
       id: `job-${job.id}`,
       interventionId: job.id,
-      startMinutes: cursor,
-      endMinutes: cursor + length,
+      startMinutes: start,
+      endMinutes: start + length,
     })
-    cursor += length
     workMinutes += length
 
+    if (index === 0) {
+      // De eerste job heeft niets om mee te botsen: staat hij op een vast uur,
+      // dan vertrekt de dag gewoon vroeger (of later). Of dat vertrekuur nog
+      // binnen het rooster valt, is een vraag voor de weergave.
+      departFromOrigin = start - leg
+    } else if (pinned !== null && pinned < earliest) {
+      // Precies het onmogelijke stuk: vanaf het einde van de vorige job — of
+      // vanaf het vastgezette uur zelf, als de bon daar nog overheen ligt — tot
+      // het vroegste moment waarop hij kan beginnen.
+      const from = Math.min(pinned, cursor)
+      conflicts.push({
+        interventionId: job.id,
+        fromMinutes: from,
+        toMinutes: earliest,
+        earliestMinutes: earliest,
+      })
+      blocks.push({
+        kind: 'clash',
+        id: `clash-${job.id}`,
+        interventionId: job.id,
+        startMinutes: from,
+        endMinutes: earliest,
+      })
+    }
+
+    cursor = start + length
     previous = job.at
   })
 
+  // Het vertrekpunt krijgt een klein blok, zodat de kolom laat zien waar de dag
+  // begint in plaats van in het niets te openen. Het komt er pas achteraf voor:
+  // met een vastgezette eerste job is het vertrekuur pas bekend als die job
+  // berekend is.
+  blocks.unshift({
+    kind: 'anchor',
+    id: 'origin-start',
+    startMinutes: departFromOrigin - 10,
+    endMinutes: departFromOrigin,
+  })
+
   const homeLeg = travelBetween(previous, origin)
-  pushTravelLeg('travel-home', homeLeg)
+  const backAtOrigin = cursor + (homeLeg ?? 0)
+  pushTravelLeg('travel-home', homeLeg, backAtOrigin)
 
-  blocks.push({ kind: 'anchor', id: 'origin-end', startMinutes: cursor, endMinutes: cursor + 10 })
+  blocks.push({
+    kind: 'anchor',
+    id: 'origin-end',
+    startMinutes: backAtOrigin,
+    endMinutes: backAtOrigin + 10,
+  })
 
-  return { blocks, backAtOriginMinutes: cursor, workMinutes, travelMinutes, unknownLegs }
+  return {
+    blocks,
+    backAtOriginMinutes: backAtOrigin,
+    workMinutes,
+    travelMinutes,
+    unknownLegs,
+    departFromOriginMinutes: departFromOrigin,
+    conflicts,
+  }
 }
