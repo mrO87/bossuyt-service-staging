@@ -17,6 +17,7 @@ import Section from './Section'
 import BonHeaderCard from './BonHeaderCard'
 import VisitSection, { type TechnicianOption } from './VisitSection'
 import DevicePicker from './DevicePicker'
+import { BonDeviceTabs, type BonDevice } from './BonDeviceTabs'
 import AlertNoteCard from './AlertNoteCard'
 
 const STATUS_OPTIONS = [
@@ -93,6 +94,13 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
   const [alertNote, setAlertNote] = useState(intervention.alertNote ?? '')
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [pickedDevice, setPickedDevice] = useState<Device | null>(null)
+  /**
+   * Welk van de toestellen van deze bon je op dit moment bekijkt.
+   *
+   * Alleen weergave: het verslag en de onderdelen blijven aan het hoofdtoestel
+   * hangen. Dit staat los van `form.deviceId` en schrijft niets weg.
+   */
+  const [bekekenToestel, setBekekenToestel] = useState<BonDevice | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   /** Whether this half-filled bon is safe yet, and where. Separate from
@@ -488,12 +496,24 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       </div>
 
       {deviceKnown ? (
-        <DevicePanel
-          deviceId={form.deviceId}
-          brand={pickedDevice?.brand ?? intervention.deviceBrand}
-          model={pickedDevice?.model ?? intervention.deviceModel}
-          refreshKey={deviceRefresh}
-        />
+        <>
+          {/*
+            De andere toestellen van deze bon. Kiezen verandert alleen wat je
+            ziet — het verslag en de onderdelen blijven aan het hoofdtoestel
+            hangen, en dat staat er ook bij.
+          */}
+          <BonDeviceTabs
+            workOrderId={intervention.id}
+            selectedId={bekekenToestel?.id ?? form.deviceId}
+            onSelect={setBekekenToestel}
+          />
+          <DevicePanel
+            deviceId={bekekenToestel?.id ?? form.deviceId}
+            brand={bekekenToestel?.brand ?? pickedDevice?.brand ?? intervention.deviceBrand}
+            model={bekekenToestel?.model ?? pickedDevice?.model ?? intervention.deviceModel}
+            refreshKey={deviceRefresh}
+          />
+        </>
       ) : (
         <DevicePicker
           siteId={intervention.siteId}
