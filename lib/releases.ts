@@ -20,6 +20,16 @@ export const RELEASES: ReleaseEntry[] = [
     changes: [
       {
         label: 'Fix',
+        title: 'Een nieuwe bon staat meteen op jouw naam',
+        body:
+          'Een bon die via de upload binnenkwam had nog geen technieker. Gaf je hem dan '
+          + 'een dag, dan verdween hij uit élke weergave: niet meer in de pool want hij '
+          + 'had een datum, en op niemands dag want er stond niemand bij. Vastgesteld op '
+          + 'een echte bon die nergens meer te vinden was. Wie een bon aanmaakt, draagt '
+          + 'hem nu — en een bon die je op een dag zet krijgt sowieso een technieker.',
+      },
+      {
+        label: 'Fix',
         title: 'Een foto uploaden strandde meteen',
         body:
           'Koos je een foto in plaats van een PDF, dan verscheen er een technische fout '

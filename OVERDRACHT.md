@@ -7,6 +7,64 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
+## Bijwerking 13 september — echte servicebonnen inlezen
+
+Zes echte PDF-bonnen door `/werkbon/upload` gehaald. Alles lukte (201 bij
+uploaden, 201 bij bevestigen), maar het legde vier dingen bloot.
+
+### Een bon zonder technieker is onvindbaar
+
+`TKT20/12784` stond op 2026-09-14 met nul toewijzingen en kwam noch in
+`planned` noch in `open` van `/api/sync/today` voor: niet in de pool want hij
+had een datum, en op niemands dag want er was geen toewijzing.
+
+Twee lagen dichtgezet:
+- `createWorkOrder` geeft de bon aan zijn maker (`created_by`), maar alleen
+  wanneer die id ook echt in `technicians` staat — anders zou de verwijzing de
+  hele aanmaak terugdraaien, en een bon verliezen om een toewijzing is erger
+  dan een bon zonder toewijzing.
+- `updatePlacement` maakt de toewijzing zelf wanneer die ontbreekt. Het scherm
+  geeft `technicianId` mee (wiens week het toont); anders draagt de actor hem.
+
+**Afspraak van de gebruiker:** zolang er één account is, gaat alles naar
+Olivier (`u1`). Pas met Keycloak erover kiest de oproeper wie hem draagt, en
+gaat `technician_ids` weer voor.
+
+### De klantnaam is niet betrouwbaar uit te lezen
+
+De uitlezing werkt met zones op coördinaten (`lib/werkbon-zones.ts`). Op deze
+zes bonnen:
+- twee keer leeg omdat het naamvak op papier leeg is — dat is géén leesfout;
+- één keer alleen "Upton" terwijl er "UPTON GIANFRANCO" staat (het was een
+  voorstel van OpenStreetMap, geen uitlezing);
+- één keer met de gemeente eraan geplakt.
+
+Daarom is de naam niet langer verplicht. Het rode merkje "niet gevonden" was
+de markering al; `lib/customerLabel.ts` zorgt dat een bon zonder naam overal
+"Naam ontbreekt" toont in plaats van een leeg blok.
+
+### De gemeente kan de straat opeten
+
+`B-6000 - CHARLEROI GRAND RUE 143` werd gemeente "Charleroi Grand" en straat
+"RUE 143". De straat is **Grand Rue 143**. Gevolg: geen coördinaten, dus geen
+rijtijd, dus niet planbaar — met handen rechtgezet in de database. De zone- of
+splitsingsregel voor adres/gemeente verdient een eigen ronde.
+
+### Twee fouten in het uploadscherm
+
+- Een foto uploaden strandde altijd: `bitmap.close()` stond vóór
+  `getImageData`, en na `close()` zijn `width` en `height` nul. Vandaar
+  letterlijk "The source width is 0".
+- Het hoekenkader sprong 8% naar binnen (`defaultCorners`) en sneed daarmee de
+  randen af van een foto die de gsm al had bijgesneden. Standaard nu de hele
+  foto.
+
+### Toestand van de staging-data
+
+De mock-bonnen `i1`–`i25` zijn **verborgen, niet verwijderd**
+(`visible_in_pool = false`, `planned_date = null`) — één `update` om terug te
+draaien. De pool bevat nu echte bonnen.
+
 ## Bijwerking 13 september — v1.67: geen werkbon meer kwijtraken
 
 Twee regels, één doel. Ze staan samen in `lib/planning/pastDays.ts`, los van de
