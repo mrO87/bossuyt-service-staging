@@ -29,6 +29,23 @@ export function snapToStep(minutes: number): number {
 }
 
 /**
+ * Een duur zoals je hem met de vinger uitrekt.
+ *
+ * Dezelfde stap als het slepen, want het is dezelfde vinger op hetzelfde
+ * rooster. De grenzen verschillen wél van die van het duurveld op de kaart
+ * (`EstimateBadge` laat 1 minuut tot 24 uur toe), en dat is met opzet: getypt
+ * is een duur een bewering, uitgerekt is het een gebaar. Nul minuten zou een
+ * blok laten verdwijnen onder de vinger die het nog vasthoudt, en meer dan acht
+ * uur past niet in een venster van 06:30 tot 18:00 — dan rek je aan iets dat
+ * aan beide kanten uit beeld loopt. Wie echt een dag van tien uur wil noteren,
+ * typt hem.
+ */
+export function snapDuration(minutes: number): number {
+  const snapped = Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES
+  return Math.min(8 * 60, Math.max(SNAP_MINUTES, snapped))
+}
+
+/**
  * Een uur zoals het uit de buitenwereld binnenkomt, of null.
  *
  * Dit is de rand van de app: een herspeelde schrijfactie uit een wachtrij van

@@ -12,6 +12,7 @@ import {
   conflictMessage,
   orderByHour,
   sanitizeStartMinutes,
+  snapDuration,
   snapToStep,
 } from '@/lib/planning/pinnedHour'
 
@@ -112,5 +113,32 @@ describe('orderByHour', () => {
 
   it('is empty for an empty day', () => {
     expect(orderByHour([])).toEqual([])
+  })
+})
+
+/**
+ * Uitrekken met de vinger.
+ *
+ * Dezelfde stap als het slepen, want het is dezelfde vinger op hetzelfde
+ * rooster. De grenzen zijn anders dan die van het duurveld op de kaart, en dat
+ * is bewust — zie de toelichting bij snapDuration.
+ */
+describe('snapDuration', () => {
+  it('snaps to the same quarter the dragging uses', () => {
+    expect(snapDuration(97)).toBe(90)
+    expect(snapDuration(98)).toBe(105)
+  })
+
+  it('never shrinks a job to nothing', () => {
+    // Een job van nul minuten is geen job, en op het rooster zou hij verdwijnen
+    // onder je vinger terwijl je nog vasthoudt.
+    expect(snapDuration(0)).toBe(15)
+    expect(snapDuration(-90)).toBe(15)
+  })
+
+  it('stops at eight hours', () => {
+    // Meer past niet in het venster van 06:30 tot 18:00, dus verder rekken is
+    // een blok dat aan beide kanten uit beeld loopt.
+    expect(snapDuration(9 * 60)).toBe(8 * 60)
   })
 })

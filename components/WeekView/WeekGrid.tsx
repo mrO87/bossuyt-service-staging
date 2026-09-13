@@ -19,6 +19,16 @@ import type { Intervention } from '@/types'
 export const VIEW_START_MINUTES = 6 * 60 + 30
 export const VIEW_END_MINUTES = 18 * 60
 
+/**
+ * Waaraan de sleepmotor een uitrekbeweging herkent.
+ *
+ * Verslepen en uitrekken vertrekken van hetzelfde blok en eindigen allebei in
+ * `handleDragEnd`; het id is het enige wat ze onderscheidt. Hier gezet en niet
+ * in WeekView, omdat het blok het id maakt en de weekweergave het leest — één
+ * naam op één plaats.
+ */
+export const RESIZE_PREFIX = 'resize:'
+
 const DOW = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za']
 
 function hhmm(minutes: number): string {
@@ -270,6 +280,20 @@ function Block({
     disabled: !isJob,
   })
 
+  // Het rekhandvat is een eigen sleepbaar ding, met een eigen id. Twee gebaren
+  // op één blok die iets anders betekenen, moeten twee dingen zijn die de
+  // sleepmotor uit elkaar kan houden — anders hangt het af van waar je toevallig
+  // begon, en dat is precies het soort verschil dat een duim niet kan maken.
+  const {
+    attributes: resizeAttributes,
+    listeners: resizeListeners,
+    setNodeRef: setResizeRef,
+    transform: resizeTransform,
+  } = useDraggable({
+    id: `${RESIZE_PREFIX}${block.interventionId ?? block.id}`,
+    disabled: !isJob,
+  })
+
   if (block.kind === 'anchor') {
     return (
       <div
@@ -307,7 +331,7 @@ function Block({
     return (
       <div
         role="presentation"
-        className="pointer-events-none absolute inset-x-0.5 z-30 rounded-sm border border-brand-red"
+        className="pointer-events-none absolute inset-x-0.5 z-30 flex items-center justify-center overflow-hidden rounded-sm border border-brand-red"
         style={{
           top,
           height,
@@ -315,7 +339,23 @@ function Block({
             'repeating-linear-gradient(135deg, rgb(214 69 69 / .55) 0 5px, rgb(214 69 69 / .16) 5px 10px)',
         }}
         title="Kan niet — deze werkbon staat vóór het moment waarop je er kunt zijn"
-      />
+      >
+        {/*
+          Het label hoort op de arcering, niet in een tooltip: op een telefoon
+          bestaat er geen tooltip, en dan draagt het rooster wel een rode vlek
+          maar nergens een woord. Twee woorden van 8 px passen op 58 px; is de
+          band te laag om ze te tonen, dan blijft de arcering zelf staan en
+          zegt de melding onder het rooster wat er aan de hand is.
+        */}
+        {height >= 13 && (
+          <span
+            className="px-0.5 text-[8px] font-bold leading-none text-white"
+            style={{ textShadow: '0 1px 2px rgb(0 0 0 / .7)' }}
+          >
+            kan niet
+          </span>
+        )}
+      </div>
     )
   }
 
@@ -377,10 +417,14 @@ function Block({
       ].join(' ')}
       style={{
         top,
-        height,
+        // Tijdens het rekken volgt de onderrand de vinger. Zonder dit trek je
+        // aan iets dat pas verspringt als je loslaat, en dan mik je blind.
+        // Alleen de hoogte beweegt mee; het echte getal wordt pas bij het
+        // loslaten afgerond en weggeschreven.
+        height: Math.max(MIN_BLOCK_HEIGHT, height + (resizeTransform?.y ?? 0)),
         transform: CSS.Translate.toString(transform),
         opacity: isDragging ? 0.6 : 1,
-        zIndex: isDragging ? 20 : undefined,
+        zIndex: isDragging || resizeTransform ? 20 : undefined,
         ...noSelect,
       }}
       title={`${hhmm(block.startMinutes)}–${hhmm(block.endMinutes)} · ${intervention.customerName}, ${intervention.siteCity}`}
@@ -389,86 +433,105 @@ function Block({
       <span
         {...listeners}
         aria-label={`${intervention.customerName} verslepen`}
-        className="flex w-3.5 shrink-0 touch-none cursor-grab items-center justify-center bg-black/25 active:cursor-grabbing"
+        className="flex w-3 shrink-0 touch-none cursor-grab items-center justify-center bg-black/25 active:cursor-grabbing"
         style={noSelect}
       >
         <span className="block h-4 w-0.5 rounded-full bg-white/70" />
       </span>
 
-      <button
-        type="button"
-        onClick={() => onOpen(intervention.id)}
-        className="min-w-0 flex-1 px-1 py-0.5 text-left active:opacity-80"
-        style={noSelect}
-      >
+      <div className="flex min-w-0 flex-1 flex-col">
         {/*
-          Het uurblokje. Het staat op élk blok, ook bij een berekend uur — dat is
-          wat het bruikbaar maakt: je leest het uur zonder je af te vragen of er
-          wel een uur is. De kleur draagt het enige verschil dat telt. Groen: dit
-          uur is berekend en schuift mee als er iets vóór deze bon verandert.
-          Rood: het ligt vast, hier gebeurt het.
-        */}
-        <span
-          className={[
-            'inline-block rounded-sm px-0.5 text-[9px] font-bold leading-tight tabular-nums',
-            isAppointment ? 'bg-brand-red' : 'bg-brand-green/90',
-          ].join(' ')}
-        >
-          {hhmm(block.startMinutes)}
-        </span>
-        {height >= 24 && (
-          <span className="block truncate text-[9.5px] font-semibold leading-tight">
-            {intervention.customerName}
-          </span>
-        )}
-      </button>
+          Het uurblokje, en tegelijk de knop die er een afspraak van maakt.
+          Het staat op élk blok, ook bij een berekend uur — dat is wat het
+          bruikbaar maakt: je leest het uur zonder je af te vragen of er wel een
+          uur is. Groen: berekend, en het schuift mee als er iets vóór deze bon
+          verandert. Rood: met de klant afgesproken.
 
-      {/*
-        Het speldje. Het verandert niets aan hoe deze bon zich laat verslepen —
-        beide soorten gaan even vrij — en zegt alleen of dit uur een afspraak is.
-        Onder de 30 px is er geen ruimte voor een knop die een duim kan raken;
-        dan blijft de kleur van het uurblokje het enige teken, en gaat het
-        speldje via de werkbon zelf.
-      */}
-      {height >= 30 && (
+          Het speldje was eerst een aparte knop van 16 px ernaast. Nagemeten op
+          een echt scherm: dan blijft er van 62 px zo'n 21 px over voor de tekst,
+          en "08:39" past daar niet in — het uur liep over het speldje heen en
+          werd daarna afgekapt tot "0...". Het uur en zijn kleur zijn toch
+          hetzelfde ding, dus is het uur nu zelf de knop. Dat leest ook directer:
+          je tikt op het bolletje dat van kleur verandert.
+        */}
         <button
           type="button"
           onClick={() => onTogglePin(intervention.id)}
           aria-pressed={isAppointment}
           aria-label={
             isAppointment
-              ? `Vast uur weghalen bij ${intervention.customerName}`
-              : `${intervention.customerName} op dit uur vastzetten`
+              ? `Afspraak weghalen bij ${intervention.customerName}`
+              : `Uur van ${intervention.customerName} als afspraak markeren`
           }
-          title={isAppointment ? 'Afspraak — blijft staan' : 'Op dit uur vastzetten'}
+          title={
+            isAppointment
+              ? `Afgesproken met de klant — ${hhmm(block.startMinutes)}`
+              : `Markeren als afspraak — ${hhmm(block.startMinutes)}`
+          }
           className={[
-            'flex w-4 shrink-0 items-center justify-center text-[10px] leading-none',
-            isAppointment ? 'bg-brand-red text-white' : 'bg-black/20 text-white/60',
+            'mx-0.5 mt-0.5 block truncate rounded-sm px-0.5 text-left text-[8.5px] font-bold leading-tight tabular-nums active:opacity-80',
+            isAppointment ? 'bg-brand-red' : 'bg-brand-green/90',
           ].join(' ')}
           style={noSelect}
         >
-          📌
+          {hhmm(block.startMinutes)}
         </button>
-      )}
+
+        <button
+          type="button"
+          onClick={() => onOpen(intervention.id)}
+          className="min-w-0 flex-1 px-1 text-left active:opacity-80"
+          style={noSelect}
+        >
+          {height >= 26 && (
+            <span className="block truncate text-[9.5px] font-semibold leading-tight">
+              {intervention.customerName}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/*
-        Het uur weghalen, zodat het weer berekend wordt. Dit is een van de drie
-        uitwegen uit een botsing, en de enige die anders nergens te vinden was:
-        een bon die eenmaal ergens neergezet is, blijft daar tot iemand dat
-        terugdraait. Hij staat alleen op bonnen die werkelijk een bewaard uur
-        dragen — op de andere valt er niets weg te halen.
+        Het uur weghalen, zodat het weer berekend wordt. Een van de drie uitwegen
+        uit een botsing, en de enige die anders nergens te vinden was: een bon
+        die eenmaal ergens neergezet is, blijft daar tot iemand dat terugdraait.
+        Alleen op bonnen die echt een bewaard uur dragen — op de andere valt er
+        niets weg te halen. Rechtsboven, want de onderrand is het rekhandvat.
       */}
-      {pinned && height >= 30 && (
+      {pinned && height >= 22 && (
         <button
           type="button"
           onClick={() => onClearHour(intervention.id)}
           aria-label={`Uur van ${intervention.customerName} weer laten berekenen`}
           title="Uur weghalen — weer berekenen"
-          className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center bg-black/35 text-[10px] leading-none text-white/80"
+          className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center bg-black/35 text-[10px] leading-none text-white/80"
           style={noSelect}
         >
           ×
         </button>
+      )}
+
+      {/*
+        Uitrekken. De onderrand van het blok — dezelfde plaats als in het
+        prototype, en om dezelfde reden: het is de rand die je verplaatst, dus
+        daar hoort het gebaar te beginnen.
+
+        Dit wijzigt `estimatedMinutes`, hetzelfde veld als de duur op de kaart.
+        Er komt dus niets bij in het model: de schatting was al aanpasbaar, dit
+        is een tweede manier om hem aan te raken — met je vinger op het rooster
+        in plaats van door een getal te typen.
+      */}
+      {height >= 24 && (
+        <span
+          ref={setResizeRef}
+          {...resizeListeners}
+          {...resizeAttributes}
+          aria-label={`Duur van ${intervention.customerName} aanpassen`}
+          className="absolute bottom-0 left-3 right-0.5 flex h-3 touch-none cursor-ns-resize items-end justify-center pb-0.5"
+          style={noSelect}
+        >
+          <span className="block h-0.5 w-5 rounded-full bg-white/65" />
+        </span>
       )}
     </div>
   )

@@ -21,9 +21,10 @@ import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
-import { conflictMessage, orderByHour, snapToStep } from '@/lib/planning/pinnedHour'
+import { conflictMessage, orderByHour, snapDuration } from '@/lib/planning/pinnedHour'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import {
+  enqueuePendingWrite,
   enqueuePlanningWrite,
   getPlannedInterventions,
   updateInterventionSequence,
@@ -34,7 +35,7 @@ import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
 import { OpenPool } from '@/components/DayView/OpenPool'
 import type { Intervention } from '@/types'
 import type { ReactNode } from 'react'
-import { WeekGrid } from './WeekGrid'
+import { RESIZE_PREFIX, WeekGrid } from './WeekGrid'
 
 /**
  * Dezelfde vier lagen als de dagweergave, via dezelfde gedeelde cache — zodat
@@ -315,10 +316,15 @@ export default function WeekView() {
   /**
    * Het speldje omzetten.
    *
-   * Staat er nog geen uur op, dan legt het speldje het uur vast waar de bon nu
-   * getekend staat — dat is wat "deze staat vast op dit uur" betekent voor een
-   * bon waarvan het uur tot nu toe berekend werd. Losmaken laat het uur staan:
-   * er verspringt niets onder je handen, het is gewoon geen afspraak meer.
+   * Staat er nog geen uur op, dan legt dit het uur vast waar de bon nu getekend
+   * staat. Let op het verschil met slepen: daar klikt het uur in op het
+   * kwartier, hier niet. Slepen ís verplaatsen, en dan helpt een raster je
+   * mikken. Markeren is zeggen dat het uur dat er staat afgesproken is — dan
+   * mag 08:39 niet stilletjes 08:45 worden, want dat verschuift een afspraak
+   * die iemand net bevestigd heeft.
+   *
+   * Losmaken laat het uur staan: er verspringt niets onder je handen, het is
+   * alleen geen afspraak meer.
    */
   async function togglePin(workOrderId: string) {
     setRefusal(null)
@@ -337,7 +343,7 @@ export default function WeekView() {
     if (shown === undefined) return
 
     await changeHour(dateStr, workOrderId, {
-      plannedStartMinutes: snapToStep(shown),
+      plannedStartMinutes: Math.round(shown),
       startIsAppointment: true,
     })
   }
@@ -353,8 +359,57 @@ export default function WeekView() {
     })
   }
 
+  /**
+   * De geschatte duur van een bon, uitgerekt met de vinger.
+   *
+   * Schrijft naar `estimatedMinutes` — hetzelfde veld als het duurbolletje op
+   * de kaart, en via dezelfde wachtrij (`update_estimate`). Er komt dus niets
+   * bij in het model; dit is een tweede manier om aan een bestaande schatting
+   * te komen, met een gebaar in plaats van een getal.
+   */
+  async function resizeJob(workOrderId: string, deltaMinutes: number) {
+    const dateStr = dayOf[workOrderId]
+    if (!dateStr) return
+
+    const previousDay = byDate[dateStr] ?? []
+    const target = previousDay.find(i => i.id === workOrderId)
+    if (!target) return
+
+    const next = snapDuration((target.estimatedMinutes ?? 0) + deltaMinutes)
+    if (next === target.estimatedMinutes) return
+
+    const updated: Intervention = { ...target, estimatedMinutes: next }
+    setByDate(current => ({
+      ...current,
+      [dateStr]: (current[dateStr] ?? []).map(i => (i.id === workOrderId ? updated : i)),
+    }))
+
+    try {
+      await upsertIntervention(updated)
+      await enqueuePendingWrite({
+        type: 'update_estimate',
+        createdAt: new Date().toISOString(),
+        payload: { workOrderId, estimatedMinutes: next },
+      })
+      await flushQueue(dateStr)
+    } catch {
+      setByDate(current => ({ ...current, [dateStr]: previousDay }))
+      setRefusal('De duur bewaren is niet gelukt. Probeer het opnieuw.')
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     setRefusal(null)
+
+    // Uitrekken eindigt in dezelfde afhandeling als verslepen, want het is
+    // dezelfde sleepmotor. Het id zegt welk van de twee het was, en dit moet
+    // vóór resolveWeekDrop staan: die kijkt naar waar je losliet, en bij
+    // uitrekken zegt dat niets.
+    const activeId = String(event.active.id)
+    if (activeId.startsWith(RESIZE_PREFIX)) {
+      await resizeJob(activeId.slice(RESIZE_PREFIX.length), (event.delta.y * 60) / pixelsPerHour)
+      return
+    }
 
     const intent = resolveWeekDrop({
       activeId: String(event.active.id),
