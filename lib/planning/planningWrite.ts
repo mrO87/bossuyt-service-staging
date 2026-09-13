@@ -19,6 +19,21 @@ export interface PlanningWritePayload extends Record<string, unknown> {
   date: string
   planningVersion: number
   orderedWorkOrderIds: string[]
+  /**
+   * The hour each work order on the day stands on — an entry per work order,
+   * including the ones with no hour at all.
+   *
+   * The empty entries are the point. This payload states a day's whole result,
+   * so the server clears what the list does not mention; an hour that was taken
+   * away is only ever communicated by its absence.
+   */
+  startTimes: PlanningStartTime[]
+}
+
+export interface PlanningStartTime {
+  workOrderId: string
+  startMinutes: number | null
+  appointment: boolean
 }
 
 /**
@@ -68,6 +83,16 @@ export function buildPlanningWrite(input: {
     date: toLocalDateStr(input.date),
     planningVersion: planningVersionFor(input.day, input.arrivingIds),
     orderedWorkOrderIds: input.day.map(intervention => intervention.id),
+    startTimes: input.day.map(intervention => ({
+      workOrderId: intervention.id,
+      startMinutes: intervention.plannedStartMinutes ?? null,
+      // Never a pin without an hour: that would claim an appointment at no
+      // particular time. The server holds the same rule; this keeps the two
+      // from ever having to disagree about it.
+      appointment: intervention.plannedStartMinutes == null
+        ? false
+        : Boolean(intervention.startIsAppointment),
+    })),
   }
 }
 

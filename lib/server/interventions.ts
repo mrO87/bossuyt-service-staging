@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, notInArray, sql } from 'd
 import type { Intervention, InterventionTechnician, User } from '@/types'
 import { db } from '@/lib/db'
 import { canLeaveTheDay } from '@/lib/planning/dropIntent'
+import { sanitizeStartMinutes } from '@/lib/planning/pinnedHour'
 import { workOrderIntakes } from '@/lib/db/schema'
 import {
   contacts,
@@ -56,6 +57,8 @@ type InterventionCoreRow = {
   ticketDate: Date | null
   createdAt: Date | null
   plannedDate: Date | null
+  plannedStartMinutes: number | null
+  startIsAppointment: boolean
   status: Intervention['status']
   type: Intervention['type']
   description: string | null
@@ -133,6 +136,8 @@ function toIntervention(
     ticketDate: row.ticketDate?.toISOString(),
     createdAt: row.createdAt?.toISOString(),
     plannedDate: row.plannedDate?.toISOString(),
+    plannedStartMinutes: row.plannedStartMinutes ?? undefined,
+    startIsAppointment: row.startIsAppointment,
     status: row.status,
     type: row.type,
     description: row.description ?? undefined,
@@ -246,6 +251,8 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
       ticketDate: workOrders.ticketDate,
       createdAt: workOrders.createdAt,
       plannedDate: workOrders.plannedDate,
+      plannedStartMinutes: workOrders.plannedStartMinutes,
+      startIsAppointment: workOrders.startIsAppointment,
       status: workOrders.status,
       type: workOrders.type,
       description: workOrders.description,
@@ -452,6 +459,19 @@ export async function savePlanningSnapshot(input: {
   date: string
   planningVersion: number
   orderedWorkOrderIds: string[]
+  /**
+   * The hours on this day, for the work orders that have one.
+   *
+   * Like the order itself, this states a result rather than a change: a work
+   * order in `orderedWorkOrderIds` that this list does not name has no hour,
+   * and gets its hour cleared. That is what keeps the write idempotent.
+   *
+   * Leaving the field out entirely is not the same as passing an empty list. It
+   * means "this client knows nothing about hours" — which is what every write
+   * queued by a v1.60 phone says — and then no hour is touched. An empty list
+   * from a client that does know is a day where nothing is pinned, and clears.
+   */
+  startTimes?: Array<{ workOrderId: string; startMinutes: number | null; appointment: boolean }>
 }): Promise<PlanningSnapshotResult> {
   const currentPlanningVersion = await getPlanningVersion(input.technicianId, input.date)
   const latest = await getTodayInterventions(input.technicianId, input.date)
@@ -503,6 +523,12 @@ export async function savePlanningSnapshot(input: {
         .update(workOrders)
         .set({
           plannedDate: null,
+          // An hour without a day means nothing, so it goes with the day. This
+          // is also what makes a day-to-day move forget its hour: that move is
+          // a release from one day and an arrival on the other, and both ends
+          // clear. Nothing has to remember to do it.
+          plannedStartMinutes: null,
+          startIsAppointment: false,
           plannedByRole: input.actor.role,
           ...(current?.status === 'gepland' || current?.status === 'onderweg'
             ? { status: 'aangemaakt' as const }
@@ -533,6 +559,12 @@ export async function savePlanningSnapshot(input: {
         .update(workOrders)
         .set({
           plannedDate: dayStart,
+          // Arriving on a day means arriving without an hour; the pass below
+          // gives one back if this write asked for one. A work order coming
+          // from the pool has none to begin with, but one moved from another
+          // day does, and 09:00 on Tuesday is not 09:00 on Wednesday.
+          plannedStartMinutes: null,
+          startIsAppointment: false,
           plannedByRole: input.actor.role,
           ...(current?.status === 'aangemaakt' ? { status: 'gepland' as const } : {}),
         })
@@ -553,6 +585,31 @@ export async function savePlanningSnapshot(input: {
           ),
       ),
     )
+
+    // ── the hours ─────────────────────────────────────────────────────────
+    // Only when the client said something about hours at all — see the comment
+    // on `startTimes`. Every work order on the day is written, including the
+    // ones being cleared, because the list states the day's whole result.
+    if (input.startTimes) {
+      const wanted = new Map(input.startTimes.map(entry => [entry.workOrderId, entry]))
+
+      await Promise.all(
+        requested.map(workOrderId => {
+          const entry = wanted.get(workOrderId)
+          const minutes = sanitizeStartMinutes(entry?.startMinutes)
+          return tx
+            .update(workOrders)
+            .set({
+              plannedStartMinutes: minutes,
+              // A pin on a work order with no hour would claim an appointment
+              // at no particular time. The two are stored apart, but only this
+              // pairing means anything.
+              startIsAppointment: minutes === null ? false : Boolean(entry?.appointment),
+            })
+            .where(eq(workOrders.id, workOrderId))
+        }),
+      )
+    }
 
     if (touched.length > 0) {
       await tx

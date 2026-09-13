@@ -101,6 +101,26 @@ describe('buildPlanningWrite', () => {
     expect(payload.planningVersion).toBe(4)
   })
 
+  it('sends the hours along with the order, for every work order on the day', () => {
+    // De lijst beschrijft de hele dag, ook de bonnen zonder uur: de server
+    // leest hem als resultaat, niet als wijziging, en wist wat er niet in
+    // staat. Zonder de lege regels zou een weggehaald uur nooit aankomen.
+    const payload = buildPlanningWrite({
+      day: [
+        { id: 'wo-1', planningVersion: 2, plannedStartMinutes: 9 * 60, startIsAppointment: true },
+        { id: 'wo-2', planningVersion: 2 },
+      ] as unknown as Intervention[],
+      actor,
+      technicianId: 'u1',
+      date: new Date(2026, 8, 14),
+    })
+
+    expect(payload.startTimes).toEqual([
+      { workOrderId: 'wo-1', startMinutes: 9 * 60, appointment: true },
+      { workOrderId: 'wo-2', startMinutes: null, appointment: false },
+    ])
+  })
+
   it('records who acted, separately from whose day it is', () => {
     // Today they are the same person. They stop being the same the moment a
     // planner moves someone else's work, which is what the notice will read.

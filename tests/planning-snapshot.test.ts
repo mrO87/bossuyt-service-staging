@@ -128,14 +128,31 @@ describe('savePlanningSnapshot', () => {
     await cleanup(ids)
   })
 
-  async function snapshot(orderedWorkOrderIds: string[], version?: number) {
+  async function snapshot(
+    orderedWorkOrderIds: string[],
+    version?: number,
+    startTimes?: Array<{ workOrderId: string; startMinutes: number | null; appointment: boolean }>,
+  ) {
     return savePlanningSnapshot({
       actor,
       technicianId,
       date: DATE,
       planningVersion: version ?? (await getPlanningVersion(technicianId, DATE)),
       orderedWorkOrderIds,
+      startTimes,
     })
+  }
+
+  /** Wat er van een werkbon in de database staat, ongefilterd door de lijsten. */
+  async function storedHour(workOrderId: string) {
+    const [row] = await testDb
+      .select({
+        minutes: workOrders.plannedStartMinutes,
+        appointment: workOrders.startIsAppointment,
+      })
+      .from(workOrders)
+      .where(eq(workOrders.id, workOrderId))
+    return row
   }
 
   it('reorders a day without changing what is on it', async () => {
@@ -292,6 +309,126 @@ describe('savePlanningSnapshot', () => {
       expect(result.ok).toBe(false)
       if (result.ok) return
       expect(result.reason).toBe('conflict')
+    })
+  })
+
+  /**
+   * Het vastgezette uur.
+   *
+   * Dit is het eerste uur dat de app onthoudt in plaats van berekent, en het
+   * reist door dezelfde deur als de volgorde: één momentopname van een hele
+   * dag. Daarom gelden hier dezelfde twee eigenschappen — wat er niet in staat
+   * wordt gewist, en tweemaal toepassen verandert niets meer.
+   */
+  describe('het uur waarop een bon staat', () => {
+    it('stores the hour and the pin that came with the day', async () => {
+      const bon = await onTheDay(1)
+
+      const result = await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 9 * 60 + 15, appointment: true },
+      ])
+
+      expect(result.ok).toBe(true)
+      expect(await storedHour(bon)).toEqual({ minutes: 9 * 60 + 15, appointment: true })
+      const day = await getTodayInterventions(technicianId, DATE)
+      expect(day.planned[0].plannedStartMinutes).toBe(9 * 60 + 15)
+      expect(day.planned[0].startIsAppointment).toBe(true)
+    })
+
+    it('clears the hour of a work order the list no longer mentions', async () => {
+      // De lijst beschrijft de hele dag. Een uur weghalen is dus: hem niet meer
+      // noemen. Zonder deze regel kon een weggehaald uur nooit vertrekken.
+      const bon = await onTheDay(1)
+      const first = await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 10 * 60, appointment: true },
+      ])
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+
+      await snapshot([bon], first.planningVersion, [])
+
+      expect(await storedHour(bon)).toEqual({ minutes: null, appointment: false })
+    })
+
+    it('leaves the hours alone for a write that says nothing about them', async () => {
+      // Een telefoon die een week offline stond stuurt schrijfacties van vóór
+      // v1.61. Die weten niets van uren en mogen er dus ook niets aan wijzigen.
+      const bon = await onTheDay(1)
+      const first = await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 10 * 60, appointment: true },
+      ])
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+
+      await snapshot([bon], first.planningVersion)
+
+      expect(await storedHour(bon)).toEqual({ minutes: 10 * 60, appointment: true })
+    })
+
+    it('drops the hour when a work order goes back to the pool', async () => {
+      const bon = await onTheDay(1)
+      const first = await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 8 * 60 + 30, appointment: true },
+      ])
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+
+      await snapshot([], first.planningVersion, [])
+
+      // Een uur zonder dag betekent niets, dus het gaat mee met de dag. Dit is
+      // ook wat een verplaatsing naar een andere dag het uur laat vergeten:
+      // die verplaatsing is een vertrek hier en een aankomst daar.
+      expect(await storedHour(bon)).toEqual({ minutes: null, appointment: false })
+    })
+
+    it('gives an arriving work order no hour, whatever it carried', async () => {
+      const arriving = await inThePool()
+      // Zoals een bon die van een andere dag komt: hij draagt daar nog een uur.
+      await testDb
+        .update(workOrders)
+        .set({ plannedStartMinutes: 14 * 60, startIsAppointment: true })
+        .where(eq(workOrders.id, arriving))
+
+      await snapshot([arriving], undefined, [])
+
+      expect(await storedHour(arriving)).toEqual({ minutes: null, appointment: false })
+    })
+
+    it('refuses a pin on a work order with no hour', async () => {
+      // Een speldje zonder uur zou een afspraak op geen enkel tijdstip beweren.
+      const bon = await onTheDay(1)
+
+      await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: null, appointment: true },
+      ])
+
+      expect(await storedHour(bon)).toEqual({ minutes: null, appointment: false })
+    })
+
+    it('stores nothing for an hour that is not an hour', async () => {
+      // De rand van de app: een herspeelde schrijfactie, een oude tab, curl.
+      const bon = await onTheDay(1)
+
+      await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 99 * 60, appointment: true },
+      ])
+
+      expect(await storedHour(bon)).toEqual({ minutes: null, appointment: false })
+    })
+
+    it('is idempotent for hours too', async () => {
+      const bon = await onTheDay(1)
+      const first = await snapshot([bon], undefined, [
+        { workOrderId: bon, startMinutes: 9 * 60, appointment: false },
+      ])
+      expect(first.ok).toBe(true)
+      if (!first.ok) return
+
+      await snapshot([bon], first.planningVersion, [
+        { workOrderId: bon, startMinutes: 9 * 60, appointment: false },
+      ])
+
+      expect(await storedHour(bon)).toEqual({ minutes: 9 * 60, appointment: false })
     })
   })
 

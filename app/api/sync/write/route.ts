@@ -16,6 +16,12 @@ type UpdatePlanningPayload = {
   date: string
   planningVersion: number
   orderedWorkOrderIds: string[]
+  /**
+   * Absent in every write queued before v1.61. It has to stay optional all the
+   * way down: a phone that has been offline for a week replays writes that know
+   * nothing about hours, and those must not clear the hours someone else set.
+   */
+  startTimes?: Array<{ workOrderId: string; startMinutes: number | null; appointment: boolean }>
   actorId?: string
   actorRole?: User['role']
 }
@@ -43,6 +49,7 @@ export async function POST(req: NextRequest) {
     date,
     planningVersion,
     orderedWorkOrderIds,
+    startTimes,
     actorId,
     actorRole,
   } = body.payload
@@ -63,6 +70,11 @@ export async function POST(req: NextRequest) {
       date,
       planningVersion,
       orderedWorkOrderIds,
+      // Passed through as sent, including absent: savePlanningSnapshot reads
+      // "no field" as "this client knows nothing about hours" and leaves them
+      // alone. Only the shape is checked here; what counts as a real hour is
+      // sanitizeStartMinutes' business, and lives in one place.
+      startTimes: Array.isArray(startTimes) ? startTimes : undefined,
     })
 
     if (!result.ok) {
