@@ -7,8 +7,10 @@
  *
  * Ze bestaan alleen terwijl er gesleept wordt. Permanent zouden ze aan beide
  * kanten ruimte kosten voor iets wat je zelden doet — en op een kolom van 62 px
- * is die ruimte er niet. De prijs is dat ze pas ontdekt worden als je toevallig
- * naar de rand sleept; dat is bewust aanvaard en staat in het ontwerp.
+ * is die ruimte er niet. Ze zijn 20 px breed: smal genoeg om een kolom niet te
+ * verbergen, breed genoeg om met een duim te raken. De prijs is dat ze pas
+ * ontdekt worden als je toevallig naar de rand sleept; dat is bewust
+ * aanvaard en staat in het ontwerp.
  */
 'use client'
 
@@ -40,7 +42,7 @@ function Edge({
       ref={setNodeRef}
       aria-hidden={!visible}
       className={[
-        'pointer-events-none absolute inset-y-0 z-30 flex w-8 items-center justify-center transition-opacity',
+        'pointer-events-none absolute inset-y-0 z-30 flex w-5 items-center justify-center transition-opacity',
         edge === 'prev' ? 'left-0' : 'right-0',
         visible ? 'opacity-100' : 'opacity-0',
         isOver ? 'bg-brand-orange' : 'bg-brand-dark/90',

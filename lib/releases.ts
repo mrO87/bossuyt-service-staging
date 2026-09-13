@@ -34,7 +34,8 @@ export const RELEASES: ReleaseEntry[] = [
         title: 'Naar de vorige of volgende week slepen',
         body:
           'Aan de linker- en rechterkant van het weekrooster verschijnen tijdens het '
-          + 'slepen twee smalle stroken. Laat je een bon op een van de twee los, dan '
+          + 'slepen twee smalle stroken van 20 px — smal genoeg om de uurkolom niet te '
+          + 'verbergen. Laat je een bon op een van de twee los, dan '
           + 'springt hij een week terug of vooruit, naar dezelfde weekdag. Buiten het '
           + 'slepen zijn ze onzichtbaar, zodat ze geen plaats innemen op een telefoon.',
       },
@@ -42,8 +43,9 @@ export const RELEASES: ReleaseEntry[] = [
         label: 'Nieuw',
         title: 'De geplande dag en het uur staan nu ook in de werkbon zelf',
         body:
-          'Bovenaan een werkbon staat voortaan een datumveld en een uurveld, met een knop '
-          + 'om dat uur als afgesproken te markeren. Zo verplaats je een bon naar eender '
+          'Bovenaan een werkbon staat voortaan een datumveld, een uurveld en een vinkje '
+          + 'om het uur vast te zetten — samen op één regel, zodat het vak klein blijft. '
+          + 'Zo verplaats je een bon naar eender '
           + 'welke dag zonder hem te slepen, ook buiten de week die je op het rooster ziet. '
           + 'Botst het uur met de rest van die dag, dan lees je daar dezelfde melding als '
           + 'op het rooster: de app rekent de doeldag door met dezelfde motor, zodat de '

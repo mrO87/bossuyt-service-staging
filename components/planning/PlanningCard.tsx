@@ -46,7 +46,9 @@ function toDateInput(iso: string | undefined): string {
 }
 
 function dayLabel(dateStr: string): string {
-  return new Intl.DateTimeFormat('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' })
+  // Kort: "do 10 sep". De lange vorm kostte een halve regel in een kaart die
+  // juist kleiner moest.
+  return new Intl.DateTimeFormat('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' })
     .format(new Date(`${dateStr}T12:00:00`))
 }
 
@@ -176,85 +178,96 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
   }
 
   return (
-    <section className="mb-3 rounded-xl border border-stroke bg-white p-3">
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-faint">Planning</h2>
-
+    <section className="mb-3 rounded-xl border border-stroke bg-white px-3 py-2">
       {locked ? (
-        <p className="text-sm text-ink-soft">
-          Er wordt al aan deze werkbon gewerkt. Dag en uur liggen vast tot hij afgerond is.
+        <p className="text-xs text-ink-soft">
+          <span className="font-semibold text-ink">Vergrendeld</span>
+          {' '}— er wordt al aan deze bon gewerkt.
         </p>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Dag</span>
+          {/*
+            Eén rij: dag, uur, vinkje — meer staat er niet, en er staat ook geen
+            opschrift boven. De regel eronder noemt de dag al, dus het opschrift
+            kostte alleen breedte. Die breedte is krap: een telefoon die in
+            12-uursnotatie staat maakt het uurveld een stuk breder, en dan moet
+            de rij nog altijd passen. Het vinkje staat er altijd, ook zonder
+            uur — dan uitgeschakeld. Verschijnen en verdwijnen zou de rij van
+            breedte doen wisselen terwijl je hem invult.
+          */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id={`planning-date-${intervention.id}`}
+              type="date"
+              aria-label="Geplande dag"
+              value={date}
+              onChange={event => changeDate(event.target.value)}
+              className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink"
+            />
+
+            {/* Geen vaste breedte: hoe breed een uurveld moet zijn hangt af van de
+                taalinstelling van de telefoon — 24 uur is smaller dan 12 uur met
+                AM/PM. Een maat die hier past, knipt daar het uur af. */}
+            <input
+              id={`planning-hour-${intervention.id}`}
+              type="time"
+              step={900}
+              aria-label="Geplande uur"
+              disabled={!date}
+              value={minutes === null ? '' : hhmm(minutes)}
+              onChange={event => changeHour(event.target.value)}
+              className="h-9 rounded-md border border-stroke px-1.5 text-xs tabular-nums text-ink disabled:opacity-40"
+            />
+
+            <label
+              className={[
+                'flex h-9 items-center gap-1.5 pr-1 text-xs',
+                minutes === null ? 'text-ink-faint' : 'text-ink-soft',
+              ].join(' ')}
+            >
               <input
-                id={`planning-date-${intervention.id}`}
-                type="date"
-                value={date}
-                onChange={event => changeDate(event.target.value)}
-                className="min-h-11 rounded-lg border border-stroke px-2 text-sm tabular-nums text-ink"
+                type="checkbox"
+                checked={appointment}
+                disabled={minutes === null}
+                onChange={toggleAppointment}
+                aria-label="Vast uur afgesproken met de klant"
+                className="h-5 w-5 accent-brand-red disabled:opacity-40"
               />
+              vast
             </label>
 
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Uur</span>
-              <input
-                id={`planning-hour-${intervention.id}`}
-                type="time"
-                step={900}
-                disabled={!date}
-                value={minutes === null ? '' : hhmm(minutes)}
-                onChange={event => changeHour(event.target.value)}
-                className="min-h-11 rounded-lg border border-stroke px-2 text-sm tabular-nums text-ink disabled:opacity-50"
-              />
-            </label>
-
-            {date && minutes !== null && (
-              <button
-                type="button"
-                onClick={toggleAppointment}
-                aria-pressed={appointment}
-                className={[
-                  'min-h-11 rounded-lg border px-3 text-xs font-semibold',
-                  appointment
-                    ? 'border-brand-red bg-brand-red text-white'
-                    : 'border-stroke text-ink-soft',
-                ].join(' ')}
-              >
-                {appointment ? 'Afgesproken' : 'Markeer als afspraak'}
-              </button>
-            )}
+            {saving && <span className="text-[10px] text-ink-faint">bewaren…</span>}
           </div>
 
-          <div className="mt-3 text-xs">
-            {!date && (
-              <p className="text-ink-soft">
-                Geen dag gekozen — deze bon staat in de open pool.
-              </p>
-            )}
+          {date && clash ? (
+            // De enige plek waar de kaart groeit. Een botsing is het moment
+            // waarop de woorden hun ruimte verdienen: zonder de drie uitwegen
+            // weet je wel dát het niet kan, maar niet wat je eraan doet.
+            <p className="mt-1.5 rounded-md border-l-4 border-brand-red bg-brand-red/10 px-2 py-1.5 text-[11px] text-ink">
+              {conflictMessage(intervention.customerName)}
+              <span className="mt-0.5 block tabular-nums text-ink-soft">
+                Ten vroegste {hhmm(clash.earliestMinutes)}
+              </span>
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-ink-soft">
+              {!date
+                ? 'Nog geen dag — staat in de open pool.'
+                : mine
+                  ? (
+                    <>
+                      {dayLabel(date)}{' '}
+                      <span className="font-semibold tabular-nums text-ink">
+                        {hhmm(mine.startMinutes)}–{hhmm(mine.endMinutes)}
+                      </span>
+                      {' '}{minutes === null ? 'berekend' : appointment ? 'afgesproken' : 'gekozen'}
+                    </>
+                  )
+                  : dayLabel(date)}
+            </p>
+          )}
 
-            {date && clash && (
-              <p className="rounded-lg border-l-4 border-brand-red bg-brand-red/10 px-3 py-2 text-ink">
-                {conflictMessage(intervention.customerName)}
-                <span className="mt-1 block tabular-nums text-ink-soft">
-                  Ten vroegste {hhmm(clash.earliestMinutes)}
-                </span>
-              </p>
-            )}
-
-            {date && !clash && mine && (
-              <p className="text-ink-soft">
-                {dayLabel(date)} · {minutes === null ? 'berekend uur' : 'vast uur'}{' '}
-                <span className="font-semibold tabular-nums text-ink">
-                  {hhmm(mine.startMinutes)}–{hhmm(mine.endMinutes)}
-                </span>
-              </p>
-            )}
-          </div>
-
-          {saving && <p className="mt-2 text-[11px] text-ink-faint">Bewaren…</p>}
-          {error && <p className="mt-2 text-[11px] text-brand-red">{error}</p>}
+          {error && <p className="mt-1 text-[11px] text-brand-red">{error}</p>}
         </>
       )}
     </section>
