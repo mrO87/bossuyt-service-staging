@@ -130,9 +130,10 @@ Dat derde punt is de kern. De splitsing is een gok — `SALAMANDER TECNO QSET
 regel bewaard blijft, kan de lijstweergave later corrigeren zonder dat iemand
 de papieren bon opnieuw moet opzoeken.
 
-**Gevolg dat de gebruiker moet kennen:** een verkeerd geraden merk betekent dat
-`device_documents` niets vindt. Het toestel werkt, de documenten ontbreken. Dat
-is het aanvaarde nadeel van "er staat alvast iets".
+**Een verkeerd geraden merk is niet erg**, en dat is met opzet zo ontworpen —
+zie "Een toesteltype aanduiden" hieronder. Merk en model zijn het etiket van de
+bon; de documenten hangen aan een aangeduid type. Tot iemand dat type aanduidt
+zijn er geen documenten, daarna wel, en de gok heeft niets kapotgemaakt.
 
 ## Zoeken bij de klant
 
@@ -148,22 +149,62 @@ Gegroepeerd en niet als één lijst: een toestel staat ergens, en twee identieke
 fornuizen op twee adressen zijn niet uitwisselbaar. De groepering maakt zichtbaar
 welk toestel je kiest.
 
-## Handleidingen per toesteltype
+## Een toesteltype aanduiden
 
-Hier is niets te bouwen. `device_documents` is uniek op `(brand, model)` — dat
-ís het toesteltype. Elk toestel met datzelfde merk en model vindt dezelfde
-schema's, doorsneetekeningen en handleidingen.
+`device_documents` is vandaag uniek op `(brand, model)` en draagt de schema's,
+doorsneetekeningen en handleidingen. Dat ís het toesteltype — de tabelnaam zegt
+"documenten", de betekenis is "type". Die naam blijft voorlopig; hem wijzigen
+raakt meer dan dit ontwerp.
 
-Wat dit ontwerp eraan toevoegt is dat toestellen voortaan mét merk en model
-worden aangemaakt in plaats van helemaal niet.
+De documenten worden vandaag gezocht met een **tekstvergelijking**:
+`where brand = X and model = Y`, exact. Dat is te broos voor wat hier moet
+gebeuren. Een type aanduiden zou dan betekenen dat je die twee teksten letterlijk
+overschrijft: één spatie ernaast en er is niets gevonden, en wie later de naam
+van een type bijwerkt, verbreekt stilzwijgend de koppeling van elk toestel dat
+erop leunde.
+
+Daarom een echte verwijzing:
+
+```
+devices.device_type_id  → device_documents.id   (nullable, set null bij verwijderen)
+```
+
+- **Leeg bij aanmaken uit een bon.** Het toestel bestaat, met zijn unitnummer,
+  zijn geraden merk en model, en zijn bewaarde bronregel. Documenten heeft het
+  nog niet.
+- **Aanduiden is één handeling.** Kies een bekend type uit de lijst; vanaf dat
+  moment heeft het toestel alle documenten van dat type. Ook elk volgend toestel
+  dat je op datzelfde type zet.
+- **Merk en model blijven staan zoals ze van de bon kwamen.** Ze zijn het
+  etiket, niet de sleutel. Dat is precies waarom de gok in de splitser
+  onschadelijk is.
+
+Het opzoeken van documenten krijgt daarmee twee wegen, in deze volgorde:
+
+1. is er een `device_type_id`, dan gelden díe documenten;
+2. anders de oude tekstvergelijking op merk en model.
+
+De tweede weg blijft bestaan voor toestellen die er al staan, en omdat een
+toestel dat toevallig exact overeenkomt meteen zijn documenten hoort te hebben.
+Hij is de terugval, niet de hoofdweg.
+
+### Wat dit oplevert dat een tekstvergelijking niet kan
+
+- Een type hernoemen breekt niets.
+- Je kan zien hoeveel toestellen op een type staan — en dus of het de moeite is
+  er een handleiding bij te zoeken.
+- Twee schrijfwijzen van hetzelfde type (`GICO` en `Gico`) kunnen naar één type
+  wijzen in plaats van twee halve verzamelingen documenten te worden.
 
 ## Buiten dit ontwerp
 
 - **Typeplaatje fotograferen.** Eigen ronde, eigen uitleeswerk.
 - **Onderdelen en verslag per toestel.** Uitdrukkelijk uitgesteld tot de
   gebruiker het in de praktijk gezien heeft. De koppeltabel houdt de deur open.
-- **De lijstweergave om toestelgegevens te corrigeren.** Afgesproken als
-  volgende ronde, niet deze.
+- **De lijstweergave om toestelgegevens te corrigeren**, en daarin het
+  aanduiden van een toesteltype. Afgesproken als volgende ronde, niet deze.
+  Dit ontwerp legt er wel de bodem voor: `device_type_id` bestaat dan al, en de
+  toestellen die nu binnenkomen zijn dan aan te duiden zonder migratie.
 
 ## Testen
 
@@ -187,6 +228,8 @@ Twee handmatige migraties, op **beide** databases (`bossuyt_staging` en
 
 1. `work_order_devices` aanmaken.
 2. `devices.source_label` toevoegen (`text`, nullable).
+3. `devices.device_type_id` toevoegen (`text`, nullable, verwijst naar
+   `device_documents.id`, `on delete set null`).
 
 Bestaande werkbonnen met een `device_id` krijgen één rij in de koppeltabel, met
 `position` 1. Zo leest de nieuwe code één waarheid, ook voor oude bonnen.
