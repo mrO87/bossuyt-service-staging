@@ -375,19 +375,26 @@ export const ZONES: Record<WerkbonField, Zone> = {
   phone:          { x1: 128, y1: 74,   x2: 204, y2: 86 },
   closingDay:     { x1: 128, y1: 85,   x2: 204, y2: 95 },
 
-  // Device row: four columns between DR_TOP (95.5) and DR_BOTTOM (120), labels
-  // at DR_TOP + 5 and values at DR_TOP + 12.
-  unitNumber:        { x1: 12,  y1: 92, x2: 36,  y2: 112 },
-  deviceDescription: { x1: 36,  y1: 92, x2: 127, y2: 112 },
-  deliveryDate:      { x1: 127, y1: 92, x2: 158, y2: 112 },
-  warrantyUntil:     { x1: 158, y1: 92, x2: 204, y2: 112 },
+  // De toestellentabel: vier kolommen, en zoveel rijen als de bon er draagt.
+  //
+  // De onderkant stond op 112 en dat was te ondiep. Nagemeten op de Trianon-bon
+  // (drie toestellen, gefotografeerd met een gsm): de rijen liggen op y 103.7,
+  // 107.8 en 112.1, en de laatste loopt door tot 117.7. Met 112 viel de derde
+  // rij er helemaal buiten en de tweede voor de helft. De klantomschrijving
+  // eronder begint pas op 122.8, dus 121 is ruim en botst niet.
+  unitNumber:        { x1: 12,  y1: 92, x2: 36,  y2: 121 },
+  deviceDescription: { x1: 36,  y1: 92, x2: 127, y2: 121 },
+  deliveryDate:      { x1: 127, y1: 92, x2: 158, y2: 121 },
+  warrantyUntil:     { x1: 158, y1: 92, x2: 204, y2: 121 },
 
   // Customer description: label at 123.5, up to three lines beneath it. The
   // band reaches past those lines on purpose — a truncated description is
   // invisible to the person checking the form, whereas a stray word is not.
   // The technician's report below is a label of its own, so it terminates this
   // field's text rather than being swept into it.
-  description: { x1: 12, y1: 113, x2: 204, y2: 140 },
+  // Begon op 113 en overlapte daarmee de tweede en derde toestelrij — die
+  // liepen op de Trianon-bon door tot 117.7. Het eigen blok begint op 122.8.
+  description: { x1: 12, y1: 121, x2: 204, y2: 140 },
 }
 
 // ── Step 4: reading a value out of the collected text ────────────────────────
@@ -650,6 +657,152 @@ const byPattern = (re: RegExp) => (text: string) => re.exec(text)?.[1]
 function readZoneOnly(fragments: Fragment[], field: WerkbonField): { value: string; source: FieldSource } {
   const value = plain(zoneText(fragments, ZONES[field], field, true))
   return value ? { value, source: 'zone' } : { value: '', source: 'empty' }
+}
+
+/**
+ * Eén toestel zoals het op de bon staat.
+ *
+ * Ruwe tekst, geen oordeel: `description` is de regel zoals docling hem gaf, en
+ * die kan aaneengeplakt zijn. Merk en model worden er elders uit gehaald
+ * (`splitDeviceLabel`), zodat dit stuk alleen over de pagina hoeft na te denken
+ * en niet over wat de woorden betekenen.
+ */
+export interface ExtractedDevice {
+  unitNumber: string
+  description: string
+  deliveryDate: string
+  warrantyUntil: string
+}
+
+/**
+ * Twee fragmenten horen bij dezelfde rij wanneer hun verticale midden hooguit
+ * zoveel millimeter uit elkaar ligt.
+ *
+ * Gemeten op de Trianon-bon: binnen een rij liggen de middens hooguit 1,1 mm
+ * uit elkaar, tussen twee rijen minstens 3,1 mm. Twee millimeter valt daar
+ * netjes tussen en heeft aan beide kanten lucht.
+ */
+const DEVICE_ROW_TOLERANCE_MM = 2
+
+/**
+ * Meer rijen dan dit betekent dat het groeperen mislukt is.
+ *
+ * Het formulier heeft er vier of vijf. Komt er een veelvoud uit, dan is elk
+ * fragment zijn eigen rij geworden — dan is niets teruggeven eerlijker dan
+ * twintig halve toestellen aanmaken die iemand met de hand moet opruimen.
+ */
+const MAX_DEVICE_ROWS = 8
+
+/** De opschriften die in de toestellenband staan en geen waarde zijn. */
+const DEVICE_LABELS = [
+  'UNIT N°',
+  'OMSCHRIJVING | DÉSIGNATION',
+  'LEVERDATUM',
+  'GARANTIE',
+].map(normalise)
+
+function isDeviceLabel(text: string): boolean {
+  const flat = normalise(text)
+  if (!flat) return true
+  return DEVICE_LABELS.some(label => flat === label || flat.startsWith(label))
+}
+
+/** Het verticale midden van een fragment. */
+function middle(fragment: Fragment): number {
+  return (fragment.y1 + fragment.y2) / 2
+}
+
+/** Hoeveel een fragment horizontaal in een kolom valt, in millimeters. */
+function horizontalOverlap(fragment: Fragment, zone: Zone): number {
+  return Math.min(fragment.x2, zone.x2) - Math.max(fragment.x1, zone.x1)
+}
+
+/**
+ * De toestellen die op de bon staan, één per rij.
+ *
+ * Dit kon niet met de gewone zonelezer: die plakt alles binnen een rechthoek
+ * aan elkaar, en dan worden drie toestellen één brei. De fragmenten dragen hun
+ * plaats op de pagina, dus de rijen zijn terug te vinden door op hoogte te
+ * groeperen — en dat is ook precies hoe een mens het formulier leest.
+ *
+ * Een rij zonder unitnummer én zonder omschrijving is een lege lijn op het
+ * formulier en telt niet mee.
+ */
+export function extractDevices(fragments: Fragment[]): ExtractedDevice[] {
+  const band: Zone = {
+    x1: ZONES.unitNumber.x1,
+    y1: ZONES.unitNumber.y1,
+    x2: ZONES.warrantyUntil.x2,
+    y2: ZONES.unitNumber.y2,
+  }
+
+  const inBand = collect(fragments, band)
+    // Het midden moet in de band liggen, niet zomaar een rand.
+    //
+    // `collect` neemt alles wat de rechthoek raakt, en dat is hier te gulzig:
+    // het ticketblok linksboven loopt van y 69,5 tot 94 en schoof met zijn
+    // onderrand net over de bovenkant van de band. Het werd daarmee een vierde
+    // toestel, met een ticketnummer als omschrijving.
+    //
+    // Dezelfde regel als bij het groeperen hieronder: een fragment hoort bij de
+    // rij waar zijn midden ligt.
+    .filter(f => middle(f) >= band.y1 && middle(f) <= band.y2)
+    .filter(f => !isDeviceLabel(f.text))
+
+  // Op hoogte groeperen. `collect` levert al van boven naar onder, dus een rij
+  // is af zodra een fragment te ver onder het lopende midden valt.
+  const rows: Fragment[][] = []
+  for (const fragment of inBand) {
+    const current = rows[rows.length - 1]
+    const sameRow =
+      current && Math.abs(middle(fragment) - middle(current[0])) <= DEVICE_ROW_TOLERANCE_MM
+
+    if (sameRow) current.push(fragment)
+    else rows.push([fragment])
+  }
+
+  if (rows.length > MAX_DEVICE_ROWS) return []
+
+  const columns = [
+    ['unitNumber', ZONES.unitNumber],
+    ['description', ZONES.deviceDescription],
+    ['deliveryDate', ZONES.deliveryDate],
+    ['warrantyUntil', ZONES.warrantyUntil],
+  ] as const
+
+  const devices: ExtractedDevice[] = []
+
+  for (const row of rows) {
+    const cells: Record<string, string[]> = {
+      unitNumber: [], description: [], deliveryDate: [], warrantyUntil: [],
+    }
+
+    for (const fragment of row) {
+      // De kolom waarin dit fragment het meest ligt. Meest en niet "helemaal":
+      // een omschrijving die over de kolomrand schuift hoort nog altijd bij de
+      // omschrijving.
+      let best: string | null = null
+      let bestOverlap = 0
+      for (const [name, zone] of columns) {
+        const overlap = horizontalOverlap(fragment, zone)
+        if (overlap > bestOverlap) { best = name; bestOverlap = overlap }
+      }
+      if (best) cells[best].push(fragment.text)
+    }
+
+    const unitNumber = cells.unitNumber.join(' ').trim()
+    const description = cells.description.join(' ').trim()
+    if (!unitNumber && !description) continue
+
+    devices.push({
+      unitNumber,
+      description,
+      deliveryDate: parsePrintedDate(cells.deliveryDate.join(' ')) ?? '',
+      warrantyUntil: parsePrintedDate(cells.warrantyUntil.join(' ')) ?? '',
+    })
+  }
+
+  return devices
 }
 
 /**
