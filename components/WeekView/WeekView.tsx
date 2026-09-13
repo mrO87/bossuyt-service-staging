@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import {
   DndContext, MeasuringStrategy, PointerSensor, TouchSensor, closestCenter, useDroppable,
   useSensor, useSensors,
-  type DragEndEvent, type DragMoveEvent, type DragStartEvent,
+  type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSettings'
 import { useTasks } from '@/lib/task-store'
@@ -77,6 +77,22 @@ type DragPreview =
       /** Het uur waar het nu staat, ingeklikt op het kwartier. */
       startMinutes: number
       baseline: SpanMap
+      /**
+       * Of de vinger nog boven de eigen dag hangt.
+       *
+       * Een uur zetten en naar een andere dag verhuizen zijn twee verschillende
+       * bewegingen die met hetzelfde gebaar beginnen; welke het wordt, weet je
+       * pas als je ziet waar de vinger uitkomt. Zolang hij boven de eigen dag
+       * blijft, is het een uur en rekent die dag mee. Gaat hij naar een andere
+       * kolom of naar de pool, dan is het een verhuizing en heeft dat uur geen
+       * betekenis meer — dan hoort de oude dag stil te blijven staan.
+       *
+       * Zonder dit onderscheid herschikte de oude dag zich zodra je zijwaarts
+       * begon te slepen: het uur klikte in op het kwartier, dat gold als een
+       * vastgezet uur, en alle andere bonnen van die dag schoven mee voor een
+       * bon die net aan het vertrekken was.
+       */
+      overOwnDay: boolean
     }
   | {
       kind: 'resize'
@@ -158,7 +174,12 @@ export default function WeekView() {
       // vergelijkt het blok zich met een positie die door hemzelf verschoven
       // is, en dan wisselen twee bonnen van plaats en weer terug bij elke
       // vingerbeweging.
-      if (drag?.kind === 'move' && drag.date === dateStr && list.some(i => i.id === drag.id)) {
+      if (
+        drag?.kind === 'move'
+        && drag.overOwnDay
+        && drag.date === dateStr
+        && list.some(i => i.id === drag.id)
+      ) {
         const ordered = orderByHour(
           list.map(i => {
             const start = i.id === drag.id
@@ -187,7 +208,7 @@ export default function WeekView() {
           // Het enige uur dat deze app onthoudt. Ontbreekt het, dan rekent de
           // motor het uit zoals hij altijd deed. Tijdens een sleep telt het uur
           // waar de vinger nu staat, nog vóór er iets bewaard is.
-          startMinutes: drag?.kind === 'move' && drag.id === i.id
+          startMinutes: drag?.kind === 'move' && drag.overOwnDay && drag.id === i.id
             ? drag.startMinutes
             : i.plannedStartMinutes ?? null,
         })),
@@ -253,14 +274,30 @@ export default function WeekView() {
    * Dat gebeurt alleen door een vastgezet uur op de eerste job: om er om 07:30
    * te staan moet je soms om 06:00 vertrekken. Het wordt niet geweigerd —
    * vroeger vertrekken kan echt — maar ongezien mag het niet gebeuren.
+   *
+   * De naam van die eerste job hoort erbij. Deze meldingen gaan over de hele
+   * zichtbare week en staan boven het rooster, dus eentje die over dinsdag gaat
+   * verschijnt even goed terwijl je aan donderdag aan het werk bent. Zonder dag
+   * en klant erin las hij als een uitspraak over wat je zonet deed — en dan
+   * beweert hij dat je vroeger moet vertrekken terwijl je dag juist later
+   * begint. Gemeld door de gebruiker, en het was precies dat.
    */
   const earlyDepartures = useMemo(
     () =>
       days
-        .map((day, index) => ({ day, depart: schedules[index].departFromOriginMinutes }))
-        .filter((entry): entry is { day: Date; depart: number } =>
+        .map((day, index) => {
+          const firstJob = schedules[index].blocks.find(block => block.kind === 'job')
+          const dateStr = toLocalDateStr(day)
+          return {
+            day,
+            depart: schedules[index].departFromOriginMinutes,
+            customerName: (byDate[dateStr] ?? [])
+              .find(i => i.id === firstJob?.interventionId)?.customerName,
+          }
+        })
+        .filter((entry): entry is { day: Date; depart: number; customerName: string | undefined } =>
           entry.depart !== null && entry.depart < departureMinutes),
-    [days, schedules, departureMinutes],
+    [days, schedules, byDate, departureMinutes],
   )
 
   /**
@@ -524,7 +561,33 @@ export default function WeekView() {
     const from = spanOf[id]?.startMinutes
     if (from === undefined) return
 
-    setDrag({ kind: 'move', id, date, fromMinutes: from, startMinutes: from, baseline: { ...spanOf } })
+    setDrag({
+      kind: 'move',
+      id,
+      date,
+      fromMinutes: from,
+      startMinutes: from,
+      baseline: { ...spanOf },
+      // Je begint per definitie boven je eigen dag: daar lag de bon.
+      overOwnDay: true,
+    })
+  }
+
+  /**
+   * De vinger komt boven een andere kolom, of gaat terug.
+   *
+   * Alleen dit zegt of het een uur wordt of een verhuizing; de sleepafstand
+   * zegt daar niets over. Zodra de vinger de eigen dag verlaat, houdt de oude
+   * dag op met meerekenen en blijft hij staan zoals hij stond — de bon is
+   * immers aan het vertrekken, en zijn uur betekent daar niets meer.
+   */
+  function handleDragOver(event: DragOverEvent) {
+    setDrag(current => {
+      if (current?.kind !== 'move') return current
+
+      const own = event.over?.id === dayDroppableId(current.date)
+      return own === current.overOwnDay ? current : { ...current, overOwnDay: own }
+    })
   }
 
   /**
@@ -827,6 +890,7 @@ export default function WeekView() {
           measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={handleDragStart}
           onDragMove={handleDragMove}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
           onDragCancel={() => { setDrag(null); setFrozenAlerts(null) }}
         >
@@ -849,9 +913,12 @@ export default function WeekView() {
               role="alert"
               className="mb-3 rounded-xl border-l-4 border-brand-red bg-brand-red/10 px-3 py-2 text-xs text-ink"
             >
-              <p>{conflictMessage(conflict.customerName)}</p>
+              {/* De dag eerst: deze meldingen gaan over de hele week, niet over
+                  de dag waar je toevallig naar kijkt. */}
+              <p className="font-bold">{dayLabel(conflict.date)}</p>
+              <p className="mt-0.5">{conflictMessage(conflict.customerName)}</p>
               <p className="mt-1 tabular-nums text-ink-soft">
-                {dayLabel(conflict.date)} · ten vroegste {hhmm(conflict.earliestMinutes)}
+                Ten vroegste {hhmm(conflict.earliestMinutes)}
               </p>
               <button
                 type="button"
@@ -863,14 +930,18 @@ export default function WeekView() {
             </div>
           ))}
 
-          {shownEarlyDepartures.map(({ day, depart }) => (
+          {shownEarlyDepartures.map(({ day, depart, customerName }) => (
             <div
               key={toLocalDateStr(day)}
               className="mb-3 rounded-xl border-l-4 border-brand-orange bg-brand-orange/10 px-3 py-2 text-xs text-ink"
             >
-              <b>Vertrek om {hhmm(depart)}</b> op {dayLabel(toLocalDateStr(day))} — vroeger dan het
-              ingestelde startuur. Om die eerste klant op zijn uur te halen, moet er eerder
-              vertrokken worden.
+              <p className="font-bold">{dayLabel(toLocalDateStr(day))}</p>
+              <p className="mt-0.5">
+                Om {customerName ?? 'de eerste klant'} op zijn vaste uur te halen, moet je die dag
+                al om <span className="font-bold tabular-nums">{hhmm(depart)}</span> vertrekken —
+                dat is {formatGap(departureMinutes - depart)} vóór het ingestelde startuur van{' '}
+                <span className="tabular-nums">{hhmm(departureMinutes)}</span>.
+              </p>
             </div>
           ))}
 
@@ -907,6 +978,15 @@ function monthName(day: Date): string {
 function hhmm(minutes: number): string {
   const rounded = Math.round(minutes)
   return `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`
+}
+
+/** "1u39" of "45 min" — hoeveel vroeger, in woorden die een uur leesbaar maken. */
+function formatGap(minutes: number): string {
+  const whole = Math.round(minutes)
+  const hours = Math.floor(whole / 60)
+  const rest = whole % 60
+  if (hours === 0) return `${rest} min`
+  return rest === 0 ? `${hours}u` : `${hours}u${String(rest).padStart(2, '0')}`
 }
 
 /** "ma 14 sep" — genoeg om te weten welke dag de melding bedoelt. */

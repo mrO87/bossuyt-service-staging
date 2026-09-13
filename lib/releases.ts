@@ -15,6 +15,34 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.65',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'De oude dag blijft stil als je een bon verhuist',
+        body:
+          'Sleepte je een werkbon naar een andere dag, dan schoven de andere bonnen van '
+          + 'zijn oude dag mee alsof er iets veranderde — terwijl die bon daar net aan het '
+          + 'vertrekken was. Zodra je begint te slepen klikt het uur namelijk in op het '
+          + 'kwartier, en dat telde meteen als een vast uur op die dag. De app kijkt nu '
+          + 'waar je vinger uitkomt: blijf je boven je eigen dag, dan rekent die mee; ga '
+          + 'je naar een andere kolom of naar de pool, dan blijft de oude dag staan zoals '
+          + 'hij stond.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De meldingen zeggen nu over welke dag ze gaan',
+        body:
+          'Een melding begon met een uur — "Vertrek om 06:23" — terwijl ze over een andere '
+          + 'dag in dezelfde week kon gaan. Zette je dan een bon vast en begon jouw dag '
+          + 'juist later, dan leek de app te beweren dat je vroeger moest vertrekken. Elke '
+          + 'melding begint nu met de dag in het vet, noemt de klant om wie het gaat, en '
+          + 'zet het vertrekuur naast het ingestelde startuur zodat je het verschil ziet.',
+      },
+    ],
+  },
+  {
     version: 'v1.64',
     date: '13 september 2026',
     changes: [
@@ -1620,7 +1648,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.64'
+const CURRENT_RELEASE_VERSION = 'v1.65'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

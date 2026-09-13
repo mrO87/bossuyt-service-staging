@@ -7,6 +7,23 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
+## Bijwerking 13 september — v1.65: twee dingen die v1.64 blootlegde
+
+1. **De oude dag bewoog mee bij een verhuizing.** Zodra een sleep begint klikt
+   het uur in op het kwartier, en dat telde in het voorbeeld als een vastgezet
+   uur — dus herschikte de héle oude dag zich voor een bon die net aan het
+   vertrekken was. Bij het aanraken is nog niet te weten of het een uur wordt of
+   een verhuizing; dat blijkt pas uit waar de vinger uitkomt. `overOwnDay` op
+   `DragPreview` volgt dat nu via `onDragOver`: boven de eigen dag rekent die
+   dag mee, erbuiten blijft hij staan.
+2. **De vertrekmelding leek over de verkeerde dag te gaan.** Geen rekenfout —
+   nagegaan: zonder vaste uren vertrekt elke dag op het ingestelde uur en staat
+   er nul melding. Maar de tekst begon met een uur terwijl deze meldingen over
+   de hele zichtbare week gaan, dus eentje over dinsdag verscheen even goed
+   terwijl je aan woensdag werkte. Beide meldingen beginnen nu met de dag in het
+   vet; de vertrekmelding noemt de klant en zet het vertrekuur naast het
+   ingestelde startuur.
+
 ## Bijwerking 13 september — v1.64: drie dingen uit de telefoontest
 
 De gebruiker heeft v1.63 op een echte telefoon gebruikt. Drie punten:
