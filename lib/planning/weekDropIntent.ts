@@ -35,6 +35,11 @@ function dateFromDroppable(id: string): string | null {
   return id.startsWith(DAY_PREFIX) ? id.slice(DAY_PREFIX.length) : null
 }
 
+/** Is dit doelwit een van de twee weekranden? */
+export function isWeekEdge(id: string): boolean {
+  return edgeFromDroppable(id) !== null
+}
+
 function edgeFromDroppable(id: string): 'prev' | 'next' | null {
   if (!id.startsWith(EDGE_PREFIX)) return null
   const edge = id.slice(EDGE_PREFIX.length)

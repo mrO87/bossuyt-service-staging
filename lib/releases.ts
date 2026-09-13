@@ -19,6 +19,18 @@ export const RELEASES: ReleaseEntry[] = [
     date: '13 september 2026',
     changes: [
       {
+        label: 'Fix',
+        title: 'De zijbalken pakken maandag niet meer af',
+        body:
+          'Een bon naar maandag verplaatsen of er een uur op zetten lukte niet: hij '
+          + 'sprong een week terug. De app koos het doelwit op basis van middelpunten, '
+          + 'en omdat de zijbalken over de volle hoogte lopen ligt hun midden dertig '
+          + 'pixels hoger dan dat van een dagkolom. Bij een blok bovenaan het rooster '
+          + 'woog dat verschil zwaarder dan de afstand opzij, en won de balk van maandag '
+          + 'terwijl je vinger op maandag stond. Nu beslist je vinger: een zijbalk telt '
+          + 'alleen mee als je er werkelijk op staat.',
+      },
+      {
         label: 'Nieuw',
         title: 'Een vergeten werkbon keert vanzelf terug naar de pool',
         body:

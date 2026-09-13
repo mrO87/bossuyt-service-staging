@@ -11,8 +11,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  DndContext, MeasuringStrategy, PointerSensor, TouchSensor, closestCenter, useDroppable,
-  useSensor, useSensors,
+  DndContext, MeasuringStrategy, PointerSensor, TouchSensor, closestCenter, pointerWithin,
+  useDroppable, useSensor, useSensors,
+  type CollisionDetection,
   type DragEndEvent, type DragMoveEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSettings'
@@ -21,7 +22,7 @@ import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedul
 import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@/lib/planning/daySchedule'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
-import { dayDroppableId, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
+import { dayDroppableId, isWeekEdge, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
 import { conflictMessage, orderByHour, snapDuration, snapToStep } from '@/lib/planning/pinnedHour'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import {
@@ -104,6 +105,33 @@ type DragPreview =
       /** De duur die de vinger nu aangeeft, ingeklikt op het kwartier. */
       minutes: number
     }
+
+/**
+ * Welk doelwit er onder de sleep ligt.
+ *
+ * `closestCenter` alleen deugde hier niet, en het waarom is de moeite waard.
+ * Die regel vergelijkt het middelpunt van het blok in je hand met het
+ * middelpunt van elk doelwit — in beide richtingen. De weekranden lopen over de
+ * volle hoogte en hun midden ligt dertig pixels hoger dan dat van een
+ * dagkolom. Sleep je een blok bovenaan het rooster, dan is dat verticale
+ * verschil groter dan het horizontale, en won de rand van maandag terwijl je
+ * vinger gewoon op maandag stond. Gevolg: een bon naar maandag verplaatsen of
+ * er een uur op zetten was onmogelijk — hij sprong een week terug.
+ *
+ * Nu beslist de vinger over de randen: een rand wint alleen wanneer je er
+ * werkelijk op staat, en die strook is twintig pixels breed. Ligt de vinger er
+ * niet op, dan spelen de randen niet mee en kiest `closestCenter` tussen de
+ * dagen en de pool — precies zoals vóór de randen bestonden.
+ */
+const weekCollisionDetection: CollisionDetection = args => {
+  const edges = args.droppableContainers.filter(c => isWeekEdge(String(c.id)))
+  const rest = args.droppableContainers.filter(c => !isWeekEdge(String(c.id)))
+
+  const onEdge = pointerWithin({ ...args, droppableContainers: edges })
+  if (onEdge.length > 0) return onEdge
+
+  return closestCenter({ ...args, droppableContainers: rest })
+}
 
 /**
  * Een `?date=`-waarde naar een datum, of `null` als er niets bruikbaars staat.
@@ -959,7 +987,7 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={weekCollisionDetection}
           // Laat de pagina niet scrollen onder je vinger.
           //
           // Twee standaardgedragingen van dnd-kit werken hier tegen ons, en
