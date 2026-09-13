@@ -29,6 +29,21 @@ import type {
 } from '@/types'
 import type { PdfFollowUp, PdfPart } from '@/lib/pdf'
 
+/**
+ * Eén toestelregel zoals ze van een geüploade bon komt.
+ *
+ * Bewust los van `devices`: dit is een **voorstel**, nog niet nagekeken door
+ * een mens. Merk en model zijn uit de omschrijving gegokt en kunnen leeg zijn.
+ */
+export type ExtractedDeviceRow = {
+  unitNumber: string
+  description: string
+  brand: string
+  model: string
+  deliveryDate: string
+  warrantyUntil: string
+}
+
 export const technicians = pgTable('technicians', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -122,7 +137,56 @@ export const devices = pgTable('devices', {
   unitNumber: text('unit_number'),                         // UNIT N°
   deliveryDate: text('delivery_date'),                     // LEVERDATUM, ISO date
   warrantyUntil: text('warranty_until'),                   // GARANTIE, ISO date
+  /**
+   * De omschrijving zoals ze op de bon stond, vóór het splitsen in merk en
+   * model. Dat splitsen is een gok; zonder de bron zou een verkeerde gok
+   * betekenen dat iemand de papieren bon terug moet zoeken.
+   */
+  sourceLabel: text('source_label'),
+  /**
+   * Het aangeduide toesteltype, en daarmee de handleidingen en schema's.
+   *
+   * Leeg voor een toestel dat net van een bon komt. Zodra iemand een bekend
+   * type aanduidt, heeft dit toestel alle documenten van dat type — en elk
+   * volgend toestel dat op datzelfde type wordt gezet.
+   *
+   * Een verwijzing en geen tekstvergelijking op merk en model: die laatste
+   * brak bij één spatie verschil, en een hernoemd type verbrak stil de
+   * koppeling van elk toestel dat erop leunde.
+   */
+  deviceTypeId: text('device_type_id')
+    .references(() => deviceDocuments.id, { onDelete: 'set null' }),
 })
+
+/**
+ * De toestellen waar één bezoek over gaat.
+ *
+ * `work_orders.device_id` blijft het **hoofdtoestel**: daar hangen het verslag
+ * en de onderdelen aan, en dat blijft voorlopig zo. Deze tabel zegt wélke
+ * toestellen de bon raakt — een servicebon noemt er in zijn UNIT-tabel
+ * gerust drie.
+ *
+ * Geen tweede waarheid dus: de ene zegt *welke*, de andere *welk ervan draagt
+ * het verslag*. Gaat het verslag ooit per toestel, dan splitst het langs deze
+ * rijen, die er dan al zijn — mét hun volgorde — voor elke bon die sindsdien
+ * is binnengekomen.
+ */
+export const workOrderDevices = pgTable(
+  'work_order_devices',
+  {
+    workOrderId: text('work_order_id')
+      .notNull()
+      .references(() => workOrders.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'restrict' }),
+    /** De volgorde waarin ze op de bon staan. */
+    position: integer('position').notNull().default(1),
+  },
+  (tbl) => ({
+    pk: primaryKey({ columns: [tbl.workOrderId, tbl.deviceId] }),
+  }),
+)
 
 export const workOrders = pgTable(
   'work_orders',
@@ -382,6 +446,14 @@ export const workOrderIntakes = pgTable('work_order_intakes', {
   // The proposed field values, and per field where each one came from.
   extracted: jsonb('extracted').$type<Record<string, string>>(),
   fieldSources: jsonb('field_sources').$type<Record<string, string>>(),
+  /**
+   * De toestellen die de bon noemt, in de volgorde van het formulier.
+   *
+   * Een eigen kolom en niet in `extracted`: dat is een platte tekstmap, en
+   * er een lijst in verstoppen zou elke lezer ervan laten raden wat een
+   * waarde is en wat structuur.
+   */
+  extractedDevices: jsonb('extracted_devices').$type<ExtractedDeviceRow[]>(),
   // docling's own grade of the conversion — worth showing when it says 'poor'.
   ocrGrade: text('ocr_grade'),
   errorMessage: text('error_message'),

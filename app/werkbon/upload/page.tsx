@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import CornerPicker from '@/components/WorkOrderIntake/CornerPicker'
 import ConfirmForm, {
+  type ExtractedDevice,
   type ExtractedFields,
   type FieldSources,
 } from '@/components/WorkOrderIntake/ConfirmForm'
@@ -24,6 +25,7 @@ type Intake = {
   mimeType: string
   status: string
   extracted: ExtractedFields | null
+  extractedDevices: ExtractedDevice[] | null
   fieldSources: FieldSources | null
   errorMessage: string | null
 }
@@ -377,6 +379,7 @@ function UploadWerkbon() {
             )}
             <ConfirmForm
               extracted={intake.extracted ?? {}}
+              devices={intake.extractedDevices ?? []}
               sources={intake.fieldSources ?? {}}
               previewUrl={previewUrl}
               isPdf={intake.mimeType === 'application/pdf'}

@@ -495,7 +495,11 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
           refreshKey={deviceRefresh}
         />
       ) : (
-        <DevicePicker siteId={intervention.siteId} onPick={handleDevicePicked} />
+        <DevicePicker
+          siteId={intervention.siteId}
+          customerId={intervention.customerId}
+          onPick={handleDevicePicked}
+        />
       )}
 
       <Section title="OMSCHRIJVING KLANT | OBSERVATIONS CLIENT">

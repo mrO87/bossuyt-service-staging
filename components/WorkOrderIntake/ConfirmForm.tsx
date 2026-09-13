@@ -9,8 +9,20 @@ import SourceField, { type FieldSource } from './SourceField'
 export type ExtractedFields = Record<string, string>
 export type FieldSources = Record<string, FieldSource>
 
+/** Eén toestelregel zoals ze van de bon komt. */
+export interface ExtractedDevice {
+  unitNumber: string
+  description: string
+  brand: string
+  model: string
+  deliveryDate: string
+  warrantyUntil: string
+}
+
 interface Props {
   extracted: ExtractedFields
+  /** De toestellen uit de UNIT-tabel, in de volgorde van de bon. */
+  devices?: ExtractedDevice[]
   sources: FieldSources
   /** The stored bon, shown next to the fields so the values can be checked. */
   previewUrl: string
@@ -34,6 +46,7 @@ function dateInputValue(iso: string | undefined): string {
  */
 export default function ConfirmForm({
   extracted,
+  devices = [],
   sources,
   previewUrl,
   isPdf,
@@ -155,6 +168,20 @@ export default function ConfirmForm({
       alert_note: draft.alertNote.trim() || undefined,
       customer,
       device: null,
+      // De toestellen uit de UNIT-tabel. De server maakt ze aan op de
+      // vestiging van deze bon en hangt ze aan de werkbon; het eerste wordt
+      // het hoofdtoestel, waar het verslag en de onderdelen aan hangen.
+      devices: devices.map(device => ({
+        unit_number: device.unitNumber || undefined,
+        brand: device.brand || undefined,
+        model: device.model || undefined,
+        delivery_date: device.deliveryDate || undefined,
+        warranty_until: device.warrantyUntil || undefined,
+        // De regel zoals ze op de bon stond. Merk en model zijn eruit gegokt;
+        // zonder de bron zou een verkeerde gok betekenen dat iemand de papieren
+        // bon terug moet zoeken.
+        source_label: device.description || undefined,
+      })),
     })
   }
 
@@ -337,6 +364,49 @@ export default function ConfirmForm({
               </>
             )}
           </div>
+
+          {/*
+            De toestellen uit de UNIT-tabel, om te tonen en niet om te wijzigen.
+            Wat hier staat wordt straks aangemaakt op de vestiging van deze bon,
+            en het eerste wordt het hoofdtoestel.
+
+            Tonen en niet bewerken is een keuze: op het kleine scherm van een
+            telefoon zou een bewerkbare tabel van drie toestellen dit formulier
+            verdubbelen, terwijl de gegevens er meestal gewoon goed uit komen.
+            Rechtzetten gebeurt in de toestellenlijst, waar ook de toesteltypes
+            aangeduid worden.
+          */}
+          {devices.length > 0 && (
+            <div className="rounded-xl border border-stroke bg-white p-3">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-faint">
+                {devices.length === 1 ? 'Toestel op de bon' : `${devices.length} toestellen op de bon`}
+              </p>
+              <ul className="flex flex-col gap-2">
+                {devices.map((device, index) => (
+                  <li
+                    key={device.unitNumber || `toestel-${index}`}
+                    className="border-l-4 border-brand-orange/40 pl-2 text-sm"
+                  >
+                    <p className="font-semibold text-ink">
+                      {device.brand || device.model
+                        ? [device.brand, device.model].filter(Boolean).join(' ')
+                        : device.description}
+                    </p>
+                    <p className="text-[11px] text-ink-soft">
+                      {device.unitNumber && (
+                        <span className="font-mono tabular-nums">{device.unitNumber}</span>
+                      )}
+                      {device.unitNumber && device.deliveryDate ? ' · ' : ''}
+                      {device.deliveryDate && <>geleverd {device.deliveryDate}</>}
+                      {index === 0 && devices.length > 1 && (
+                        <span className="ml-1 text-ink-faint">· hoofdtoestel</span>
+                      )}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Every refusal shows here, including the ones that also mark a
               field. A server error naming "ticket_number" used to appear only

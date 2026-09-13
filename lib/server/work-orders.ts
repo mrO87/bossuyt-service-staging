@@ -8,7 +8,7 @@
 import { randomUUID } from 'crypto'
 import { and, eq, type SQL } from 'drizzle-orm'
 import { db } from '@/lib/db/client'
-import { customers, contacts, devices, sites, technicians, workOrderAssignments, workOrders } from '@/lib/db/schema'
+import { customers, contacts, devices, sites, technicians, workOrderAssignments, workOrderDevices, workOrders } from '@/lib/db/schema'
 import { withAudit, type Tx } from '@/lib/db/with-audit'
 import { geocodeAddress } from '@/lib/routing/NominatimGeocoder'
 import type { InterventionSource, InterventionStatus, InterventionType } from '@/types'
@@ -74,6 +74,8 @@ export interface CreateWorkOrderDevice {
   serialNumber?: string
   deliveryDate?: string
   warrantyUntil?: string
+  /** De omschrijving zoals ze op de bon stond, vóór het splitsen. */
+  sourceLabel?: string
 }
 
 export interface CreateWorkOrderInput {
@@ -88,6 +90,14 @@ export interface CreateWorkOrderInput {
   customer: CreateWorkOrderCustomer
   site?: CreateWorkOrderSite   // defaults to the customer address
   device?: CreateWorkOrderDevice | null
+  /**
+   * Alle toestellen die de bon noemt, in de volgorde van het formulier.
+   *
+   * Naast `device` en niet in de plaats ervan: `device` blijft het
+   * **hoofdtoestel**, waar het verslag en de onderdelen aan hangen. Staat deze
+   * lijst er en `device` niet, dan wordt de eerste het hoofdtoestel.
+   */
+  devices?: CreateWorkOrderDevice[]
   technicianIds?: string[]     // first one becomes lead
   createdBy?: string
   /**
@@ -233,6 +243,31 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
     }
   }
 
+  /**
+   * De toestellen die de bon noemt.
+   *
+   * Soepeler gelezen dan `device`: merk en model komen van een gok op de
+   * bonregel en mogen leeg zijn zolang er een unitnummer is. Een rij zonder
+   * unitnummer én zonder merk zegt niets en wordt overgeslagen — dat is een
+   * lege lijn op het formulier, geen toestel.
+   */
+  let deviceList: CreateWorkOrderDevice[] | undefined
+  if (Array.isArray(json.devices)) {
+    deviceList = json.devices
+      .filter(isObject)
+      .map(entry => ({
+        id:            optionalString(entry, 'id'),
+        unitNumber:    optionalString(entry, 'unit_number'),
+        brand:         optionalString(entry, 'brand'),
+        model:         optionalString(entry, 'model'),
+        serialNumber:  optionalString(entry, 'serial_number'),
+        deliveryDate:  optionalDate(entry, 'delivery_date'),
+        warrantyUntil: optionalDate(entry, 'warranty_until'),
+        sourceLabel:   optionalString(entry, 'source_label'),
+      }))
+      .filter(entry => entry.id || entry.unitNumber || (entry.brand && entry.model))
+  }
+
   let technicianIds: string[] | undefined
   if (json.technician_ids !== undefined) {
     if (!Array.isArray(json.technician_ids) || json.technician_ids.some(id => typeof id !== 'string')) {
@@ -254,6 +289,7 @@ export function parseCreateWorkOrderBody(json: unknown): CreateWorkOrderInput {
     customer,
     site,
     device,
+    devices: deviceList,
     technicianIds,
     createdBy: optionalString(json, 'created_by'),
     alertNote: optionalString(json, 'alert_note'),
@@ -507,15 +543,23 @@ async function findOrCreateDevice(tx: Tx, siteId: string, device: CreateWorkOrde
     return byId.id
   }
 
-  if (!device.brand || !device.model) {
+  // Een unitnummer is genoeg om een toestel aan te maken.
+  //
+  // Merk en model komen van een gok op de bonregel en kunnen leeg blijven; het
+  // unitnummer staat er gedrukt en benoemt het toestel eenduidig. Wie met de
+  // hand een toestel toevoegt heeft geen unitnummer en moet wél merk en model
+  // geven, anders staat er straks een rij zonder enige aanduiding.
+  if (!device.unitNumber && (!device.brand || !device.model)) {
     throw new ValidationError('device.brand', 'Merk en model zijn verplicht voor een nieuw toestel')
   }
 
+  // Het unitnummer gaat voor: dat is wat op het toestel én op de bon staat, en
+  // het maakt twee keer dezelfde bon uploaden onschadelijk.
   const conds: SQL[] = [eq(devices.siteId, siteId)]
   if (device.unitNumber) {
     conds.push(eq(devices.unitNumber, device.unitNumber))
   } else {
-    conds.push(eq(devices.brand, device.brand), eq(devices.model, device.model))
+    conds.push(eq(devices.brand, device.brand ?? ''), eq(devices.model, device.model ?? ''))
     if (device.serialNumber) conds.push(eq(devices.serialNumber, device.serialNumber))
   }
 
@@ -526,12 +570,14 @@ async function findOrCreateDevice(tx: Tx, siteId: string, device: CreateWorkOrde
   await tx.insert(devices).values({
     id,
     siteId,
-    brand: device.brand,
-    model: device.model,
+    brand: device.brand ?? '',
+    model: device.model ?? '',
     serialNumber: device.serialNumber ?? null,
     unitNumber: device.unitNumber ?? null,
     deliveryDate: device.deliveryDate ?? null,
     warrantyUntil: device.warrantyUntil ?? null,
+    // De regel zoals ze op de bon stond, vóór het splitsen.
+    sourceLabel: device.sourceLabel ?? null,
   })
   return id
 }
@@ -552,7 +598,17 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
     const siteId     = await findOrCreateSite(tx, customerId, input.customer, input.site)
     createdSiteId = siteId
     await ensureContact(tx, siteId, input.customer)
-    const deviceId   = input.device ? await findOrCreateDevice(tx, siteId, input.device) : null
+    // Alle toestellen die de bon noemt. Het hoofdtoestel is wat de oproeper
+    // uitdrukkelijk meegaf, en anders het eerste van de lijst.
+    const listed: string[] = []
+    for (const device of input.devices ?? []) {
+      const created = await findOrCreateDevice(tx, siteId, device)
+      if (!listed.includes(created)) listed.push(created)
+    }
+
+    const deviceId = input.device
+      ? await findOrCreateDevice(tx, siteId, input.device)
+      : (listed[0] ?? null)
 
     const id = `wo-${randomUUID()}`
     const inserted = await insertUnlessRaced(tx, sp => sp.insert(workOrders).values({
@@ -603,6 +659,20 @@ export async function createWorkOrder(input: CreateWorkOrderInput): Promise<{ id
     // aanmaak terugdraaien — een bon verliezen om een toewijzing is erger dan
     // een bon zonder toewijzing. Wanneer Keycloak erover komt, kiest de
     // oproeper zelf wie hem draagt en gaat `technician_ids` weer voor.
+    // De toestellen waar dit bezoek over gaat. Het hoofdtoestel hoort er ook
+    // bij: zonder dat zou een bon met één toestel een lege lijst hebben, en
+    // moest elke lezer twee plaatsen raadplegen in plaats van één.
+    const linked = deviceId && !listed.includes(deviceId) ? [deviceId, ...listed] : listed
+    if (linked.length > 0) {
+      await tx.insert(workOrderDevices).values(
+        linked.map((device, index) => ({
+          workOrderId: id,
+          deviceId: device,
+          position: index + 1,
+        })),
+      )
+    }
+
     let technicianIds = input.technicianIds ?? []
     if (technicianIds.length === 0 && input.createdBy) {
       const [maker] = await tx

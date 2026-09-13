@@ -4,25 +4,53 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
 import { db } from '@/lib/db'
-import { deviceDocuments } from '@/lib/db/schema'
+import { deviceDocuments, devices } from '@/lib/db/schema'
 
-// GET /api/devices/documents?brand=X&model=Y
+/**
+ * GET /api/devices/documents?device=<id> — of, als terugval, ?brand=X&model=Y
+ *
+ * Twee wegen, in deze volgorde.
+ *
+ * **Het aangeduide toesteltype.** Staat er een `device_type_id` op het toestel,
+ * dan gelden díe documenten. Eén verwijzing, en dus bestand tegen een spatie
+ * verschil of een hernoemd type.
+ *
+ * **Anders merk en model**, letterlijk vergeleken. Dat was vroeger de enige
+ * weg; hij blijft bestaan voor toestellen die er al stonden, en omdat een
+ * toestel dat exact overeenkomt meteen zijn documenten hoort te hebben. Het is
+ * de terugval, niet de hoofdweg.
+ */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
+  const deviceId = searchParams.get('device')
   const brand = searchParams.get('brand')
   const model = searchParams.get('model')
 
-  if (!brand || !model) {
-    return NextResponse.json({ error: 'brand and model required' }, { status: 400 })
+  if (!deviceId && (!brand || !model)) {
+    return NextResponse.json({ error: 'device of brand+model is verplicht' }, { status: 400 })
   }
 
-  const result = await db
-    .select()
-    .from(deviceDocuments)
-    .where(and(eq(deviceDocuments.brand, brand), eq(deviceDocuments.model, model)))
-    .limit(1)
+  let doc: typeof deviceDocuments.$inferSelect | null = null
 
-  const doc = result[0] ?? null
+  if (deviceId) {
+    const [row] = await db
+      .select({ document: deviceDocuments })
+      .from(devices)
+      .innerJoin(deviceDocuments, eq(devices.deviceTypeId, deviceDocuments.id))
+      .where(eq(devices.id, deviceId))
+      .limit(1)
+    doc = row?.document ?? null
+  }
+
+  if (!doc && brand && model) {
+    const [row] = await db
+      .select()
+      .from(deviceDocuments)
+      .where(and(eq(deviceDocuments.brand, brand), eq(deviceDocuments.model, model)))
+      .limit(1)
+    doc = row ?? null
+  }
+
   if (!doc) return NextResponse.json(null)
 
   return NextResponse.json({

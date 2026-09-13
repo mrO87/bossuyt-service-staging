@@ -17,7 +17,9 @@ import { withAudit } from '@/lib/db/with-audit'
 import { convertDocument, DoclingFailedError, DoclingUnavailableError } from '@/lib/server/docling'
 import { handleCreateWorkOrderRequest, type CreateWorkOrderHttpResult } from '@/lib/server/work-orders'
 import { correctStreet, nameAtAddress } from '@/lib/routing/StreetCorrector'
-import { extractWerkbon } from '@/lib/werkbon-zones'
+import { extractDevices, extractWerkbon, toFragments } from '@/lib/werkbon-zones'
+import { splitDeviceLabel } from '@/lib/werkbon-devices'
+import type { ExtractedDeviceRow } from '@/lib/db/schema'
 
 export type IntakeRow = typeof workOrderIntakes.$inferSelect
 
@@ -31,6 +33,7 @@ export type SerializedIntake = {
   size: number
   status: string
   extracted: Record<string, string> | null
+  extractedDevices: ExtractedDeviceRow[]
   fieldSources: Record<string, string> | null
   ocrGrade: string | null
   errorMessage: string | null
@@ -48,6 +51,7 @@ export function serializeIntake(row: IntakeRow): SerializedIntake {
     size: row.size,
     status: row.status,
     extracted: row.extracted,
+    extractedDevices: row.extractedDevices ?? [],
     fieldSources: row.fieldSources,
     ocrGrade: row.ocrGrade,
     errorMessage: row.errorMessage,
@@ -206,6 +210,19 @@ export async function extractIntakeFields(
     const converted = await convertDocument(blob, `werkbon${extname(intake.originalPath) || '.pdf'}`)
     const extracted = extractWerkbon(converted.document)
 
+    // De toestellentabel, rij per rij. Apart van de gewone velden omdat het er
+    // meerdere zijn: de zonelezer geeft één waarde per veld, en drie toestellen
+    // in één waarde persen maakt er een brei van.
+    const deviceRows = extractDevices(toFragments(converted.document)).map(row => ({
+      unitNumber: row.unitNumber,
+      description: row.description,
+      // Merk en model zijn een gok op de omschrijving; de bronregel blijft
+      // staan zodat een verkeerde gok te herstellen is zonder de papieren bon.
+      ...splitDeviceLabel(row.description),
+      deliveryDate: row.deliveryDate,
+      warrantyUntil: row.warrantyUntil,
+    }))
+
     // A street OCR read wrong is a street nobody can drive to and no map can
     // find. The postal code came off the same scan intact — digits survive
     // where letters do not — so it can vouch for the correction.
@@ -244,6 +261,7 @@ export async function extractIntakeFields(
         .set({
           status: readAnything ? 'gelezen' : 'mislukt',
           extracted: fields,
+          extractedDevices: deviceRows,
           fieldSources: sources,
           ocrGrade: converted.grade,
           errorMessage: readAnything

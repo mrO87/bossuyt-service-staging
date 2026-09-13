@@ -291,14 +291,26 @@ export default function DevicePanel({ deviceId, brand, model, refreshKey }: Prop
     async function loadDevicePanelData() {
       setLoadingDetail(true)
 
+      // Aan een local gebonden: de bewaking hierboven versmalt het type niet tot
+      // binnen deze closure.
+      const id = deviceId
+      if (!id) return
       const historyUrl = `/api/devices/${deviceId}/history`
 
       try {
         const [dev, docsData, hist] = await Promise.all([
           fetch(`/api/devices/${deviceId}`).then(r => r.ok ? r.json() : null),
-          brand && model
-            ? fetch(`/api/devices/documents?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`).then(r => r.json())
-            : Promise.resolve(null),
+          // Het toestel zelf erbij, niet alleen merk en model: staat er een
+          // toesteltype aangeduid, dan gelden díe documenten. Een toestel dat
+          // van een bon komt heeft vaak nog geen merk — vroeger sloeg deze
+          // oproep dan helemaal over, en dus waren er nooit documenten, ook
+          // niet nadat iemand het type had aangeduid.
+          fetch(
+            `/api/devices/documents?device=${encodeURIComponent(id)}`
+            + (brand && model
+              ? `&brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`
+              : ''),
+          ).then(r => (r.ok ? r.json() : null)),
           fetch(historyUrl).then(r => r.json()),
         ])
 
