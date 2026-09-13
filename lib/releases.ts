@@ -15,6 +15,33 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.63',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'De dag rekent mee terwijl je sleept',
+        body:
+          'Verschuif een bon en de hele dag beweegt mee onder je vinger: de rijtijden '
+          + 'verspringen, de vertrektijd schuift op, de volgorde herschikt zich, en botst '
+          + 'het ergens dan verschijnt de rode arcering meteen. Tot nu toe zag je pas na '
+          + 'het loslaten wat je gedaan had — je sleepte dus eigenlijk blind. Wat op het '
+          + 'scherm staat terwijl je vasthoudt, is nu precies wat er bewaard wordt als je '
+          + 'loslaat.',
+      },
+      {
+        label: 'Fix',
+        title: 'Een bon met een botsing was helemaal niet te verslepen',
+        body:
+          'Stond er rode arcering over een werkbon, dan gebeurde er niets als je hem '
+          + 'probeerde te verplaatsen: hij sprong terug alsof je niets gedaan had. Juist '
+          + 'die bon is degene die de melding je vraagt te verzetten. De arcering droeg '
+          + 'intern dezelfde naam als de bon eronder, waardoor het slepen aan het '
+          + 'verkeerde ding vasthing. Zat er sinds v1.61 in.',
+      },
+    ],
+  },
+  {
     version: 'v1.62',
     date: '13 september 2026',
     changes: [
@@ -1558,7 +1585,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.62'
+const CURRENT_RELEASE_VERSION = 'v1.63'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

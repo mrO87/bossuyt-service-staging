@@ -7,7 +7,41 @@ Alles hieronder is nagekeken in de code, niet uit het hoofd opgeschreven.
 
 ---
 
-## Bijwerking 13 september — v1.62 draait op staging
+## Bijwerking 13 september (later) — v1.63: meerekenen tijdens het slepen
+
+De weekweergave rekende alleen bij het loslaten. Nu volgt de hele dag de vinger:
+rijtijden, vertrektijd, volgorde, arcering. `DragPreview` in `WeekView.tsx`.
+
+**Twee dingen die dat mogelijk maken, en die je niet mag weghalen:**
+
+1. **Alleen bijwerken als het ingeklikte kwartier verandert** (~13 px). Anders
+   tekent het scherm bij elke pixel opnieuw — de fout waar het prototype in
+   sectie 5 voor waarschuwt.
+2. **Alles afmeten tegen een momentopname van bij het begin van de sleep**, nooit
+   tegen wat er nú staat. Dat laatste beweegt mee, en dan telt een blok zijn
+   eigen verplaatsing er telkens opnieuw bij op en rent het weg onder je hand.
+
+De dnd-kit-transform wordt nog maar **zijwaarts** toegepast: de herberekende dag
+zet het blok verticaal al op zijn plaats, en allebei doen laat het twee keer zo
+ver bewegen als je vinger.
+
+### De fout die het voorbeeld blootlegde
+
+Bij het loslaten kwam er `over: null` en `activeRect: null` — dnd-kit had het
+blok nooit opgemeten. **Het arceringsblok draagt de `interventionId` van de bon
+waar het overheen ligt**, en registreerde zich dus als tweede sleepbaar ding
+onder hetzelfde id. dnd-kit houdt de laatste registratie, en dat was de
+arcering: een blok dat `return` doet vóór `setNodeRef` ergens op staat.
+
+Gevolg: **een bon met een botsing was helemaal niet te verslepen** — precies de
+bon die de melding je vraagt te verzetten. Zat sinds v1.61 op staging.
+
+De regel staat nu in `draggableIdFor` (`lib/planning/daySchedule.ts`) met drie
+tests. Twee dingen onder één naam is de fout die geen test ziet zolang beide
+kanten op zich kloppen — dezelfde vorm als de `source`/`plannedDate`-splitsing
+uit v1.59.
+
+## Bijwerking 13 september — v1.62
 
 **v1.61 én v1.62 zijn uitgerold** (`curl .../api/version` zegt v1.62, sha
 72d60a8). 464 tests groen, typecheck/lint/build schoon.
