@@ -119,6 +119,19 @@ Gevolgen om over na te denken vóór er iets gebouwd wordt:
 - `resolveWeekDrop` kent een vierde uitkomst: `set_hour`
 - Weekweergave: verticaal slepen, speldje, kruisje, arcering, melding
 
+### Aangevuld in v1.62
+
+- **`kan niet` staat op de arcering**, niet in een tooltip. Sectie 1 vroeg het
+  letterlijk; de eerste versie zette het in een `title`, en op een telefoon
+  bestaat die niet.
+- **Uitrekken** met een handvat onderaan het blok, zoals in het prototype.
+  Schrijft naar `estimatedMinutes` via dezelfde wachtrij als het duurbolletje.
+- **Het uurblokje is zelf de knop geworden.** Een apart speldje van 16 px liet
+  zo'n 21 px over voor tekst, en daar past "08:39" niet in — nagemeten op een
+  echt scherm, niet beredeneerd. Uur en kleur zijn toch hetzelfde ding.
+- **Markeren snapt niet meer naar het kwartier.** Slepen wel: dat is mikken.
+  Markeren is bevestigen wat er staat, en dan mag 08:39 geen 08:45 worden.
+
 ### Wat er bewust niet in zit
 
 - **De dagweergave toont het uur, maar niet de botsing.** Ze rekent met

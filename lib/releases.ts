@@ -15,6 +15,48 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.62',
+    date: '13 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Een job langer of korter maken met je vinger',
+        body:
+          'Onderaan elk blok in de weekweergave zit een handvat. Sleep het naar beneden en '
+          + 'de job duurt langer, naar boven en hij duurt korter — op het kwartier, en '
+          + 'alles wat erachter komt schuift meteen mee. Het is dezelfde geschatte duur '
+          + 'die je ook op de kaart kunt intypen, dus er staat niets dubbel: dit is een '
+          + 'tweede manier om er aan te komen, met je vinger in plaats van met een getal.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Het uur staat nu leesbaar op elk blok',
+        body:
+          'Het speldje was een aparte knop naast het uur, en daardoor bleef er van een '
+          + 'kolom van 62 px te weinig over: "08:39" liep over het speldje heen. Het uur '
+          + 'is nu zélf de knop. Tik op het groene bolletje en het wordt rood — dit uur is '
+          + 'afgesproken met de klant. Het kruisje rechtsboven haalt een uur weer weg, '
+          + 'zodat het weer berekend wordt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een afspraak markeren verschuift het uur niet meer',
+        body:
+          'Stond een job op 08:39 en markeerde je hem als afspraak, dan sprong hij naar '
+          + '08:45. Slepen klikt in op het kwartier omdat dat helpt mikken, maar markeren '
+          + 'is iets anders: je zegt dat het uur dat er staat afgesproken is. Dan hoort er '
+          + 'niets te verschuiven.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Bij een botsing staat nu "kan niet" op de arcering',
+        body:
+          'De rode arcering over een onmogelijk stuk droeg haar uitleg alleen in een '
+          + 'tooltip, en op een telefoon bestaat die niet. Nu staat het er gewoon op.',
+      },
+    ],
+  },
+  {
     version: 'v1.61',
     date: '12 september 2026',
     changes: [
@@ -1516,7 +1558,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.61'
+const CURRENT_RELEASE_VERSION = 'v1.62'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
