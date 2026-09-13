@@ -30,13 +30,14 @@ export const RELEASES: ReleaseEntry[] = [
       },
       {
         label: 'Nieuw',
-        title: 'Het speldje: dit is een afspraak',
+        title: 'Het speldje: dit uur is afgesproken',
         body:
           'Het uurtje links op elk blok is groen zolang het berekend wordt, en rood zodra '
-          + 'het vastligt. Met het speldje maak je van een uur een afspraak. Dat verandert '
-          + 'niets aan hoe de bon zich laat verslepen — dat blijft even vrij — het zegt '
-          + 'alleen dat dit uur blijft staan wanneer de app straks zelf een kortste '
-          + 'volgorde voorstelt. Het kruisje rechtsonder haalt een uur weer weg.',
+          + 'het vastligt. Met het speldje zeg je dat dat uur met de klant afgesproken is. '
+          + 'Dat verandert niets aan hoe de bon zich laat verslepen — dat blijft even vrij — '
+          + 'het is een bericht aan wie de planning leest: een groen uur mag je verzetten '
+          + 'als het beter uitkomt, een rood uur heeft iemand beloofd. Het kruisje '
+          + 'rechtsonder haalt een uur weer weg.',
       },
       {
         label: 'Nieuw',

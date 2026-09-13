@@ -155,10 +155,11 @@ export interface Intervention {
    */
   plannedStartMinutes?: number
   /**
-   * Whether that hour is an appointment rather than a preference.
+   * Whether that hour was agreed with the customer rather than merely chosen.
    *
-   * Both kinds drag alike. This decides one thing: "shortest order" may move a
-   * work order whose hour is merely a preference, and never one with the pin.
+   * Both kinds drag alike and nothing branches on this. It is a message to the
+   * next person reading the planning: a derived hour may be shifted if that
+   * suits better, an agreed one was promised to someone.
    */
   startIsAppointment?: boolean
   status: InterventionStatus

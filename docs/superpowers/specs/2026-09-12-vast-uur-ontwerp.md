@@ -37,12 +37,20 @@ soorten laten zich even vrij verslepen en geven dezelfde arcering.
 
 Het zegt alleen of het uur een **afspraak** is:
 
-| | uurblokje | bij "kortste volgorde" |
+| | uurblokje | wat het betekent |
 |---|---|---|
-| zonder speldje | **groen** | mag verplaatst worden |
-| met speldje | **rood** + stippellijn | blijft staan |
+| zonder speldje | **groen** | mag verzet worden als het beter uitkomt |
+| met speldje | **rood** + stippellijn | met de klant afgesproken |
 
 Het uurblokje staat links op elk blok, altijd — ook bij een berekend uur.
+
+**Verduidelijkt bij het bouwen (13 september).** De tabel verwees eerst naar
+"kortste volgorde", een knop uit het prototype die de goedkoopste route
+voorstelt. Dat gaf de indruk dat het speldje een grendel is die iets tegenhoudt.
+Dat is het niet, en die knop bestaat ook niet in de app. Het speldje beschermt
+niets: het **meldt** dat dit uur beloofd is. Dat is een bericht aan de volgende
+persoon die deze planning openslaat, en niet aan een algoritme — de app beslist
+niet welke afspraken er gemaakt worden, en grendelt ze dus ook niet.
 
 ## 3. Rijtijden hangen af van de klanten, niet van de positie
 

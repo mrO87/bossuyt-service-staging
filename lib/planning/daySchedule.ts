@@ -82,9 +82,10 @@ export interface ScheduleJob {
    * Het uur waarop de gebruiker deze bon heeft neergezet, in minuten sinds
    * middernacht. Ontbreekt het, dan wordt het uur berekend zoals altijd.
    *
-   * Of er een speldje op staat doet hier niet ter zake: het speldje zegt of het
-   * uur een afspraak is, en dat is een vraag voor "kortste volgorde" — niet
-   * voor de klok.
+   * Of er een speldje op staat doet hier niet ter zake. Het speldje zegt dat
+   * dit uur met de klant afgesproken is — dat is iets wat een mens moet weten
+   * voor hij de planning omgooit, en niets waar deze berekening anders van
+   * wordt. Een afspraak en een voorkeur lopen op dezelfde klok.
    */
   startMinutes?: number | null
 }

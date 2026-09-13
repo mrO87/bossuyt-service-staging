@@ -352,9 +352,14 @@ function Block({
   const noSelect = { WebkitTouchCallout: 'none', WebkitUserSelect: 'none' } as const
 
   // Twee dingen die los van elkaar staan, en dat moeten blijven. `pinned` zegt
-  // dat dit uur bewaard is — dat iemand de bon hier heeft neergezet. `isAppointment`
-  // zegt dat het uur een afspraak is. Slepen gedraagt zich in beide gevallen
-  // hetzelfde; alleen "kortste volgorde" ziet het verschil.
+  // dat dit uur bewaard is — iemand heeft de bon hier neergezet. `isAppointment`
+  // zegt dat dat uur met de klant afgesproken is.
+  //
+  // Het verschil is niet wat de app ermee doet, maar wat de volgende persoon
+  // die naar deze planning kijkt moet weten. Een groen uur mag je verzetten als
+  // het beter uitkomt; een rood uur heeft iemand beloofd. Slepen gedraagt zich
+  // in beide gevallen hetzelfde, en dat hoort ook zo: de app beslist niet welke
+  // afspraken er gemaakt worden.
   const pinned = typeof intervention.plannedStartMinutes === 'number'
   const isAppointment = pinned && Boolean(intervention.startIsAppointment)
 

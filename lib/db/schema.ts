@@ -149,10 +149,14 @@ export const workOrders = pgTable(
     // day it belongs to is already `planned_date`, and storing the same day
     // twice is storing a way for the two to disagree.
     plannedStartMinutes: integer('planned_start_minutes'),
-    // Whether that hour is an appointment. It changes nothing about how the
-    // work order behaves when dragged — both kinds move freely and clash the
-    // same way. It says one thing only: "shortest order" may reorder a derived
-    // hour, and must leave an appointment where it stands.
+    // Whether that hour was agreed with the customer. It changes nothing about
+    // how the work order behaves when dragged — both kinds move freely and
+    // clash the same way — and nothing in the code branches on it.
+    //
+    // That is the point rather than an omission. It is a message to the next
+    // person reading this planning: a derived hour may be shifted if that suits
+    // better, an agreed one was promised to someone. The app does not decide
+    // which promises get made, so it does not enforce this either.
     startIsAppointment: boolean('start_is_appointment').notNull().default(false),
     // Which role last moved this work order on or off a day. Written by
     // savePlanningSnapshot and read by nobody yet: it is the record the change
