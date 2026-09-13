@@ -89,6 +89,17 @@ export function PlanningBoard({
     )
     if (moved) await upsertIntervention(moved)
 
+    // De vertrekkende bon: hij staat niet meer in `nextDay`, maar de server
+    // telt hem nog wel mee wanneer die het hoogste versienummer van de dag
+    // opzoekt. Stuurden we dan het nummer van wie blijft, dan was dat lager en
+    // weigerde de server de schrijfactie als een conflict dat niet bestond —
+    // op het scherm stond de bon in de pool, in de database op zijn dag.
+    //
+    // Onzichtbaar zolang elke schrijfweg een hele dag tegelijk ophoogde. Zodra
+    // één bon zijn eigen nummer kan verhogen (`update_placement`, of een bon
+    // die net vanuit de werkbon een datum kreeg), is het meteen raak.
+    const leaving = moved && !nextDay.some(i => i.id === moved.id) ? moved : null
+
     await enqueuePlanningWrite(
       buildPlanningWrite({
         day: nextDay,
@@ -100,6 +111,7 @@ export function PlanningBoard({
         // one already resident that a reorder merely reshuffled. Its version
         // describes the pool, not this day, so it must not raise the day's.
         arrivingIds: moved ? [moved.id] : undefined,
+        serverDay: leaving ? [...nextDay, leaving] : undefined,
       }),
     )
   }, [currentUser, selectedDate])
