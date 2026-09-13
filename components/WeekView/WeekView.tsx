@@ -21,8 +21,15 @@ import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
+import { conflictMessage, orderByHour, snapToStep } from '@/lib/planning/pinnedHour'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
-import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
+import {
+  enqueuePlanningWrite,
+  getPlannedInterventions,
+  updateInterventionSequence,
+  upsertIntervention,
+} from '@/lib/idb'
+import { syncPendingWrites } from '@/lib/sync'
 import { ViewSwitcher } from '@/components/planning/ViewSwitcher'
 import { OpenPool } from '@/components/DayView/OpenPool'
 import type { Intervention } from '@/types'
@@ -104,6 +111,9 @@ export default function WeekView() {
           at: typeof i.siteLat === 'number' && typeof i.siteLon === 'number'
             ? { lat: i.siteLat, lon: i.siteLon }
             : undefined,
+          // Het enige uur dat deze app onthoudt. Ontbreekt het, dan rekent de
+          // motor het uit zoals hij altijd deed.
+          startMinutes: i.plannedStartMinutes ?? null,
         })),
         travelBetween: lookupTravel,
         breakMinutes: UNPAID_BREAK_MINUTES,
@@ -117,6 +127,65 @@ export default function WeekView() {
     for (const list of Object.values(byDate)) for (const i of list) map[i.id] = i
     return map
   }, [byDate])
+
+  /**
+   * Waar elk blok nú ligt, volgens de berekening.
+   *
+   * Slepen verschuift ten opzichte van dit uur en niet ten opzichte van de
+   * bovenkant van de kolom: een bon die getekend staat op 08:22 en twee
+   * kwartier naar beneden gaat, hoort op 09:00 te belanden — op het kwartier,
+   * want dat is de stap waarmee gemikt wordt.
+   */
+  const spanOf = useMemo(() => {
+    const map: Record<string, { startMinutes: number; endMinutes: number }> = {}
+    for (const schedule of schedules) {
+      for (const block of schedule.blocks) {
+        if (block.kind === 'job' && block.interventionId) {
+          map[block.interventionId] = {
+            startMinutes: block.startMinutes,
+            endMinutes: block.endMinutes,
+          }
+        }
+      }
+    }
+    return map
+  }, [schedules])
+
+  /**
+   * De botsingen in de zichtbare week, met genoeg erbij om ze te kunnen noemen.
+   *
+   * Ze worden getoond en niet geweigerd. Het uur is bewaard, de arcering staat
+   * op het rooster, en de melding noemt de drie uitwegen — welke de juiste is,
+   * weet alleen wie de klant gebeld heeft.
+   */
+  const conflicts = useMemo(
+    () =>
+      days.flatMap((day, index) =>
+        schedules[index].conflicts.map(conflict => ({
+          ...conflict,
+          date: toLocalDateStr(day),
+          customerName: (byDate[toLocalDateStr(day)] ?? [])
+            .find(i => i.id === conflict.interventionId)?.customerName,
+        })),
+      ),
+    [days, schedules, byDate],
+  )
+
+  /**
+   * Dagen waarop het vertrekuur vóór de ingestelde start valt.
+   *
+   * Dat gebeurt alleen door een vastgezet uur op de eerste job: om er om 07:30
+   * te staan moet je soms om 06:00 vertrekken. Het wordt niet geweigerd —
+   * vroeger vertrekken kan echt — maar ongezien mag het niet gebeuren.
+   */
+  const earlyDepartures = useMemo(
+    () =>
+      days
+        .map((day, index) => ({ day, depart: schedules[index].departFromOriginMinutes }))
+        .filter((entry): entry is { day: Date; depart: number } =>
+          entry.depart !== null && entry.depart < departureMinutes),
+    [days, schedules, departureMinutes],
+  )
 
   const dayOf = useMemo(() => {
     const map: Record<string, string | undefined> = {}
@@ -149,6 +218,139 @@ export default function WeekView() {
         arrivingIds: moved ? [moved.id] : undefined,
       }),
     )
+
+    await flushQueue(dateStr)
+  }
+
+  /**
+   * De wachtrij wegsturen, en daarna weten wat de server ervan vond.
+   *
+   * Twee dingen die allebei ontbraken, en die alleen samen werken.
+   *
+   * Het eerste: de weekweergave stuurde haar wachtrij nooit weg. Dat viel niet
+   * op omdat de dagweergave hem leegt bij het openen (useDayData), dus vroeg of
+   * laat vertrok alles. Maar de weekweergave leest van de server en niet uit
+   * IndexedDB — wie hier iets versleept en herlaadt zonder ooit de dagweergave
+   * te openen, zag zijn wijziging terugspringen naar wat de server nog dacht.
+   *
+   * Het tweede: na een geslaagde schrijfactie verhoogt de server het
+   * versienummer van de dag, en dit scherm hield het oude vast. De tweede
+   * handeling op rij stuurde dan een versie die niet meer bestond, kreeg een
+   * 409, en werd weggegooid — het uur zetten lukte, het speldje erna niet, en
+   * niets zei waarom. Met de hand gezien in de browser, niet beredeneerd.
+   *
+   * Alleen het versienummer wordt overgenomen. De rest van wat hier op het
+   * scherm staat is net bevestigd door diezelfde geslaagde schrijfactie; de
+   * hele dag overschrijven zou een sleep die ondertussen begonnen is ongedaan
+   * maken.
+   */
+  async function flushQueue(dateStr: string) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+
+    try {
+      const result = await syncPendingWrites()
+      if (result.synced === 0) return
+
+      const fresh = await getPlannedInterventions(dateStr)
+      const versions = new Map(fresh.map(i => [i.id, i.planningVersion]))
+
+      setByDate(current => ({
+        ...current,
+        [dateStr]: (current[dateStr] ?? []).map(i =>
+          versions.has(i.id) ? { ...i, planningVersion: versions.get(i.id) } : i),
+      }))
+    } catch {
+      // De schrijfactie staat in de wachtrij en vertrekt bij de volgende
+      // gelegenheid. Offline hoort hier niets van te merken.
+    }
+  }
+
+  /**
+   * Een bon op een uur zetten, of dat uur weer weghalen.
+   *
+   * Eén weg voor alle drie de handelingen — slepen, het speldje, het kruisje —
+   * omdat ze onderaan hetzelfde doen: het veld wijzigen, de dag opnieuw in de
+   * juiste volgorde zetten, en die hele dag wegschrijven. Bij een fout gaat het
+   * scherm terug naar wat het was, zoals overal in dit bestand.
+   */
+  async function changeHour(
+    dateStr: string,
+    workOrderId: string,
+    patch: { plannedStartMinutes?: number; startIsAppointment: boolean },
+  ) {
+    const previousDay = byDate[dateStr] ?? []
+    const target = previousDay.find(i => i.id === workOrderId)
+    if (!target) return
+
+    const updated: Intervention = { ...target, ...patch }
+
+    // De volgorde volgt het uur: de lijstvolgorde is wat computeDaySchedule
+    // afloopt, dus een bon die naar de avond gaat hoort ook achteraan te staan.
+    // Wat geen eigen uur heeft, blijft liggen waar de berekening het zette.
+    const withNewHour = previousDay.map(i => (i.id === workOrderId ? updated : i))
+    const ordered = orderByHour(
+      withNewHour.map(i => {
+        const span = spanOf[i.id]
+        const start = i.id === workOrderId && patch.plannedStartMinutes !== undefined
+          ? patch.plannedStartMinutes
+          : span?.startMinutes ?? 0
+        return { id: i.id, startMinutes: start, endMinutes: start + (i.estimatedMinutes ?? 0) }
+      }),
+    )
+    const next = ordered
+      .map(id => withNewHour.find(i => i.id === id))
+      .filter((i): i is Intervention => Boolean(i))
+
+    setByDate(current => ({ ...current, [dateStr]: next }))
+
+    try {
+      await upsertIntervention(updated)
+      await persistDay(dateStr, next)
+    } catch {
+      setByDate(current => ({ ...current, [dateStr]: previousDay }))
+      setRefusal('Het uur bewaren is niet gelukt. Probeer het opnieuw.')
+    }
+  }
+
+  /**
+   * Het speldje omzetten.
+   *
+   * Staat er nog geen uur op, dan legt het speldje het uur vast waar de bon nu
+   * getekend staat — dat is wat "deze staat vast op dit uur" betekent voor een
+   * bon waarvan het uur tot nu toe berekend werd. Losmaken laat het uur staan:
+   * er verspringt niets onder je handen, het is gewoon geen afspraak meer.
+   */
+  async function togglePin(workOrderId: string) {
+    setRefusal(null)
+    const dateStr = dayOf[workOrderId]
+    if (!dateStr) return
+
+    const current = (byDate[dateStr] ?? []).find(i => i.id === workOrderId)
+    if (!current) return
+
+    if (current.startIsAppointment) {
+      await changeHour(dateStr, workOrderId, { startIsAppointment: false })
+      return
+    }
+
+    const shown = current.plannedStartMinutes ?? spanOf[workOrderId]?.startMinutes
+    if (shown === undefined) return
+
+    await changeHour(dateStr, workOrderId, {
+      plannedStartMinutes: snapToStep(shown),
+      startIsAppointment: true,
+    })
+  }
+
+  /** Het uur weghalen: vanaf nu weer berekend, zoals elke andere bon. */
+  async function clearHour(workOrderId: string) {
+    setRefusal(null)
+    const dateStr = dayOf[workOrderId]
+    if (!dateStr) return
+    await changeHour(dateStr, workOrderId, {
+      plannedStartMinutes: undefined,
+      startIsAppointment: false,
+    })
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -160,12 +362,34 @@ export default function WeekView() {
       dayOf,
       poolIds: pool.map(i => i.id),
       statusById,
+      startMinutesOf: Object.fromEntries(
+        Object.entries(spanOf).map(([id, span]) => [id, span.startMinutes]),
+      ),
+      // Van pixels naar minuten met dezelfde schaal waarmee getekend is. Zonder
+      // dit zou een sleep van een centimeter iets anders betekenen bij elke
+      // stand van de hoogteschuif.
+      deltaMinutes: (event.delta.y * 60) / pixelsPerHour,
     })
 
     if (intent.kind === 'none') {
       if (intent.reason === 'het werk is al begonnen') {
-        setRefusal('Deze werkbon is al gestart en blijft op de dag staan.')
+        setRefusal('Deze werkbon is al gestart — zijn uur ligt vast en hij blijft op de dag staan.')
       }
+      return
+    }
+
+    // Op zijn eigen dag losgelaten: geen verplaatsing, maar een uur. Waar je
+    // hem neerzet, daar staat hij — ook als dat niet kan. Dan komt er arcering
+    // over het onmogelijke stuk en blijft het aan de gebruiker.
+    if (intent.kind === 'set_hour') {
+      await changeHour(intent.date, intent.workOrderId, {
+        plannedStartMinutes: intent.startMinutes,
+        // Slepen zet een uur, geen afspraak. Het speldje is een aparte
+        // handeling, en dat onderscheid is de hele reden dat het bestaat.
+        startIsAppointment: Boolean(
+          (byDate[intent.date] ?? []).find(i => i.id === intent.workOrderId)?.startIsAppointment,
+        ),
+      })
       return
     }
 
@@ -180,6 +404,11 @@ export default function WeekView() {
       const released: Intervention = {
         ...moving,
         plannedDate: undefined,
+        // Een uur zonder dag betekent niets. savePlanningSnapshot wist het aan
+        // de serverkant; hier moet het scherm hetzelfde zeggen, anders toont de
+        // pool een uur dat nergens meer bestaat.
+        plannedStartMinutes: undefined,
+        startIsAppointment: false,
         status: moving.status === 'gepland' || moving.status === 'onderweg' ? 'aangemaakt' : moving.status,
       }
 
@@ -203,6 +432,8 @@ export default function WeekView() {
       const scheduled: Intervention = {
         ...moving,
         plannedDate: `${intent.toDate}T00:00:00.000Z`,
+        plannedStartMinutes: undefined,
+        startIsAppointment: false,
         status: moving.status === 'aangemaakt' ? 'gepland' : moving.status,
       }
       const target = [...previousDay, scheduled]
@@ -229,7 +460,16 @@ export default function WeekView() {
     // IndexedDB uiteen zodra er iets misgaat.
     const fromList = byDate[intent.fromDate] ?? []
     const without = fromList.filter(i => i.id !== moving.id)
-    const scheduled: Intervention = { ...moving, plannedDate: `${intent.toDate}T00:00:00.000Z` }
+    // Een uur hoort bij een dag: 09:00 op dinsdag is niet 09:00 op woensdag,
+    // want de rit ernaartoe vertrekt van een andere plaats in een andere
+    // planning. Naar een andere dag slepen laat het uur dus los — aan beide
+    // kanten, hier en in savePlanningSnapshot.
+    const scheduled: Intervention = {
+      ...moving,
+      plannedDate: `${intent.toDate}T00:00:00.000Z`,
+      plannedStartMinutes: undefined,
+      startIsAppointment: false,
+    }
 
     setByDate(current => ({ ...current, [intent.fromDate]: without }))
 
@@ -252,7 +492,12 @@ export default function WeekView() {
       // schrijfbeweging vergen die evengoed kan mislukken. In plaats daarvan
       // volgt het scherm de bon naar waar hij werkelijk staat: op geen enkele
       // dag, dus de pool — de vluchtroute die de schrijfvolgorde bewust openhoudt.
-      const released: Intervention = { ...moving, plannedDate: undefined }
+      const released: Intervention = {
+        ...moving,
+        plannedDate: undefined,
+        plannedStartMinutes: undefined,
+        startIsAppointment: false,
+      }
       setByDate(current => ({
         ...current,
         [intent.toDate]: (current[intent.toDate] ?? []).filter(i => i.id !== scheduled.id),
@@ -334,6 +579,44 @@ export default function WeekView() {
             </div>
           )}
 
+          {/*
+            De botsingen. Ze blijven staan tot de gebruiker ze oplost — de app
+            schuift niets vanzelf op, want dan glijdt een bon weg onder je
+            vinger en lijkt alles aan elkaar te hangen. Elke melding noemt alle
+            drie de uitwegen, en de derde staat er ook als knop bij: die is
+            anders nergens te vinden zonder de bon aan te raken.
+          */}
+          {conflicts.map(conflict => (
+            <div
+              key={`${conflict.date}-${conflict.interventionId}`}
+              role="alert"
+              className="mb-3 rounded-xl border-l-4 border-brand-red bg-brand-red/10 px-3 py-2 text-xs text-ink"
+            >
+              <p>{conflictMessage(conflict.customerName)}</p>
+              <p className="mt-1 tabular-nums text-ink-soft">
+                {dayLabel(conflict.date)} · ten vroegste {hhmm(conflict.earliestMinutes)}
+              </p>
+              <button
+                type="button"
+                onClick={() => clearHour(conflict.interventionId)}
+                className="mt-2 min-h-11 rounded-lg border border-brand-red/40 px-3 text-xs font-semibold text-brand-red active:bg-brand-red/10"
+              >
+                Vast uur weghalen
+              </button>
+            </div>
+          ))}
+
+          {earlyDepartures.map(({ day, depart }) => (
+            <div
+              key={toLocalDateStr(day)}
+              className="mb-3 rounded-xl border-l-4 border-brand-orange bg-brand-orange/10 px-3 py-2 text-xs text-ink"
+            >
+              <b>Vertrek om {hhmm(depart)}</b> op {dayLabel(toLocalDateStr(day))} — vroeger dan het
+              ingestelde startuur. Om die eerste klant op zijn uur te halen, moet er eerder
+              vertrokken worden.
+            </div>
+          ))}
+
           <WeekGrid
             days={days}
             schedules={schedules}
@@ -341,6 +624,8 @@ export default function WeekView() {
             pixelsPerHour={pixelsPerHour}
             selectedDate={new Date()}
             onOpenIntervention={id => router.push(`/interventions/${id}`)}
+            onTogglePin={id => { void togglePin(id) }}
+            onClearHour={id => { void clearHour(id) }}
             renderDayColumn={(day, index, column) => (
               <DayDroppable dateStr={toLocalDateStr(day)}>{column}</DayDroppable>
             )}
@@ -360,6 +645,17 @@ export default function WeekView() {
 
 function monthName(day: Date): string {
   return new Intl.DateTimeFormat('nl-BE', { month: 'short' }).format(day)
+}
+
+function hhmm(minutes: number): string {
+  const rounded = Math.round(minutes)
+  return `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}`
+}
+
+/** "ma 14 sep" — genoeg om te weten welke dag de melding bedoelt. */
+function dayLabel(dateStr: string): string {
+  return new Intl.DateTimeFormat('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' })
+    .format(new Date(`${dateStr}T12:00:00`))
 }
 
 /**

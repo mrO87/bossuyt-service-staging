@@ -374,6 +374,11 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
           id: item.intervention.id,
           estimatedMinutes: item.intervention.estimatedMinutes,
           at: jobCoordinates(item.intervention),
+          // Het vastgezette uur hoort hier net zo goed thuis als in de week.
+          // Zonder dit toont de dagweergave 08:22 waar de weekweergave 10:00
+          // toont voor dezelfde bon — dezelfde motor, andere invoer, en dan is
+          // "ze kunnen nooit een ander uur tonen" niet langer waar.
+          startMinutes: item.intervention.plannedStartMinutes ?? null,
         })),
       travelBetween: (from, to) => {
         const leg = resolveLeg(cacheSnapshot, from, to)

@@ -128,3 +128,83 @@ describe('resolveWeekDrop', () => {
     })
   })
 })
+
+/**
+ * Loslaten op je eigen dag, op een andere hoogte.
+ *
+ * Dat is de vierde uitkomst, en de enige die geen verplaatsing is: de bon
+ * blijft waar hij staat en krijgt een uur. Zonder dit zou verticaal slepen
+ * niets doen — precies de variant die in het prototype sneuvelde omdat slepen
+ * dan stuk voelt.
+ */
+describe('resolveWeekDrop — een uur zetten', () => {
+  const sameDay = {
+    ...context,
+    overId: dayDroppableId(MON),
+    startMinutesOf: { 'wo-1': 8 * 60 } as Record<string, number | undefined>,
+  }
+
+  it('turns a drop on its own day into an hour', () => {
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: 62 })).toEqual({
+      kind: 'set_hour',
+      workOrderId: 'wo-1',
+      date: MON,
+      startMinutes: 9 * 60,
+    })
+  })
+
+  it('snaps to the quarter, so a thumb lands on a usable hour', () => {
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: 8 })).toMatchObject({
+      startMinutes: 8 * 60 + 15,
+    })
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: 7 })).toMatchObject({
+      startMinutes: 8 * 60,
+    })
+  })
+
+  it('does nothing when the finger did not really move', () => {
+    // Een tik is geen sleep. Zonder deze regel zou elke tik een uur vastzetten
+    // op het uur dat er toch al berekend stond.
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: 2 }).kind).toBe('none')
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: 0 }).kind).toBe('none')
+  })
+
+  it('does nothing when nobody knows what hour it stands on', () => {
+    expect(resolveWeekDrop({ ...sameDay, startMinutesOf: {}, deltaMinutes: 60 }).kind).toBe('none')
+  })
+
+  it('never lets an hour land outside the day', () => {
+    expect(resolveWeekDrop({ ...sameDay, deltaMinutes: -600 })).toMatchObject({ startMinutes: 0 })
+  })
+
+  it('refuses to re-time work that has already started', () => {
+    // Bij een gestarte job is het uur geen plan meer maar een feit. Dezelfde
+    // grendel die hem op de dag houdt, houdt ook zijn uur tegen.
+    const started = resolveWeekDrop({
+      ...sameDay,
+      statusById: { 'wo-1': 'bezig' },
+      deltaMinutes: 60,
+    })
+    expect(started.kind).toBe('none')
+    if (started.kind !== 'none') return
+    expect(started.reason).toBe('het werk is al begonnen')
+  })
+
+  it('leaves a move to another day a move, hour or no hour', () => {
+    // De regel die de gebruiker koos: een uur hoort bij een dag. Naar een
+    // andere dag slepen wist het, en dat gebeurt in savePlanningSnapshot —
+    // hier is er dus niets bijzonders aan een verplaatsing.
+    expect(resolveWeekDrop({ ...context, startMinutesOf: { 'wo-1': 8 * 60 }, deltaMinutes: 60 }))
+      .toEqual({ kind: 'move', workOrderId: 'wo-1', fromDate: MON, toDate: TUE })
+  })
+
+  it('leaves a pool work order without an hour', () => {
+    // De poolkaart staat ergens anders op het scherm; hoe hoog je hem in de
+    // kolom loslaat zegt niets. Hij komt op de dag en het uur wordt berekend.
+    expect(resolveWeekDrop({
+      ...context,
+      dayOf: { 'wo-1': undefined },
+      deltaMinutes: 120,
+    })).toEqual({ kind: 'schedule', workOrderId: 'wo-1', toDate: TUE })
+  })
+})

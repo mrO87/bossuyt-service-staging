@@ -32,6 +32,8 @@ export function WeekGrid({
   pixelsPerHour,
   selectedDate,
   onOpenIntervention,
+  onTogglePin,
+  onClearHour,
   renderDayColumn,
 }: {
   days: Date[]
@@ -40,6 +42,10 @@ export function WeekGrid({
   pixelsPerHour: number
   selectedDate: Date
   onOpenIntervention: (id: string) => void
+  /** Het speldje: of dit uur een afspraak is. Zegt niets over hoe hij sleept. */
+  onTogglePin: (id: string) => void
+  /** Het uur weghalen, zodat het weer berekend wordt zoals bij elke andere bon. */
+  onClearHour: (id: string) => void
   /** Laat Task 3 een droppable om elke kolom hangen zonder dit bestand te wijzigen. */
   renderDayColumn?: (day: Date, index: number, column: ReactNode) => ReactNode
 }) {
@@ -115,6 +121,8 @@ export function WeekGrid({
                 totalPx={totalPx}
                 hours={hours}
                 onOpenIntervention={onOpenIntervention}
+                onTogglePin={onTogglePin}
+                onClearHour={onClearHour}
               />
             )
             return (
@@ -130,7 +138,8 @@ export function WeekGrid({
 }
 
 function DayColumn({
-  day, schedule, interventionsById, toPx, totalPx, hours, onOpenIntervention,
+  day, schedule, interventionsById, toPx, totalPx, hours,
+  onOpenIntervention, onTogglePin, onClearHour,
 }: {
   day: Date
   schedule: DayScheduleResult
@@ -139,6 +148,8 @@ function DayColumn({
   totalPx: number
   hours: number[]
   onOpenIntervention: (id: string) => void
+  onTogglePin: (id: string) => void
+  onClearHour: (id: string) => void
 }) {
   const roster = scheduleForDate(day)
 
@@ -182,6 +193,8 @@ function DayColumn({
             clippedTop={rawTop < 0}
             clippedBottom={rawBottom > totalPx}
             onOpen={onOpenIntervention}
+            onTogglePin={onTogglePin}
+            onClearHour={onClearHour}
           />
         )
       })}
@@ -239,7 +252,7 @@ function clipEdgeClasses(clippedTop: boolean, clippedBottom: boolean, tone: 'lig
  * op en zet `disabled` voor de blokken die geen job zijn.
  */
 function Block({
-  block, intervention, top, height, clippedTop, clippedBottom, onOpen,
+  block, intervention, top, height, clippedTop, clippedBottom, onOpen, onTogglePin, onClearHour,
 }: {
   block: ScheduleBlock
   intervention?: Intervention
@@ -248,6 +261,8 @@ function Block({
   clippedTop: boolean
   clippedBottom: boolean
   onOpen: (id: string) => void
+  onTogglePin: (id: string) => void
+  onClearHour: (id: string) => void
 }) {
   const isJob = block.kind === 'job' && Boolean(intervention)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -284,6 +299,26 @@ function Block({
     )
   }
 
+  // De arcering ligt óver het blok heen en vangt geen aanraking: precies het
+  // stuk dat niet kan, en verder niets. Er staat geen tekst in — op 62 px past
+  // die niet — dus de woorden staan in de melding onder het rooster, en het
+  // blok zelf draagt ze in zijn title en zijn aria-label.
+  if (block.kind === 'clash') {
+    return (
+      <div
+        role="presentation"
+        className="pointer-events-none absolute inset-x-0.5 z-30 rounded-sm border border-brand-red"
+        style={{
+          top,
+          height,
+          background:
+            'repeating-linear-gradient(135deg, rgb(214 69 69 / .55) 0 5px, rgb(214 69 69 / .16) 5px 10px)',
+        }}
+        title="Kan niet — deze werkbon staat vóór het moment waarop je er kunt zijn"
+      />
+    )
+  }
+
   if (block.kind === 'break') {
     return (
       <div
@@ -316,6 +351,13 @@ function Block({
   // blijft gewoon aantikbaar én scrollbaar.
   const noSelect = { WebkitTouchCallout: 'none', WebkitUserSelect: 'none' } as const
 
+  // Twee dingen die los van elkaar staan, en dat moeten blijven. `pinned` zegt
+  // dat dit uur bewaard is — dat iemand de bon hier heeft neergezet. `isAppointment`
+  // zegt dat het uur een afspraak is. Slepen gedraagt zich in beide gevallen
+  // hetzelfde; alleen "kortste volgorde" ziet het verschil.
+  const pinned = typeof intervention.plannedStartMinutes === 'number'
+  const isAppointment = pinned && Boolean(intervention.startIsAppointment)
+
   return (
     <div
       ref={setNodeRef}
@@ -323,6 +365,9 @@ function Block({
       className={[
         'absolute inset-x-0.5 flex select-none overflow-hidden rounded text-white shadow-sm',
         typeBorderClass(intervention.type, intervention.isUrgent),
+        // Een afspraak draagt hem zichtbaar: rode rand met een stippellijn
+        // bovenaan, op het uur waarop hij vastligt.
+        isAppointment ? 'outline outline-2 -outline-offset-2 outline-brand-red border-t-2 border-dashed border-t-brand-red' : '',
         clipEdgeClasses(clippedTop, clippedBottom, 'dark'),
       ].join(' ')}
       style={{
@@ -351,7 +396,19 @@ function Block({
         className="min-w-0 flex-1 px-1 py-0.5 text-left active:opacity-80"
         style={noSelect}
       >
-        <span className="block text-[9px] font-bold leading-tight tabular-nums">
+        {/*
+          Het uurblokje. Het staat op élk blok, ook bij een berekend uur — dat is
+          wat het bruikbaar maakt: je leest het uur zonder je af te vragen of er
+          wel een uur is. De kleur draagt het enige verschil dat telt. Groen: dit
+          uur is berekend en schuift mee als er iets vóór deze bon verandert.
+          Rood: het ligt vast, hier gebeurt het.
+        */}
+        <span
+          className={[
+            'inline-block rounded-sm px-0.5 text-[9px] font-bold leading-tight tabular-nums',
+            isAppointment ? 'bg-brand-red' : 'bg-brand-green/90',
+          ].join(' ')}
+        >
           {hhmm(block.startMinutes)}
         </span>
         {height >= 24 && (
@@ -360,6 +417,54 @@ function Block({
           </span>
         )}
       </button>
+
+      {/*
+        Het speldje. Het verandert niets aan hoe deze bon zich laat verslepen —
+        beide soorten gaan even vrij — en zegt alleen of dit uur een afspraak is.
+        Onder de 30 px is er geen ruimte voor een knop die een duim kan raken;
+        dan blijft de kleur van het uurblokje het enige teken, en gaat het
+        speldje via de werkbon zelf.
+      */}
+      {height >= 30 && (
+        <button
+          type="button"
+          onClick={() => onTogglePin(intervention.id)}
+          aria-pressed={isAppointment}
+          aria-label={
+            isAppointment
+              ? `Vast uur weghalen bij ${intervention.customerName}`
+              : `${intervention.customerName} op dit uur vastzetten`
+          }
+          title={isAppointment ? 'Afspraak — blijft staan' : 'Op dit uur vastzetten'}
+          className={[
+            'flex w-4 shrink-0 items-center justify-center text-[10px] leading-none',
+            isAppointment ? 'bg-brand-red text-white' : 'bg-black/20 text-white/60',
+          ].join(' ')}
+          style={noSelect}
+        >
+          📌
+        </button>
+      )}
+
+      {/*
+        Het uur weghalen, zodat het weer berekend wordt. Dit is een van de drie
+        uitwegen uit een botsing, en de enige die anders nergens te vinden was:
+        een bon die eenmaal ergens neergezet is, blijft daar tot iemand dat
+        terugdraait. Hij staat alleen op bonnen die werkelijk een bewaard uur
+        dragen — op de andere valt er niets weg te halen.
+      */}
+      {pinned && height >= 30 && (
+        <button
+          type="button"
+          onClick={() => onClearHour(intervention.id)}
+          aria-label={`Uur van ${intervention.customerName} weer laten berekenen`}
+          title="Uur weghalen — weer berekenen"
+          className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center bg-black/35 text-[10px] leading-none text-white/80"
+          style={noSelect}
+        >
+          ×
+        </button>
+      )}
     </div>
   )
 }
