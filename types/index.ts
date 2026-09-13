@@ -145,6 +145,22 @@ export interface Intervention {
   /** Absent while the work order sits in the open pool — assigned, but no day
    *  picked yet. Having a day is what moves it into the planning. */
   plannedDate?: string
+  /**
+   * The hour this work order was put on, in minutes since local midnight.
+   *
+   * Absent means the hour is derived — departure time plus driving, and then
+   * job after job. Present means someone dragged it onto that hour and it stays
+   * there, even when that turns out to be impossible: the app draws the clash
+   * and leaves the fixing to whoever put it there.
+   */
+  plannedStartMinutes?: number
+  /**
+   * Whether that hour is an appointment rather than a preference.
+   *
+   * Both kinds drag alike. This decides one thing: "shortest order" may move a
+   * work order whose hour is merely a preference, and never one with the pin.
+   */
+  startIsAppointment?: boolean
   status: InterventionStatus
   type: InterventionType
   description?: string    // reported problem (OMSCHRIJVING KLANT)

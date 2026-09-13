@@ -141,6 +141,19 @@ export const workOrders = pgTable(
     // day yet. This is the single field deciding which of the two lists a work
     // order appears in — see getTodayInterventions.
     plannedDate: timestamp('planned_date', { withTimezone: true }),
+    // The hour the work order was put on, in minutes since local midnight —
+    // null means the hour is derived, which is how every work order started out
+    // and how most stay. This is the first hour this app remembers rather than
+    // recomputes: everything else in the day follows from the departure time
+    // and the driving between customers. Minutes, not a timestamp, because the
+    // day it belongs to is already `planned_date`, and storing the same day
+    // twice is storing a way for the two to disagree.
+    plannedStartMinutes: integer('planned_start_minutes'),
+    // Whether that hour is an appointment. It changes nothing about how the
+    // work order behaves when dragged — both kinds move freely and clash the
+    // same way. It says one thing only: "shortest order" may reorder a derived
+    // hour, and must leave an appointment where it stands.
+    startIsAppointment: boolean('start_is_appointment').notNull().default(false),
     // Which role last moved this work order on or off a day. Written by
     // savePlanningSnapshot and read by nobody yet: it is the record the change
     // notice and the planner's lock will be built on once roles arrive.
