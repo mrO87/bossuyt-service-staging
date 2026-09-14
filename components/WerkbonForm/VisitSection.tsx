@@ -1,3 +1,4 @@
+import { kindForDate, resolveInterventionKind } from '@/lib/werkbon/interventionKind'
 import type { InterventionKind, WerkbonFormState } from '@/types'
 import Section from './Section'
 
@@ -36,10 +37,32 @@ function withTime(visitDate: string, hhmm: string): string {
   return base.toISOString()
 }
 
-type TimeField = 'arrivalTime' | 'departureTime' | 'workStart' | 'workEnd'
+/**
+ * De twee uren die op de bon staan.
+ *
+ * Er waren er vier: aankomst, vertrek, werk-start en werk-einde. Die laatste
+ * twee zeggen hetzelfde als de eerste twee — je begint te werken wanneer je
+ * aankomt en je stopt wanneer je vertrekt — en ze stonden ook niet op het
+ * papier: de gedrukte bon kent alleen AANKOMSTUUR en VERTREKUUR. Vier velden
+ * invullen voor twee gegevens is werk zonder opbrengst.
+ */
+type TimeField = 'arrivalTime' | 'departureTime'
 
 /** Right-hand block of the paper bon: technicus, bezoekdatum, uren, week/weekend, ritten, personen. */
 export default function VisitSection({ form, technicians, onChange }: Props) {
+  /**
+   * Week of weekend zoals het getoond moet worden.
+   *
+   * Afgeleid uit de bezoekdatum, tenzij iemand de knop zelf omzette. Zo kan een
+   * opgeslagen keuze nooit blijven hangen bij een datum waar ze niet meer bij
+   * hoort — wat precies het gemelde geval was.
+   */
+  const getoondeSoort = resolveInterventionKind({
+    visitDate: form.visitDate,
+    stored: form.interventionKind,
+    manual: Boolean(form.interventionKindManual),
+  })
+
   function renderTimeField(label: string, field: TimeField) {
     return (
       <div key={field} className="rounded-xl p-3 bg-surface flex flex-col gap-2">
@@ -120,8 +143,10 @@ export default function VisitSection({ form, technicians, onChange }: Props) {
               const value = e.target.value
               onChange('visitDate', value)
               if (value) {
-                const day = new Date(`${value}T12:00:00`).getDay()
-                onChange('interventionKind', day === 0 || day === 6 ? 'weekend' : 'week')
+                // Een nieuwe dag wist een eerdere eigen keuze: die ging over
+                // een andere datum en zegt hier niets meer.
+                onChange('interventionKind', kindForDate(value))
+                onChange('interventionKindManual', false)
               }
             }}
             className={inputClass}
@@ -131,8 +156,6 @@ export default function VisitSection({ form, technicians, onChange }: Props) {
         <div className="grid grid-cols-2 gap-2">
           {renderTimeField('Aankomstuur', 'arrivalTime')}
           {renderTimeField('Vertrekuur', 'departureTime')}
-          {renderTimeField('Werk start', 'workStart')}
-          {renderTimeField('Werk einde', 'workEnd')}
         </div>
 
         <div>
@@ -144,9 +167,15 @@ export default function VisitSection({ form, technicians, onChange }: Props) {
               <button
                 key={kind}
                 type="button"
-                onClick={() => onChange('interventionKind', kind)}
+                onClick={() => {
+                  // Zelf omzetten is een uitspraak over déze dag — een
+                  // feestdag, nachtwerk — en die blijft staan tot de
+                  // bezoekdatum verandert.
+                  onChange('interventionKind', kind)
+                  onChange('interventionKindManual', true)
+                }}
                 className={`flex-1 py-3 text-sm font-bold uppercase ${
-                  form.interventionKind === kind ? 'bg-brand-orange text-white' : 'bg-white text-ink'
+                  getoondeSoort === kind ? 'bg-brand-orange text-white' : 'bg-white text-ink'
                 }`}
               >
                 {kind}

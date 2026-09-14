@@ -12,6 +12,7 @@ import type { Intervention } from '@/types'
 import { TimelineRail, RailLine } from './TimelineRail'
 import AlertNoteBadge from '@/components/AlertNoteBadge'
 import {
+  formatClock,
   statusClass,
   statusLabel,
   typeBorderClass,
@@ -122,8 +123,7 @@ export function JobTimelineCard({
                             : 'Berekend uur — schuift mee'
                         }
                       >
-                        {String(Math.floor(startMinutes / 60)).padStart(2, '0')}:
-                        {String(startMinutes % 60).padStart(2, '0')}
+                        {formatClock(startMinutes)}
                       </p>
                     )}
                   </div>

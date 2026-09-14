@@ -298,6 +298,30 @@ async function runSyncPendingWrites(): Promise<PendingWriteResult> {
         continue
       }
 
+      if (write.type === 'set_day_clock') {
+        // Rechtstreeks naar zijn eigen route, want dit gaat niet over een
+        // werkbon: `/api/sync/write` antwoordt met een dag vol bonnen, en die
+        // heeft de dagklok niet.
+        const res = await fetch('/api/day-clock', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(write.payload),
+        })
+        if (res.ok) {
+          await removePendingWrite(write.id!)
+          synced++
+        } else if (res.status >= 400 && res.status < 500) {
+          // Een uur dat de server weigert, wordt bij de honderdste poging niet
+          // ineens geldig. Weggooien is hier beter dan een wachtrij die voor
+          // altijd vastloopt op één rij.
+          await removePendingWrite(write.id!)
+          failed++
+        } else {
+          failed++
+        }
+        continue
+      }
+
       const res = await fetch(`/api/sync/write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

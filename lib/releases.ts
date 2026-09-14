@@ -15,6 +15,88 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.69',
+    date: '14 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'Je dag starten en afsluiten',
+        body:
+          'In de START-regel van de dagplanning staat een groen play-knopje met '
+          + 'het geplande vertrekuur erachter, en onderaan bij EINDE een rood '
+          + 'stopknopje. Tik erop wanneer je vertrekt en wanneer je thuis bent. '
+          + 'Het uur wordt zwart zodra het het échte is, en de rest van de dag '
+          + 'schuift mee: vertrek je om 07:12 in plaats van 07:00, dan staat de '
+          + 'eerste klant ook twaalf minuten later. Een bon met een vastgezet uur '
+          + 'blijft staan waar hij staat — dat uur is met de klant afgesproken. '
+          + 'Vergeten te tikken kan altijd rechtgezet worden: tik op het uur en '
+          + 'zet het met "Nu", met stapjes van een kwartier, of tik het gewoon in. '
+          + 'Zonder bereik blijft de tik in de wachtrij staan en vertrekt hij '
+          + 'zodra er weer verbinding is — het uur dat bewaard wordt is dat van '
+          + 'het moment waarop je tikte, niet van het moment waarop de wachtrij '
+          + 'leegliep.',
+      },
+      {
+        label: 'Fix',
+        title: 'Een bon waaraan gewerkt is, blijft op zijn dag staan',
+        body:
+          'Sinds v1.67 keert een vergeten werkbon om middernacht terug naar de '
+          + 'pool. Die opkuis keek alleen naar de status, en een bon blijft '
+          + '"gepland" zolang je hem niet indient — ook al ben je er geweest. Wie '
+          + 'zijn aankomst- en vertrekuur al ingevuld had maar de bon nog niet '
+          + 'afgerond, zag hem dus \'s nachts naar de pool verhuizen. Voortaan '
+          + 'blijft een bon staan zodra er een uur op ingevuld is, of dat nu op de '
+          + 'ingediende bon staat of nog in het half ingevulde scherm. Eén uur is '
+          + 'genoeg: wie een aankomstuur heeft, is vertrokken.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De week toont hoe lang een bezoek écht duurde',
+        body:
+          'Een afgewerkte bon stond op de weekplanning nog altijd op zijn geraamde '
+          + 'duur. Een job van anderhalf uur die er drie geduurd heeft, zag er dan '
+          + 'uit als anderhalf uur, en zo klopte het beeld van de week niet met wat '
+          + 'er gebeurd was. Nu staat een afgewerkte bon van zijn aankomstuur tot '
+          + 'zijn vertrekuur, op de plaats waar hij werkelijk viel. Zolang de bon '
+          + 'nog loopt, of er maar één uur op staat, blijft de raming staan — een '
+          + 'half ingevuld bezoek mag geen verzonnen duur op de week zetten.',
+      },
+      {
+        label: 'Fix',
+        title: 'Alle toestellen van een bon staan op de afgewerkte bon',
+        body:
+          'De bon van Trianon noemt drie toestellen. De app las ze alle drie uit en '
+          + 'toonde ze ook op het scherm, maar op de afgewerkte PDF verscheen er één '
+          + '— de toestelband had maar plaats voor één regel. Wie die bon later '
+          + 'terugleest, miste dan twee toestellen die de technieker wel degelijk '
+          + 'gezien heeft. Er passen er nu vier in de band; bij meer staat er "+2 '
+          + 'meer" achter de laatste, zodat er niets stil wegvalt.',
+      },
+      {
+        label: 'Fix',
+        title: 'Week of weekend volgt de bezoekdatum',
+        body:
+          'Deze keuze stond los van de bezoekdatum, en die twee konden elkaar dus '
+          + 'tegenspreken. Wie een bon een dag eerder opende, kreeg de datum van '
+          + 'toen te zien — en de knop stond dan op wat bij díé dag hoorde. Vandaar '
+          + 'de indruk dat hij "altijd op weekend" stond. Nu volgt de keuze altijd '
+          + 'de bezoekdatum. Zet je hem zelf om, voor een feestdag of nachtwerk, dan '
+          + 'blijft die keuze staan tot je de bezoekdatum verandert — want dan gaat '
+          + 'het over een andere dag.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Twee uurvelden op de werkbon in plaats van vier',
+        body:
+          'Naast aankomst- en vertrekuur stonden er ook "werk start" en "werk '
+          + 'einde". Die zeggen hetzelfde: je begint te werken wanneer je aankomt en '
+          + 'je stopt wanneer je vertrekt. Ze stonden ook niet op het papier — de '
+          + 'gedrukte bon kent alleen AANKOMSTUUR en VERTREKUUR. Vier velden '
+          + 'invullen voor twee gegevens is werk zonder opbrengst, dus ze zijn weg.',
+      },
+    ],
+  },
+  {
     version: 'v1.68',
     date: '14 september 2026',
     changes: [
@@ -1875,7 +1957,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.68'
+const CURRENT_RELEASE_VERSION = 'v1.69'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

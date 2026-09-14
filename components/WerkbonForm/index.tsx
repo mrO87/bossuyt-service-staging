@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SignaturePad from '@/components/SignaturePad'
 import DevicePanel from '@/components/DevicePanel'
 import { generateWerkbonPDF } from '@/lib/pdf'
-import type { PdfPart, ServiceBonPdfData } from '@/lib/pdf'
+import type { PdfDevice, PdfPart, ServiceBonPdfData } from '@/lib/pdf'
 import { useTasks } from '@/lib/task-store'
 import { queueTaskCommand } from '@/lib/tasks/sync'
 import { deleteWerkbon, loadWerkbon, saveWerkbon } from '@/lib/idb'
@@ -17,7 +17,9 @@ import Section from './Section'
 import BonHeaderCard from './BonHeaderCard'
 import VisitSection, { type TechnicianOption } from './VisitSection'
 import DevicePicker from './DevicePicker'
-import { BonDeviceTabs, type BonDevice } from './BonDeviceTabs'
+import { BonDeviceTabs } from './BonDeviceTabs'
+import { deviceLabel, useBonDevices, type BonDevice } from './useBonDevices'
+import { kindForDate, resolveInterventionKind } from '@/lib/werkbon/interventionKind'
 import AlertNoteCard from './AlertNoteCard'
 
 const STATUS_OPTIONS = [
@@ -32,10 +34,6 @@ function todayISODate(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function isWeekend(isoDate: string): boolean {
-  const day = new Date(`${isoDate}T12:00:00`).getDay()
-  return day === 0 || day === 6
-}
 
 /**
  * The technicians a fresh bon starts with: whoever is filling it in, then the
@@ -65,9 +63,8 @@ function initialForm(intervention: Intervention, currentUserId?: string): Werkbo
     visitDate: today,
     arrivalTime: '',
     departureTime: '',
-    workStart: '',
-    workEnd: '',
-    interventionKind: isWeekend(today) ? 'weekend' : 'week',
+    interventionKind: kindForDate(today),
+    interventionKindManual: false,
     tripCount: 1,
     // AANTAL PERSONEN follows who is on the bon, not who was planned.
     personCount: Math.max(1, technicianIds.length),
@@ -101,6 +98,8 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
    * hangen. Dit staat los van `form.deviceId` en schrijft niets weg.
    */
   const [bekekenToestel, setBekekenToestel] = useState<BonDevice | null>(null)
+  /** Alle toestellen van deze bon — voor de keuzerij én voor de afgewerkte bon. */
+  const bonToestellen = useBonDevices(intervention.id)
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   /** Whether this half-filled bon is safe yet, and where. Separate from
@@ -301,6 +300,57 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
     .filter(Boolean)
     .join(', ')
 
+  /**
+   * Week of weekend, zoals het op de bon moet komen.
+   *
+   * Dezelfde afleiding als op het scherm, zodat wat de technieker ziet en wat
+   * er op de PDF en naar de server gaat niet uit elkaar kunnen lopen. Het veld
+   * `interventionKind` in het formulier is nog maar een opslagplaats voor een
+   * eigen keuze; wat geldt, staat hier.
+   */
+  function getoondeSoort() {
+    return resolveInterventionKind({
+      visitDate: form.visitDate,
+      stored: form.interventionKind,
+      manual: Boolean(form.interventionKindManual),
+    })
+  }
+
+  /**
+   * De toestelregels voor de afgewerkte bon.
+   *
+   * Alle toestellen van deze bon, met het hoofdtoestel vooraan — dat is waar
+   * het verslag en de onderdelen aan hangen, en op papier hoort dat bovenaan
+   * te staan.
+   *
+   * Kent de app er geen (een bon die met de hand is ingetikt, of een lijst die
+   * nog aan het laden is), dan valt dit terug op het ene toestel dat de
+   * werkbon zelf al kende. Een lege band op een afgewerkte bon zou erger zijn
+   * dan een onvolledige.
+   */
+  function pdfDevices(): PdfDevice[] {
+    if (bonToestellen.length > 0) {
+      return [...bonToestellen]
+        .sort((a, b) => Number(b.isMain) - Number(a.isMain))
+        .map(device => ({
+          unitNumber: device.unitNumber ?? '',
+          description: deviceLabel(device),
+          deliveryDate: device.deliveryDate ?? '',
+          warrantyUntil: device.warrantyUntil ?? '',
+        }))
+    }
+
+    return [{
+      unitNumber: pickedDevice?.unitNumber ?? intervention.deviceUnitNumber ?? '',
+      description: [
+        pickedDevice?.brand ?? intervention.deviceBrand,
+        pickedDevice?.model ?? intervention.deviceModel,
+      ].filter(Boolean).join(' '),
+      deliveryDate: pickedDevice?.deliveryDate ?? intervention.deviceDeliveryDate ?? '',
+      warrantyUntil: pickedDevice?.warrantyUntil ?? intervention.deviceWarrantyUntil ?? '',
+    }]
+  }
+
   /** Single place that maps form + intervention to the Service Bon PDF input. */
   function buildPdfData(): ServiceBonPdfData {
     const invoiceNumber =
@@ -320,13 +370,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       contactName: intervention.contactName ?? '',
       phones: [intervention.contactPhone, ...(intervention.sitePhones ?? [])].filter((p): p is string => Boolean(p)),
       closingDay: intervention.closingDay ?? '',
-      deviceUnitNumber: pickedDevice?.unitNumber ?? intervention.deviceUnitNumber ?? '',
-      deviceDescription: [
-        pickedDevice?.brand ?? intervention.deviceBrand,
-        pickedDevice?.model ?? intervention.deviceModel,
-      ].filter(Boolean).join(' '),
-      deviceDeliveryDate: pickedDevice?.deliveryDate ?? intervention.deviceDeliveryDate ?? '',
-      deviceWarrantyUntil: pickedDevice?.warrantyUntil ?? intervention.deviceWarrantyUntil ?? '',
+      devices: pdfDevices(),
       customerDescription: intervention.description ?? '',
       technicianReport: form.notes,
       parts: form.parts,
@@ -334,7 +378,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       visitDate: form.visitDate ? new Date(`${form.visitDate}T00:00:00`).toISOString() : '',
       arrivalTime: form.arrivalTime,
       departureTime: form.departureTime,
-      interventionKind: form.interventionKind,
+      interventionKind: getoondeSoort(),
       tripCount: form.tripCount,
       personCount: form.personCount,
       remarks: form.remarks,
@@ -365,10 +409,10 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
       fd.append('completionParts', JSON.stringify(form.parts))
       fd.append('followUp', JSON.stringify(linkedTasks))
       fd.append('visitDate', new Date(`${form.visitDate}T00:00:00`).toISOString())
-      for (const key of ['arrivalTime', 'departureTime', 'workStart', 'workEnd'] as const) {
+      for (const key of ['arrivalTime', 'departureTime'] as const) {
         if (form[key]) fd.append(key, form[key])
       }
-      fd.append('interventionKind', form.interventionKind)
+      fd.append('interventionKind', getoondeSoort())
       fd.append('tripCount', String(form.tripCount))
       fd.append('personCount', String(form.personCount))
       if (form.signature) fd.append('signature', form.signature)
@@ -503,7 +547,7 @@ export default function WerkbonForm({ intervention, initialActivityId }: Props) 
             hangen, en dat staat er ook bij.
           */}
           <BonDeviceTabs
-            workOrderId={intervention.id}
+            devices={bonToestellen}
             selectedId={bekekenToestel?.id ?? form.deviceId}
             onSelect={setBekekenToestel}
           />

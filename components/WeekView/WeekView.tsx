@@ -21,6 +21,7 @@ import { useTasks } from '@/lib/task-store'
 import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedule'
 import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@/lib/planning/daySchedule'
 import { orderDayByClock } from '@/lib/planning/dayOrder'
+import { actualVisitSpan } from '@/lib/planning/visitSpan'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, isWeekEdge, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
@@ -248,21 +249,35 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
           .filter((i): i is Intervention => Boolean(i))
       }
 
-      const jobs = list.map(i => ({
+      const jobs = list.map(i => {
+        // Een afgewerkte bon staat op de week zoals hij werkelijk gelopen is:
+        // van het aankomstuur tot het vertrekuur. De raming was een schatting
+        // vooraf; hierna is er iets beters. Zie `actualVisitSpan`.
+        const gelopen = actualVisitSpan(i)
+
+        return {
           id: i.id,
-          estimatedMinutes: drag?.kind === 'resize' && drag.id === i.id
-            ? drag.minutes
-            : i.estimatedMinutes,
+          estimatedMinutes: gelopen
+            ? gelopen.minutes
+            : drag?.kind === 'resize' && drag.id === i.id
+              ? drag.minutes
+              : i.estimatedMinutes,
           at: typeof i.siteLat === 'number' && typeof i.siteLon === 'number'
             ? { lat: i.siteLat, lon: i.siteLon }
             : undefined,
           // Het enige uur dat deze app onthoudt. Ontbreekt het, dan rekent de
           // motor het uit zoals hij altijd deed. Tijdens een sleep telt het uur
           // waar de vinger nu staat, nog vóór er iets bewaard is.
-          startMinutes: drag?.kind === 'move' && drag.overOwnDay && drag.id === i.id
-            ? drag.startMinutes
-            : i.plannedStartMinutes ?? null,
-      }))
+          //
+          // Een afgewerkte bon staat op zijn echte aankomstuur, en dat gaat
+          // vóór het geplande: wat er gebeurd is, wint van wat er bedoeld was.
+          startMinutes: gelopen
+            ? gelopen.startMinutes
+            : drag?.kind === 'move' && drag.overOwnDay && drag.id === i.id
+              ? drag.startMinutes
+              : i.plannedStartMinutes ?? null,
+        }
+      })
 
       // Dezelfde volgorde en dezelfde pauze als de dagweergave. Week en dag
       // mogen nooit een ander uur tonen voor dezelfde bon, en dat lukt alleen

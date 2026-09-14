@@ -13,10 +13,7 @@ const data: ServiceBonPdfData = {
   contactName: '',
   phones: [],
   closingDay: '',
-  deviceUnitNumber: '',
-  deviceDescription: 'Berner Friteuse',
-  deviceDeliveryDate: '',
-  deviceWarrantyUntil: '',
+  devices: [{ unitNumber: '', description: 'Berner Friteuse', deliveryDate: '', warrantyUntil: '' }],
   customerDescription: 'Nazicht/ herstel 2 friteuses Berner - controleren op lekken',
   technicianReport: 'Lek aan dichting vastgesteld. Dichting vervangen en getest.',
   parts: [{ id: 'p1', code: 'A-1', description: 'Dichting 40mm', quantity: 2, toOrder: false, urgent: false }],
@@ -114,5 +111,46 @@ describe('generateWerkbonPDF', () => {
     // jsPDF writes text uncompressed by default, so the field values are greppable.
     expect(raw).toContain('K04647')
     expect(raw).toContain('Molenhoeve group bvba')
+  })
+
+  /**
+   * De bon van Trianon noemt drie toestellen. De app las ze alle drie uit en
+   * toonde ze ook op het scherm, maar op de afgewerkte bon stond er één — de
+   * band had maar één regel. Wie die bon later terugleest, mist dan twee
+   * toestellen die de technieker wel degelijk gezien heeft.
+   */
+  describe('de toestelband', () => {
+    const drie = [
+      { unitNumber: 'U-1', description: 'GICO Qset 60', deliveryDate: '', warrantyUntil: '' },
+      { unitNumber: 'U-2', description: 'TECNO Vaatwas 38', deliveryDate: '', warrantyUntil: '' },
+      { unitNumber: 'U-3', description: 'GICO Bakplaat', deliveryDate: '', warrantyUntil: '' },
+    ]
+
+    it('zet elk toestel van de bon op het papier', async () => {
+      const raw = (await bytes(await generateWerkbonPDF({ ...data, devices: drie }, { download: false })))
+        .toString('latin1')
+
+      for (const device of drie) {
+        expect(raw).toContain(device.unitNumber)
+        expect(raw).toContain(device.description)
+      }
+    })
+
+    it('zegt hoeveel er niet meer pasten in plaats van ze stil weg te laten', async () => {
+      const zes = Array.from({ length: 6 }, (_, i) => ({
+        unitNumber: `U-${i}`, description: `Toestel ${i}`, deliveryDate: '', warrantyUntil: '',
+      }))
+      const raw = (await bytes(await generateWerkbonPDF({ ...data, devices: zes }, { download: false })))
+        .toString('latin1')
+
+      // Vier passen er in de gedrukte band; de twee andere worden geteld.
+      expect(raw).toContain('Toestel 3')
+      expect(raw).toContain('+2 meer')
+    })
+
+    it('blijft werken voor een bon met één toestel', async () => {
+      const raw = (await bytes(await generateWerkbonPDF(data, { download: false }))).toString('latin1')
+      expect(raw).toContain('Berner Friteuse')
+    })
   })
 })

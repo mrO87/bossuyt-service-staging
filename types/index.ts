@@ -34,8 +34,14 @@ export interface WerkbonFormState {
   visitDate: string            // yyyy-mm-dd
   arrivalTime: string          // ISO datetime or ''
   departureTime: string        // ISO datetime or ''
-  workStart: string            // ISO datetime or ''
-  workEnd: string              // ISO datetime or ''
+  /**
+   * Of iemand week/weekend zelf omgezet heeft voor deze bezoekdatum.
+   *
+   * Zonder dit volgt de keuze gewoon de datum — zie `resolveInterventionKind`.
+   * Verandert de bezoekdatum, dan valt dit terug op `false`: het ging over een
+   * andere dag, en de oude keuze zegt daar niets over.
+   */
+  interventionKindManual?: boolean
   interventionKind: InterventionKind
   tripCount: number
   personCount: number
@@ -184,6 +190,18 @@ export interface Intervention {
    * werkbon. Deliberately absent from ServiceBonPdfData: the PDF is what the
    * customer signs, and an internal instruction has no business on it.
    */
+  /**
+   * Wanneer de technieker er werkelijk aankwam en weer vertrok, van de
+   * ingevulde bon.
+   *
+   * Dit is geen plan maar een verslag: het staat er pas als iemand het bezoek
+   * ingevuld heeft. De weekweergave tekent een afgewerkte bon op deze uren in
+   * plaats van op de geschatte duur — een job die anderhalf uur geraamd was en
+   * er drie geduurd heeft, hoort ook drie uur breed te staan, anders klopt het
+   * beeld van de week niet met wat er gebeurd is.
+   */
+  arrivalTime?: string
+  departureTime?: string
   /** The uploaded bon this work order was read from, when it came from one. */
   scanPath?: string
   alertNote?: string

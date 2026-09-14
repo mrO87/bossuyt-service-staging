@@ -11,6 +11,8 @@ import {
   devices,
   sites,
   technicians,
+  werkbonnen,
+  workOrderDrafts,
   workOrderAssignments,
   workOrderEvents,
   workOrders,
@@ -109,6 +111,7 @@ function toIntervention(
   techniciansForWorkOrder: InterventionTechnician[],
   contact: PrimaryContact | undefined,
   scanPath: string | undefined,
+  visit?: { arrivalTime: Date | null; departureTime: Date | null },
 ): Intervention {
   return {
     id: row.id,
@@ -152,6 +155,8 @@ function toIntervention(
     statusOnderwegBy: row.statusOnderwegBy ?? undefined,
     createdBy: row.createdBy ?? undefined,
     visibleInPool: row.visibleInPool,
+    arrivalTime: visit?.arrivalTime?.toISOString(),
+    departureTime: visit?.departureTime?.toISOString(),
     scanPath: scanPath ?? undefined,
     alertNote: row.alertNote ?? undefined,
     alertNoteBy: row.alertNoteBy ?? undefined,
@@ -289,12 +294,38 @@ async function fetchInterventionRows(workOrderIds: string[]): Promise<Interventi
     scanRows.filter(r => r.workOrderId).map(r => [r.workOrderId as string, r.path]),
   )
 
+  // Het aankomst- en vertrekuur van het bezoek, zoals ze op de bon ingevuld
+  // zijn. De weekweergave tekent een afgewerkte bon op deze uren.
+  //
+  // De jongste bon wint: een bon kan meerdere keren afgewerkt worden (een
+  // opvolgbezoek op dezelfde werkorder), en dan is het laatste bezoek wat de
+  // planning toont. Oplopend sorteren en telkens overschrijven laat vanzelf de
+  // laatste staan.
+  const visitRows = await db
+    .select({
+      workOrderId: werkbonnen.workOrderId,
+      arrivalTime: werkbonnen.arrivalTime,
+      departureTime: werkbonnen.departureTime,
+    })
+    .from(werkbonnen)
+    .where(inArray(werkbonnen.workOrderId, workOrderIds))
+    .orderBy(asc(werkbonnen.completedAt))
+
+  const visitByWorkOrder = new Map<string, { arrivalTime: Date | null; departureTime: Date | null }>()
+  for (const row of visitRows) {
+    visitByWorkOrder.set(row.workOrderId, {
+      arrivalTime: row.arrivalTime,
+      departureTime: row.departureTime,
+    })
+  }
+
   return rows.map((row: InterventionCoreRow) =>
     toIntervention(
       row,
       assignmentsByWorkOrder.get(row.id) ?? [],
       contactsBySite.get(row.siteId),
       scanByWorkOrder.get(row.id),
+      visitByWorkOrder.get(row.id),
     ),
   )
 }
@@ -338,6 +369,31 @@ export async function releaseForgottenWorkOrders(
       and(
         lt(workOrders.plannedDate, startOfToday),
         inArray(workOrders.status, [...RETURNS_TO_POOL]),
+        // Er mag niet aan gewerkt zijn.
+        //
+        // De status alleen was niet genoeg. Een technieker die ter plaatse
+        // geweest is en zijn aankomst- en vertrekuur heeft ingevuld, maar de
+        // bon nog niet ingediend heeft, staat nog altijd op 'gepland' — en die
+        // bon verdween om middernacht naar de pool terwijl het werk gedaan was.
+        // Vandaar de gebruiker: "enkel de bonnen die niet gestart zijn gaan om
+        // 00u naar de pool".
+        //
+        // Eén uur is genoeg om te blijven staan, niet allebei. Wie een
+        // aankomstuur heeft ingevuld, is vertrokken; dat de bon nog geen
+        // vertrekuur heeft, betekent meestal dat hij nog niet af is — en dat is
+        // juist een reden om hem te laten staan waar hij hoort, niet om hem weg
+        // te halen. Deze opkuis kiest overal de veilige kant.
+        sql`not exists (
+          select 1 from ${werkbonnen}
+          where ${werkbonnen.workOrderId} = ${workOrders.id}
+            and (${werkbonnen.arrivalTime} is not null or ${werkbonnen.departureTime} is not null)
+        )`,
+        sql`not exists (
+          select 1 from ${workOrderDrafts}
+          where ${workOrderDrafts.workOrderId} = ${workOrders.id}
+            and coalesce(nullif(${workOrderDrafts.form} ->> 'arrivalTime', ''),
+                         nullif(${workOrderDrafts.form} ->> 'departureTime', '')) is not null
+        )`,
       ),
     )
     .returning({ id: workOrders.id })

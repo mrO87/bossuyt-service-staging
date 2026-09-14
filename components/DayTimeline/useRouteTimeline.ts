@@ -123,7 +123,20 @@ function breakIndexIn(items: readonly MovableItem[]): number {
   return items.findIndex(item => item.kind === 'break')
 }
 
-export function useRouteTimeline(plannedInterventions: Intervention[], settings: Settings) {
+export function useRouteTimeline(
+  plannedInterventions: Intervention[],
+  settings: Settings,
+  /**
+   * Het uur waarop je écht vertrokken bent, in minuten sinds middernacht.
+   *
+   * Zolang dit null is, rekent de dag met het ingestelde vertrekuur — het plan.
+   * Zodra je op het play-knopje tikt, rekent hij met de werkelijkheid en schuift
+   * de hele dag mee. Een bon met een vastgezet uur blijft staan waar hij staat;
+   * die is met de klant afgesproken, en botst hij, dan verschijnt de arcering
+   * die daar al voor bestaat.
+   */
+  actualDepartureMinutes: number | null = null,
+) {
   const configuredStartAddress = useMemo(() => getStartAddressFromSettings(settings), [settings])
   const configuredStartCoordinates = useMemo(
     () => getStartCoordinatesFromSettings(settings),
@@ -172,6 +185,12 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
   // confused — see shouldTakeExternalOrder.
   const lastExternalJobSignatureRef = useRef<string | null>(null)
   const { movableItems, startAddress, endAddress, sameAsStart } = state
+
+  /**
+   * Het uur waarmee de dag rekent: het echte vertrek als je getikt hebt, en
+   * anders het ingestelde vertrekuur.
+   */
+  const vertrekMinuten = actualDepartureMinutes ?? clockToMinutes(settings.startTime)
 
   const usingConfiguredStart = startAddress === configuredStartAddress
   const startCoordinates = resolvedEndpoints.start
@@ -223,7 +242,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
         at: jobCoordinates(item.intervention),
         startMinutes: item.intervention.plannedStartMinutes ?? null,
       })),
-      departureMinutes: clockToMinutes(settings.startTime),
+      departureMinutes: vertrekMinuten,
       origin: startCoordinates,
       travelBetween,
       breakMinutes: DEFAULT_BREAK_MINUTES,
@@ -231,7 +250,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
 
     const byId = new Map(jobs.map(item => [item.intervention.id, item]))
     return insertBreakAt(order.map(id => byId.get(id)!), breakBefore)
-  }, [settings.startTime, startCoordinates, travelBetween])
+  }, [vertrekMinuten, startCoordinates, travelBetween])
 
   /**
    * De volgorde volgt de klok — ook nadat er gesleept is of een rijtijd binnen
@@ -354,7 +373,10 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
   }, [locationSetKey])
 
   // Derived: the full visible sequence, the day's totals, and each job's clock time.
-  const { fullSequence, totals, travelIsEstimated, startByIntervention } = useMemo(() => {
+  const {
+    fullSequence, totals, travelIsEstimated, startByIntervention,
+    departFromOriginMinutes, backAtOriginMinutes,
+  } = useMemo(() => {
     const startItem: StartItem = { kind: 'start', id: 'start', address: state.startAddress }
     const endItem: EndItem = {
       kind: 'end',
@@ -438,7 +460,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     // Dezelfde motor als de weekweergave, zodat dag en week nooit een andere
     // tijd tonen voor dezelfde job.
     const schedule = computeDaySchedule({
-      departureMinutes: clockToMinutes(settings.startTime),
+      departureMinutes: vertrekMinuten,
       origin: startCoordinates,
       jobs: state.movableItems
         .filter((item): item is JobItem => item.kind === 'job')
@@ -475,8 +497,12 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
       totals: tally,
       travelIsEstimated: anyEstimated || tally.unknownLegs > 0,
       startByIntervention,
+      // De twee uiteinden van de dag, voor het play- en het stopknopje: het
+      // uur waarop je weg moet en het uur waarop je terug bent.
+      departFromOriginMinutes: schedule.departFromOriginMinutes,
+      backAtOriginMinutes: schedule.backAtOriginMinutes,
     }
-  }, [state, startCoordinates, endCoordinates, cacheSnapshot, settings.startTime])
+  }, [state, startCoordinates, endCoordinates, cacheSnapshot, vertrekMinuten])
 
   const reorder = useCallback((activeId: string, overId: string) => {
     const oldIndex = movableItems.findIndex(item => item.id === activeId)
@@ -527,6 +553,10 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     fullSequence,
     totals,
     startByIntervention,
+    departFromOriginMinutes,
+    backAtOriginMinutes,
+    /** Het uur waarop de planning rekent, los van of er al getikt is. */
+    plannedDepartureMinutes: clockToMinutes(settings.startTime),
     routeLoading,
     /**
      * True while any leg on screen is a guess rather than a routed answer.

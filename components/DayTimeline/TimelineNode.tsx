@@ -15,10 +15,16 @@ export function TimelineNode({
   label,
   address,
   position,
+  extra,
+  note,
 }: {
   label: string
   address: string
   position: 'start' | 'end'
+  /** Staat rechts naast het opschrift — het play- of stopknopje van de dag. */
+  extra?: React.ReactNode
+  /** Eén regel onder het adres, bijvoorbeeld hoeveel later je vertrok. */
+  note?: string
 }) {
   return (
     <TimelineRail
@@ -34,10 +40,19 @@ export function TimelineNode({
       }
     >
       <div className="pl-3 py-2">
-        <p className="text-[10px] uppercase tracking-widest font-bold text-brand-orange">
-          {label}
-        </p>
+        {/*
+          Het opschrift en het dagknopje delen één regel. Het knopje staat dus
+          in iets wat er al was, in plaats van in een eigen balk — daar begint
+          en eindigt de dag op het scherm al.
+        */}
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold text-brand-orange">
+            {label}
+          </p>
+          {extra}
+        </div>
         <p className="text-sm font-bold text-ink leading-snug">{address}</p>
+        {note && <p className="mt-0.5 text-[10.5px] text-ink-soft">{note}</p>}
       </div>
     </TimelineRail>
   )

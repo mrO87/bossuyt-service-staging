@@ -31,6 +31,8 @@ import { resolveDropIntent } from '@/lib/planning/dropIntent'
 import { buildPlanningWrite } from '@/lib/planning/planningWrite'
 import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
+import { minutesOfDay, useDayClock } from '@/lib/planning/useDayClock'
+import { toLocalDateStr } from '@/lib/planning/weekDays'
 import type { Settings } from '@/lib/hooks/useSettings'
 import type { Intervention, InterventionStatus, User } from '@/types'
 import { PoolBar } from '@/components/planning/PoolBar'
@@ -75,7 +77,16 @@ export function PlanningBoard({
   useEffect(() => { setDay(planned) }, [planned])
   useEffect(() => { setPool(open) }, [open])
 
-  const timeline = useRouteTimeline(day, settings)
+  /**
+   * Wanneer deze dag echt begon en eindigde.
+   *
+   * Het vertrekuur gaat de tijdlijn in: vertrek je om 07:12 in plaats van
+   * 07:00, dan staat de eerste klant twaalf minuten later. Wat op het scherm
+   * staat, is dan waar je werkelijk gaat aankomen.
+   */
+  const dagSleutel = toLocalDateStr(selectedDate)
+  const { clock, zet } = useDayClock(currentUser.id, dagSleutel)
+  const timeline = useRouteTimeline(day, settings, minutesOfDay(clock.startedAt))
 
   // A deliberate hold before a touch drag starts, so the page stays scrollable.
   const sensors = useSensors(
@@ -281,6 +292,7 @@ export function PlanningBoard({
         timeline={timeline}
         selectedDate={selectedDate}
         onOpenIntervention={onOpenIntervention}
+        dayClock={{ day: dagSleutel, clock, zet }}
       />
 
       <PoolBar

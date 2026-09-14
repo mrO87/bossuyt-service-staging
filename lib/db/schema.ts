@@ -2,6 +2,7 @@ import { relations } from 'drizzle-orm'
 import {
   bigserial,
   boolean,
+  date,
   doublePrecision,
   index,
   integer,
@@ -157,6 +158,38 @@ export const devices = pgTable('devices', {
   deviceTypeId: text('device_type_id')
     .references(() => deviceDocuments.id, { onDelete: 'set null' }),
 })
+
+/**
+ * Wanneer een technieker zijn dag echt begon en eindigde.
+ *
+ * Eén rij per technieker per dag. Dat is geen vorm maar een regel: je vertrekt
+ * één keer en je komt één keer thuis, en twee rijen voor dezelfde dag zouden
+ * meteen de vraag oproepen welke de juiste is.
+ *
+ * `day` is een kale datum, geen tijdstip: de vraag "welke dag was dit" mag niet
+ * van een tijdzone afhangen. De twee uren zijn wél tijdstippen mét zone, want
+ * die worden op de klok afgelezen.
+ *
+ * Allebei mogen leeg blijven. Tussen vertrekken en thuiskomen staat er een
+ * halve dag lang alleen een begin, en een dag waar niets van geweten is heeft
+ * gewoon geen rij.
+ */
+export const technicianDays = pgTable(
+  'technician_days',
+  {
+    technicianId: text('technician_id')
+      .notNull()
+      .references(() => technicians.id, { onDelete: 'cascade' }),
+    /** `YYYY-MM-DD`. Als tekst gelezen, zodat er geen tijdzone bij komt kijken. */
+    day: date('day', { mode: 'string' }).notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (tbl) => ({
+    pk: primaryKey({ columns: [tbl.technicianId, tbl.day] }),
+  }),
+)
 
 /**
  * De toestellen waar één bezoek over gaat.

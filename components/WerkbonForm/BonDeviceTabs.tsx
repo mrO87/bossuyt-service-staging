@@ -12,50 +12,25 @@
  *
  * Bij één toestel toont dit niets: een keuze uit één is geen keuze, en een lege
  * rij knoppen is enkel ruis op een telefoonscherm.
+ *
+ * De lijst zelf haalt dit niet meer op — die komt van boven, uit
+ * `useBonDevices`, omdat de afgewerkte bon hem ook nodig heeft. Zie daar.
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { deviceLabel, type BonDevice } from './useBonDevices'
 
-export interface BonDevice {
-  id: string
-  brand: string
-  model: string
-  unitNumber?: string
-  sourceLabel?: string
-  isMain: boolean
-}
-
-/** Hoe een toestel heet op het scherm, ook wanneer het merk niet herkend is. */
-export function deviceLabel(device: BonDevice): string {
-  const naam = [device.brand, device.model].filter(Boolean).join(' ').trim()
-  // Geen merk en geen model: dan is de ruwe regel van de bon nog altijd beter
-  // dan een lege knop — dezelfde gedachte als achter `customerLabel`.
-  return naam || device.sourceLabel?.trim() || 'Toestel zonder naam'
-}
+export { deviceLabel, type BonDevice }
 
 export function BonDeviceTabs({
-  workOrderId,
+  devices,
   selectedId,
   onSelect,
 }: {
-  workOrderId: string
+  devices: BonDevice[]
   selectedId: string | null
   onSelect: (device: BonDevice) => void
 }) {
-  const [devices, setDevices] = useState<BonDevice[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    fetch(`/api/work-orders/${workOrderId}/devices`)
-      .then(r => (r.ok ? r.json() : { devices: [] }))
-      .then((data: { devices?: BonDevice[] }) => {
-        if (!cancelled) setDevices(data.devices ?? [])
-      })
-      .catch(() => { if (!cancelled) setDevices([]) })
-    return () => { cancelled = true }
-  }, [workOrderId])
-
   if (devices.length < 2) return null
 
   return (

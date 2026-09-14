@@ -18,6 +18,26 @@ export function formatMinutes(minutes?: number): string {
   return `${h}u${m}`
 }
 
+/**
+ * Een kloktijd uit minuten sinds middernacht, als `HH:MM`.
+ *
+ * De omslag op 24 uur is het hele punt. Zolang een dag altijd om 07:00 begon,
+ * kwam er nooit iets voorbij middernacht en viel het niet op dat deze
+ * berekening gewoon doortelde. Zodra het échte vertrekuur meetelt, kan dat wel
+ * — en dan stond er op het scherm "24:39" en "26:41" in plaats van 00:39 en
+ * 02:41. Een tijdsduur mag doortellen (`formatHours` doet dat met opzet: 26u
+ * werk is 26u), maar een klok loopt rond.
+ *
+ * Eén functie voor elke plek waar een kloktijd getoond wordt, zodat er geen
+ * tweede kan ontstaan die het anders doet.
+ */
+export function formatClock(minutes: number): string {
+  const wrapped = ((Math.round(minutes) % 1440) + 1440) % 1440
+  const h = Math.floor(wrapped / 60)
+  const m = wrapped % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 /** Hours for a day total, where zero is worth showing. */
 export function formatHours(minutes: number): string {
   if (minutes === 0) return '0u'

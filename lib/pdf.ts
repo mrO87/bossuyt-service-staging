@@ -31,6 +31,22 @@ export interface PdfTaskItem {
 // ── Service Bon data ─────────────────────────────────────────────────────────
 // Built from the stored werkbon + work order so the PDF can be regenerated later.
 
+/**
+ * Hoeveel toestelregels er in de gedrukte band passen.
+ *
+ * Nagemeten op het formulier: de band loopt van 95,5 tot 120 mm, de opschriften
+ * staan op 100,5 en de eerste waarderegel op 107,5. Daaronder blijft 11 mm over.
+ */
+export const MAX_PDF_DEVICE_ROWS = 4
+
+/** Eén regel in de toestelband van de bon. */
+export interface PdfDevice {
+  unitNumber: string
+  description: string            // "Berner Friteuse 2x8L"
+  deliveryDate: string           // ISO date or ''
+  warrantyUntil: string          // ISO date or ''
+}
+
 export interface ServiceBonPdfData {
   ticketNumber: string
   bonNumber: string
@@ -43,10 +59,18 @@ export interface ServiceBonPdfData {
   contactName: string
   phones: string[]
   closingDay: string
-  deviceUnitNumber: string
-  deviceDescription: string      // "Berner Friteuse 2x8L"
-  deviceDeliveryDate: string     // ISO date or ''
-  deviceWarrantyUntil: string    // ISO date or ''
+  /**
+   * De toestellen waar dit bezoek over gaat — allemaal, niet alleen het eerste.
+   *
+   * Hier stond één toestel, in vier losse velden. De bon van Trianon noemt er
+   * drie; de app las ze alle drie uit en toonde ze ook, maar op de afgewerkte
+   * bon verscheen er één. Wie die bon later terugleest, mist dan twee
+   * toestellen die de technieker wel degelijk gezien heeft.
+   *
+   * Het eerste toestel is het hoofdtoestel: dat is waar het verslag en de
+   * onderdelen aan hangen.
+   */
+  devices: PdfDevice[]
   customerDescription: string    // OMSCHRIJVING KLANT
   technicianReport: string       // TECHNICUS RAPPORT
   parts: PdfPart[]
@@ -234,11 +258,40 @@ export async function generateWerkbonPDF(
   const DR_TOP = HB_BOTTOM, DR_BOTTOM = 120
   const cols = [ML, ML + 24, SPLIT, ML + 148, PAGE_W - MR]
   for (const x of cols.slice(1, -1)) line(x, DR_TOP + 3, x, DR_BOTTOM)
-  label('UNIT N°', cols[0] + 2, DR_TOP + 5);                     value(data.deviceUnitNumber, cols[0] + 2, DR_TOP + 12)
+  label('UNIT N°', cols[0] + 2, DR_TOP + 5)
   label('OMSCHRIJVING | DÉSIGNATION', cols[1] + 2, DR_TOP + 5)
-  value((doc.splitTextToSize(data.deviceDescription || '', cols[2] - cols[1] - 4) as string[])[0] ?? '', cols[1] + 2, DR_TOP + 12)
-  label('LEVERDATUM', cols[2] + 2, DR_TOP + 5);                  value(fmtDate(data.deviceDeliveryDate), cols[2] + 2, DR_TOP + 12)
-  label('GARANTIE', cols[3] + 2, DR_TOP + 5);                    value(fmtDate(data.deviceWarrantyUntil), cols[3] + 2, DR_TOP + 12)
+  label('LEVERDATUM', cols[2] + 2, DR_TOP + 5)
+  label('GARANTIE', cols[3] + 2, DR_TOP + 5)
+
+  // Eén waarderegel per toestel, onder dezelfde opschriften.
+  //
+  // De band is gedrukt papier en ligt vast: van de eerste waarderegel tot de
+  // onderrand is er 11 mm. Drie toestellen passen daar comfortabel in op 5,5 mm
+  // uit elkaar; bij vier wordt de regelafstand en de letter kleiner. Meer dan
+  // vier past er met geen mogelijkheid in, en dan is een eerlijk "+2" beter dan
+  // tekst die over de kaderlijn heen loopt.
+  const ROW_TOP = DR_TOP + 12
+  const ROW_ROOM = DR_BOTTOM - 1.5 - ROW_TOP
+  const rows = data.devices.slice(0, MAX_PDF_DEVICE_ROWS)
+  const hidden = data.devices.length - rows.length
+  const step = rows.length > 1 ? Math.min(5.5, ROW_ROOM / (rows.length - 1)) : 0
+  const size = step === 0 || step >= 5 ? 9 : step >= 4 ? 8 : 7
+
+  rows.forEach((device, index) => {
+    const y = ROW_TOP + index * step
+    const laatste = index === rows.length - 1
+    const omschrijving = laatste && hidden > 0
+      ? `${device.description} +${hidden} meer`
+      : device.description
+
+    value(device.unitNumber, cols[0] + 2, y, size)
+    value(
+      (doc.splitTextToSize(omschrijving || '', cols[2] - cols[1] - 4) as string[])[0] ?? '',
+      cols[1] + 2, y, size,
+    )
+    value(fmtDate(device.deliveryDate), cols[2] + 2, y, size)
+    value(fmtDate(device.warrantyUntil), cols[3] + 2, y, size)
+  })
 
   // ── omschrijving klant: y 123.5 → 138 ──────────────────────────────────────
   label('OMSCHRIJVING KLANT | OBSERVATIONS CLIENT', ML + 2, 123.5)

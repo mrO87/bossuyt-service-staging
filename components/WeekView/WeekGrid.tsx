@@ -12,7 +12,7 @@ import type { ReactNode } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { draggableIdFor, type DayScheduleResult, type ScheduleBlock } from '@/lib/planning/daySchedule'
 import { scheduleForDate, clockToMinutes } from '@/lib/planning/workSchedule'
-import { formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
+import { formatClock, formatHours, typeBorderClass } from '@/components/planning/interventionLabels'
 import type { Intervention } from '@/types'
 import { customerLabel } from '@/lib/customerLabel'
 
@@ -31,9 +31,14 @@ export const RESIZE_PREFIX = 'resize:'
 
 const DOW = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za']
 
-function hhmm(minutes: number): string {
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
-}
+/**
+ * De kloktijd komt uit één gedeelde functie.
+ *
+ * Hier stond een eigen berekening die niet omsloeg op 24 uur. Zolang elke dag
+ * om 07:00 begon viel dat niet op; met een echt vertrekuur wel — dan staat er
+ * "24:39" waar 00:39 hoort.
+ */
+const hhmm = formatClock
 
 export function WeekGrid({
   days,

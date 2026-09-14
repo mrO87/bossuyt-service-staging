@@ -123,6 +123,16 @@ export interface PendingWrite {
      * sleep naar volgende week.
      */
     | 'update_placement'
+    /**
+     * Wanneer de dag echt begon of eindigde.
+     *
+     * Dit hoort in de wachtrij en niet rechtstreeks naar de server, want het
+     * knopje wordt getikt op het moment dat je in de wagen stapt — en dat is
+     * precies de plek waar een bedrijventerrein geen bereik heeft. Het uur
+     * komt daarom uit de telefoon en niet van de server: bewaard moet worden
+     * wanneer je vertrok, niet wanneer de wachtrij toevallig leegliep.
+     */
+    | 'set_day_clock'
     | 'save_draft'
     | 'upload_work_order_photo'
     | 'delete_work_order_photo'
