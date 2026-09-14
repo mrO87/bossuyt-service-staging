@@ -37,7 +37,9 @@ interface Details {
   editable: boolean
 }
 
-const INVOER = 'w-full rounded-lg border border-stroke bg-surface px-2.5 py-2 text-sm text-ink'
+const INVOER_BASIS = 'w-full rounded-lg border bg-surface px-2.5 py-2 text-sm text-ink'
+const INVOER = `${INVOER_BASIS} border-stroke`
+const INVOER_ONTBREEKT = `${INVOER_BASIS} border-brand-red`
 
 /** Het merkje dat zegt hoe ver een wijziging reikt. */
 function Bereik({ aantal }: { aantal: number }) {
@@ -83,11 +85,13 @@ function Veld({
   children,
   hint,
   waarschuwing,
+  gemist,
 }: {
   label: string
   children: React.ReactNode
   hint?: string
   waarschuwing?: string
+  gemist?: string
 }) {
   return (
     <label className="mb-2.5 block">
@@ -95,6 +99,9 @@ function Veld({
         {label}
       </span>
       {children}
+      {gemist && (
+        <span className="mt-1 block text-[11px] font-semibold text-brand-red">{gemist}</span>
+      )}
       {hint && <span className="mt-1 block text-[11px] text-ink-soft">{hint}</span>}
       {waarschuwing && <span className="mt-1 block text-[11px] text-brand-blue">{waarschuwing}</span>}
     </label>
@@ -238,7 +245,7 @@ export default function BonAanpassenPage() {
         <Groep titel="Klant" aantal={details.sharedWithCustomer}>
           <Veld
             label="Naam"
-            hint={!details.customerName.trim() ? 'Stond niet op de bon. Vul in wat je ter plaatse ziet.' : undefined}
+            gemist={!details.customerName.trim() ? 'Stond niet op de bon — vul in wat je ter plaatse ziet.' : undefined}
             waarschuwing={
               gewijzigd('customerName') && details.sharedWithCustomer > 1
                 ? `Verandert ook op de ${details.sharedWithCustomer - 1} andere bon${details.sharedWithCustomer > 2 ? 'nen' : ''} van deze klant.`
@@ -246,7 +253,7 @@ export default function BonAanpassenPage() {
             }
           >
             <input
-              className={`${INVOER} ${!details.customerName.trim() ? 'border-brand-red' : ''}`}
+              className={details.customerName.trim() ? INVOER : INVOER_ONTBREEKT}
               value={details.customerName}
               placeholder="stond niet op de bon"
               onChange={e => zet('customerName', e.target.value)}
