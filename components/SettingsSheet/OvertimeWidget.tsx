@@ -1,18 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { dayCapacityMinutes } from '@/lib/planning/workSchedule'
+import { dayCapacityMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedule'
+import { todayInBelgium } from '@/lib/planning/pastDays'
+import { useDayClock } from '@/lib/planning/useDayClock'
+import { workedToday } from '@/lib/planning/workedTime'
+import { useTasks } from '@/lib/task-store'
 
 interface Props {
-  startTime: string   // "HH:MM"
-  saldo: number | null  // total overtime in minutes; null = not yet loaded from DB
+  /** Het totale overurensaldo in minuten; null zolang het niet geladen is. */
+  saldo: number | null
 }
 
-function parseMinutes(hhmm: string): number {
-  const match = hhmm.match(/^(\d{1,2}):(\d{2})$/)
-  if (!match) return 0
-  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10)
-}
 
 function formatElapsed(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -35,27 +34,43 @@ function formatSaldo(minutes: number): string {
   return `${sign}${h}u${m.toString().padStart(2, '0')}`
 }
 
-export default function OvertimeWidget({ startTime, saldo }: Props) {
-  const [elapsed, setElapsed] = useState(0)  // minutes since startTime
+export default function OvertimeWidget({ saldo }: Props) {
+  const { currentUser } = useTasks()
+  const vandaag = todayInBelgium()
+  const { clock } = useDayClock(currentUser?.id ?? '', vandaag)
+
+  /**
+   * Eén tik per minuut, alleen om de klok te laten lopen.
+   *
+   * De gewerkte tijd wordt hieronder uitgerekend en niet in de toestand
+   * bewaard: er is maar één plek waar dat getal ontstaat, en dat is
+   * `workedToday`.
+   */
+  const [tik, setTik] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setTik(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
   // The day's target comes from the roster, so it is 8u30 Monday to Thursday
   // and 6u00 on Friday instead of a flat 7u45 that was right on no day at all.
-  // Recomputed on the same tick as `elapsed` so it survives midnight.
-  const [target, setTarget] = useState<number | null>(null)
+  const target = dayCapacityMinutes(tik)
 
-  useEffect(() => {
-    function update() {
-      const now = new Date()
-      let nowMinutes = now.getHours() * 60 + now.getMinutes()
-      const startMinutes = parseMinutes(startTime)
-      // Handle midnight rollover (shift started before midnight)
-      if (nowMinutes < startMinutes) nowMinutes += 24 * 60
-      setElapsed(Math.max(0, nowMinutes - startMinutes))
-      setTarget(dayCapacityMinutes(now))
-    }
-    update()
-    const id = setInterval(update, 60_000)
-    return () => clearInterval(id)
-  }, [startTime])
+  /**
+   * Gewerkte tijd volgens de dagklok.
+   *
+   * Hier stond `nu − het ingestelde startuur`. Dat telde geen enkel gewerkt uur
+   * maar gewoon hoe laat het was: 's avonds om elf uur stond er zestien uur, en
+   * één minuut na middernacht zeventien. Nu er een echte start- en eindtijd is,
+   * telt alleen wat daartussen ligt.
+   */
+  const gewerkt = workedToday({
+    startedAt: clock.startedAt,
+    endedAt: clock.endedAt,
+    now: tik,
+    breakMinutes: UNPAID_BREAK_MINUTES,
+  })
+  const elapsed = gewerkt?.minutes ?? 0
 
   // A day with no roster — a weekend — has nothing to count down to.
   const progress = target ? Math.min(100, (elapsed / target) * 100) : 0
@@ -69,14 +84,19 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
           <p className="text-[10px] font-semibold text-ink-soft uppercase tracking-wide mb-0.5">
             Vandaag
           </p>
-          <p className="text-2xl font-bold text-brand-orange leading-none">
-            {formatElapsed(elapsed)}
-            {target !== null && (
-              <span className="text-sm font-normal text-ink-soft ml-1">
-                / {formatElapsed(target)}
-              </span>
-            )}
-          </p>
+          {gewerkt === null ? (
+            // Niet vertrokken is niet nul: nul zou suggereren dat er gemeten is.
+            <p className="text-2xl font-bold text-ink-faint leading-none">--u--</p>
+          ) : (
+            <p className="text-2xl font-bold text-brand-orange leading-none">
+              {formatElapsed(elapsed)}
+              {target !== null && (
+                <span className="text-sm font-normal text-ink-soft ml-1">
+                  / {formatElapsed(target)}
+                </span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Saldo */}
@@ -104,8 +124,14 @@ export default function OvertimeWidget({ startTime, saldo }: Props) {
 
       {/* Status line */}
       <div className="mb-2">
-        {target === null ? (
+        {gewerkt === null ? (
+          <p className="text-xs text-ink-soft">
+            Nog niet vertrokken — tik op ▶ in de dagplanning.
+          </p>
+        ) : target === null ? (
           <p className="text-xs text-ink-soft">Geen werkdag vandaag</p>
+        ) : !gewerkt.running ? (
+          <p className="text-xs text-ink-soft">Dag afgesloten</p>
         ) : remaining > 0 ? (
           <p className="text-xs text-ink-soft">
             Nog {formatRemaining(remaining)} tot einde dag

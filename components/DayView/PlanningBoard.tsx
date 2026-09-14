@@ -35,7 +35,7 @@ import { minutesOfDay, useDayClock } from '@/lib/planning/useDayClock'
 import { toLocalDateStr } from '@/lib/planning/weekDays'
 import type { Settings } from '@/lib/hooks/useSettings'
 import type { Intervention, InterventionStatus, User } from '@/types'
-import { PoolBar } from '@/components/planning/PoolBar'
+import { OpenPool } from './OpenPool'
 
 /** Position within the movable items (break included) → index among the jobs. */
 function jobIndexForPosition(movableItems: MovableItem[], position: number): number {
@@ -59,19 +59,8 @@ export function PlanningBoard({
 }) {
   const [day, setDay] = useState(planned)
   const [pool, setPool] = useState(open)
-  const [poolVisible, setPoolVisible] = useState(false)
+  const [poolVisible, setPoolVisible] = useState(true)
   const [refusal, setRefusal] = useState<string | null>(null)
-  /**
-   * Of er nu een blok in de hand is.
-   *
-   * De poolbalk zegt daarmee wat loslaten betekent. Ze staat altijd onderaan
-   * het scherm, ook tijdens een sleep, en dat is precies waarom ze er is: de
-   * pool stond vroeger ónder de tijdlijn, en met een blok in je hand kon je er
-   * niet meer naartoe scrollen. Op een telefoon van 950 px stond de eerste
-   * bon van de dag dan op y = −52, boven de bovenrand — je mikte niet, de app
-   * koos de dichtstbijzijnde kaart. Nu zijn pool en dag altijd samen bereikbaar.
-   */
-  const [dragging, setDragging] = useState(false)
 
   // The server's answer always wins over the optimistic copy.
   useEffect(() => { setDay(planned) }, [planned])
@@ -186,7 +175,6 @@ export function PlanningBoard({
   }, [currentUser, selectedDate])
 
   async function handleDragEnd(event: DragEndEvent) {
-    setDragging(false)
     setRefusal(null)
 
     const activeId = String(event.active.id)
@@ -273,8 +261,6 @@ export function PlanningBoard({
       // sleep na het openklappen deed niets, terwijl dezelfde sleep daarna
       // wél werkte. Precies dezelfde reden waarom de weekweergave dit al doet.
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-      onDragStart={() => setDragging(true)}
-      onDragCancel={() => setDragging(false)}
       onDragEnd={handleDragEnd}
     >
       <div className="flex items-center justify-between mb-2">
@@ -295,12 +281,20 @@ export function PlanningBoard({
         dayClock={{ day: dagSleutel, clock, zet }}
       />
 
-      <PoolBar
+      {/*
+        De pool als kaart ónder de dag, niet als vaste balk.
+
+        De balk onderaan was bedoeld om pool en dag samen bereikbaar te houden
+        tijdens een sleep, en dat doet ze ook. Maar op de dagplanning wil de
+        technieker de pool gewoon in de lijst zien staan, als onderdeel van de
+        dag die hij afloopt. In de weekplanning blijft de balk wel: daar is het
+        rooster het scherm, en hoort de pool er niet in.
+      */}
+      <OpenPool
         interventions={pool}
-        open={poolVisible}
-        onToggle={() => setPoolVisible(v => !v)}
-        dragging={dragging}
-        onOpenIntervention={onOpenIntervention}
+        visible={poolVisible}
+        onToggleVisible={() => setPoolVisible(v => !v)}
+        onOpen={onOpenIntervention}
       />
     </DndContext>
   )

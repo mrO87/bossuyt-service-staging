@@ -19,6 +19,46 @@ export const RELEASES: ReleaseEntry[] = [
     date: '14 september 2026',
     changes: [
       {
+        label: 'Fix',
+        title: 'De app bleef na middernacht op gisteren hangen',
+        body:
+          'Wie na twaalven \'s nachts de planning opende, kreeg de vorige dag te '
+          + 'zien — en die stond leeg, want de bonnen van vandaag hoorden bij de '
+          + 'nieuwe dag. Verversen hielp niet. Er zaten drie oorzaken onder, alle '
+          + 'drie dezelfde: de app rekende met de klok van de server in plaats van '
+          + 'die van België, en die loopt \'s zomers twee uur achter. Tussen '
+          + 'middernacht en twee uur stond de ene dus nog op gisteren terwijl de '
+          + 'andere al op vandaag stond. Daarbovenop bleef de datum uit de '
+          + 'adresbalk — die er staat om je plaats te bewaren als je tussen dag en '
+          + 'week wisselt — voor altijd staan, dus las elke verversing hem opnieuw. '
+          + 'Hij wordt nu één keer gebruikt en dan opgeruimd. Ook een bon die je na '
+          + 'middernacht invulde, kreeg de bezoekdatum van gisteren; ook dat is '
+          + 'recht.',
+      },
+      {
+        label: 'Fix',
+        title: 'De overurenteller telde de klok en niet je werk',
+        body:
+          'De teller onder je avatar rekende hoe lang het geleden was dat het '
+          + 'ingestelde startuur voorbij was, en verder niets. Wie \'s avonds om elf '
+          + 'uur nog eens keek, las dat hij zestien uur gewerkt had; een minuut na '
+          + 'middernacht stond er zeventien. Nu er een echte start- en eindtijd is, '
+          + 'telt hij wat daartussen ligt, met de onbetaalde pauze eraf — want het '
+          + 'rooster waar hij tegen afgezet wordt, heeft die er ook al af. Ben je nog '
+          + 'niet vertrokken, dan staat er "--u--": nul zou suggereren dat er gemeten '
+          + 'is. Tijdens de dag komt de pauze er pas af zodra de middag voorbij is, '
+          + 'want daarvoor heb je ze nog niet genomen.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De pool staat weer als kaart onder de dagplanning',
+        body:
+          'De vaste balk onderaan houdt pool en dag samen bereikbaar tijdens het '
+          + 'slepen, en daar blijft ze dan ook — in de weekplanning. Op de '
+          + 'dagplanning hoort de pool gewoon onderaan de lijst te staan, als deel '
+          + 'van de dag die je afloopt. Ze staat er weer.',
+      },
+      {
         label: 'Nieuw',
         title: 'Je dag starten en afsluiten',
         body:

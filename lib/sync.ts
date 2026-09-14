@@ -12,6 +12,7 @@
  * After a successful sync the app works fully offline.
  */
 
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import {
   cacheInterventions,
   saveDayMeta,
@@ -55,7 +56,9 @@ export async function shouldSync(technicianId: string): Promise<boolean> {
   const meta = await getDayMeta()
   if (!meta) return true
 
-  const today = new Date().toISOString().slice(0, 10)
+  // Dezelfde dag als `syncToday` gebruikt, anders vergelijkt dit twee
+  // verschillende kalenders met elkaar.
+  const today = todayInBelgium()
   if (meta.date !== today || meta.technicianId !== technicianId) return true
 
   const ageMs = Date.now() - new Date(meta.cachedAt).getTime()
@@ -69,7 +72,12 @@ export async function shouldSync(technicianId: string): Promise<boolean> {
  * It fetches data from the server and stores it in IndexedDB.
  */
 export async function syncToday(technicianId: string): Promise<SyncResult> {
-  const today = new Date().toISOString().slice(0, 10)
+  // `toISOString()` is UTC, en dat is hier niet hetzelfde als vandaag. Tussen
+  // middernacht en twee uur 's nachts staat de Belgische kalender al op de
+  // volgende dag terwijl UTC nog op de vorige staat — dus haalde dit gisteren
+  // op en zette dat in de lokale opslag, terwijl het scherm vandaag opvroeg.
+  // Gevolg: elke nacht een venster van twee uur waarin "vandaag" leeg was.
+  const today = todayInBelgium()
 
   try {
     // Step 1: fetch today's interventions from the server

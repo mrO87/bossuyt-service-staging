@@ -174,7 +174,7 @@ export default function AvatarMenu() {
             <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-wide mb-2">
               Overuren
             </p>
-            <OvertimeWidget startTime={settings.startTime} saldo={null} />
+            <OvertimeWidget saldo={null} />
           </div>
 
           {/* — Open activiteiten — */}

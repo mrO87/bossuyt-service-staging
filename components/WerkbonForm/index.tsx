@@ -20,6 +20,7 @@ import DevicePicker from './DevicePicker'
 import { BonDeviceTabs } from './BonDeviceTabs'
 import { deviceLabel, useBonDevices, type BonDevice } from './useBonDevices'
 import { kindForDate, resolveInterventionKind } from '@/lib/werkbon/interventionKind'
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import AlertNoteCard from './AlertNoteCard'
 
 const STATUS_OPTIONS = [
@@ -30,8 +31,16 @@ const STATUS_OPTIONS = [
   { value: 'afgewerkt',        label: 'Afgewerkt',             activeClass: 'bg-brand-green text-white border-brand-green',     inactiveClass: 'bg-surface text-ink-soft border-stroke' },
 ]
 
+/**
+ * De bezoekdatum waarmee een verse bon opent.
+ *
+ * Niet `toISOString()`: dat is UTC, en tussen middernacht en twee uur 's nachts
+ * staat dat nog op gisteren. Een bon die je na een late interventie invult,
+ * kreeg dan de datum van de dag ervoor — en daarmee ook de verkeerde keuze
+ * tussen week en weekend, want die volgt de datum.
+ */
 function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10)
+  return todayInBelgium()
 }
 
 

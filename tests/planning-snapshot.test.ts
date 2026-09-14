@@ -20,9 +20,26 @@ import {
 import type { InterventionStatus } from '@/types'
 import type { CleanupIds } from './setup'
 import { cleanup, testDb } from './setup'
+import { todayInBelgium } from '@/lib/planning/pastDays'
 
-const DATE = '2026-09-14'          // a Monday
+/**
+ * De dag waarop deze tests plannen: vandaag, uitgerekend en niet ingetikt.
+ *
+ * Hier stond een vaste datum. Die werkte tot de kalender hem inhaalde, en toen
+ * viel dit hele bestand om — `savePlanningSnapshot` weigert een dag die voorbij
+ * is, en dat is precies wat er om middernacht van die datum gebeurde. Een test
+ * die op een bepaalde nacht stukgaat, is erger dan geen test: hij wijst naar
+ * code die niets mankeert.
+ */
+const DATE = todayInBelgium()
 const DAY_START = new Date(`${DATE}T00:00:00.000Z`)
+
+/** `YYYY-MM-DD`, een aantal dagen later. */
+function dagenLater(dag: string, aantal: number): string {
+  const moment = new Date(`${dag}T12:00:00.000Z`)
+  moment.setUTCDate(moment.getUTCDate() + aantal)
+  return moment.toISOString().slice(0, 10)
+}
 
 const actor = { id: 'u1', role: 'technician' as const }
 
@@ -475,8 +492,8 @@ describe('updatePlacement', () => {
   let siteId: string
 
   const actor = { id: 'u1', role: 'technician' as const }
-  const DAY_A = '2026-09-14'
-  const DAY_B = '2026-09-28'      // twee weken later: nooit samen op één scherm
+  const DAY_A = DATE
+  const DAY_B = dagenLater(DATE, 14)   // twee weken later: nooit samen op één scherm
 
   async function insert(fields: { plannedDate: Date | null; status: InterventionStatus }) {
     const id = `wo-${randomUUID()}`

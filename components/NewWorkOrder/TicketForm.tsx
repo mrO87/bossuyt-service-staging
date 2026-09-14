@@ -1,5 +1,6 @@
 'use client'
 
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import { useEffect, useState } from 'react'
 import Field, { inputClass } from './Field'
 
@@ -22,7 +23,8 @@ interface Props {
   onSubmit: (draft: TicketDraft) => void
 }
 
-function today(): string { return new Date().toISOString().slice(0, 10) }
+/** Vandaag in België — niet UTC; zie todayInBelgium. */
+function today(): string { return todayInBelgium() }
 
 export default function TicketForm({ submitting, serverError, onSubmit }: Props) {
   const [draft, setDraft] = useState<TicketDraft>({

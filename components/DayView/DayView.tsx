@@ -8,7 +8,7 @@
  * en dat vraagt één gedeelde sleepcontext.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import SettingsSheet from '@/components/SettingsSheet'
 import CalendarSheet from '@/components/CalendarSheet'
@@ -18,6 +18,7 @@ import { useTasks } from '@/lib/task-store'
 import { usePushNotifications } from '@/lib/usePushNotifications'
 import { useDayData } from '@/lib/useDayData'
 import { toLocalDateStr } from '@/lib/planning/weekDays'
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
 import { PlanningBoard } from './PlanningBoard'
 
@@ -42,15 +43,63 @@ function BossuyLogo() {
   )
 }
 
+/**
+ * Een `?date=`-waarde naar een datum, of `null` als er niets bruikbaars staat.
+ *
+ * Middag en niet middernacht: op middernacht kan een uurverschil of een
+ * zomertijdsprong de datum in de vorige dag laten vallen.
+ */
+function parseDateParam(value: string | null): Date | null {
+  if (!value) return null
+  const parsed = new Date(`${value}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 // ---------- main view ----------
 
-export default function DayView() {
+export default function DayView({ initialDate = null }: { initialDate?: string | null }) {
   const router = useRouter()
-  const today = new Date()
-  // De dag die de weekweergave meegaf, als die er is — zie ViewSwitcher.
-  // Zonder dit begint elke weergave opnieuw bij vandaag en ben je je plaats
-  // kwijt zodra je wisselt.
-  const [selectedDate, setSelectedDate] = useState(() => dateFromSearch() ?? today)
+  /**
+   * Vandaag, volgens de klok in België.
+   *
+   * Niet `new Date()`. De eerste versie van deze pagina wordt op de server
+   * gemaakt, en die draait op UTC: om kwart over twaalf 's nachts in België is
+   * het daar nog kwart over tien op de vorige dag. De dagplanning opende dan op
+   * gisteren, en bleef daar tot je zelf verder klikte. Middag en niet
+   * middernacht, zodat een uurverschil de dag niet alsnog verschuift.
+   */
+  const today = new Date(`${todayInBelgium()}T12:00:00`)
+
+  /**
+   * De dag die de weekweergave meegaf, als die er is — zie ViewSwitcher.
+   * Zonder dit begint elke weergave opnieuw bij vandaag en ben je je plaats
+   * kwijt zodra je wisselt.
+   *
+   * De server geeft hem mee (`initialDate`), zodat server en browser dezelfde
+   * dag tekenen. `dateFromSearch` blijft de terugval voor wie hier landt zonder
+   * dat de pagina die datum kon doorgeven.
+   */
+  const [selectedDate, setSelectedDate] = useState(
+    () => parseDateParam(initialDate) ?? dateFromSearch() ?? today,
+  )
+
+  /**
+   * De datum uit de adresbalk geldt één keer, en dan niet meer.
+   *
+   * Hij staat er om je plaats te bewaren tussen dag- en weekweergave. Maar hij
+   * bleef er ook staan, en werd bij élke verversing opnieuw gelezen — ook de
+   * dag erna. Wie 's avonds van week naar dag wisselde, zat de volgende ochtend
+   * nog altijd op gisteren, hoe vaak hij ook ververste.
+   *
+   * Dus wordt hij opgebruikt: gelezen bij het openen, daarna uit de adresbalk
+   * gehaald. Een verversing betekent dan gewoon "vandaag", en doorklikken naar
+   * een andere dag blijft werken zoals het werkte.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!window.location.search.includes('date=')) return
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [newWorkOrderOpen, setNewWorkOrderOpen] = useState(false)
