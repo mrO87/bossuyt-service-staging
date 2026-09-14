@@ -1,6 +1,8 @@
 import type { Intervention } from '@/types'
 import Section from './Section'
-import { BonFileButton, kindForPath } from './BonFileButton'
+import { BonHeaderButtons } from './BonHeaderButtons'
+import { canLeaveTheDay } from '@/lib/planning/dropIntent'
+import { useRouter } from 'next/navigation'
 import { customerLabel } from '@/lib/customerLabel'
 
 interface Props {
@@ -25,6 +27,8 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 
 /** Read-only top half of the paper bon: ticket, bon number and customer block. */
 export default function BonHeaderCard({ intervention, bonNumberPreview }: Props) {
+  const router = useRouter()
+
   const klantNr = intervention.invoiceCustomerNumber && intervention.invoiceCustomerNumber !== intervention.customerNumber
     ? `L ${intervention.customerNumber ?? '—'} · F ${intervention.invoiceCustomerNumber}`
     : intervention.customerNumber ?? '—'
@@ -35,17 +39,17 @@ export default function BonHeaderCard({ intervention, bonNumberPreview }: Props)
 
   return (
     <Section
-      title="SERVICE BON | BON DE SERVICE"
+      // Ingekort van "SERVICE BON | BON DE SERVICE". Nagemeten op 400 px: de
+      // tweetalige titel vraagt 241 px en krijgt er met drie knopjes 190; deze
+      // vraagt er 101. De Franse helft staat nog altijd op de PDF zelf.
+      title="SERVICE BON"
       headerExtra={
-        // Geen origineel, geen knopje. Een bon die met de hand is ingetikt heeft
-        // er geen, en een knop die niets opent is erger dan geen knop.
-        intervention.scanPath
-          ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <BonFileButton kind={kindForPath(intervention.scanPath)} href={intervention.scanPath} />
-            </div>
-          )
-          : undefined
+        <BonHeaderButtons
+          workOrderId={intervention.id}
+          scanPath={intervention.scanPath}
+          editable={canLeaveTheDay(intervention.status)}
+          onEdit={() => router.push(`/interventions/${intervention.id}/aanpassen`)}
+        />
       }
     >
       <div className="grid grid-cols-2 gap-x-4 mb-3">

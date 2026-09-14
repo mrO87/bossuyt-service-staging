@@ -19,6 +19,39 @@ export const RELEASES: ReleaseEntry[] = [
     date: '13 september 2026',
     changes: [
       {
+        label: 'Nieuw',
+        title: 'Een bon rechtzetten waar je hem ziet',
+        body:
+          'Kwam een bon binnen met een leeg naamvak of een fout adres, dan stond dat er '
+          + 'en bleef dat er. Het potloodje in de kop van de werkbon opent nu een scherm '
+          + 'waar je die gegevens verbetert. De velden staan gegroepeerd naar wat een '
+          + 'wijziging raakt, want niet alles op een bon hoort bij díé bon: het '
+          + 'ticketnummer wel, maar de naam, het adres en het telefoonnummer deelt hij met '
+          + 'elke andere bon van hetzelfde huis. Een merkje zegt daarom vooraf hoe ver je '
+          + 'wijziging reikt — "alleen deze bon", of "geldt voor 4 bonnen". Aan een bon '
+          + 'waaraan al gewerkt wordt, verandert niemand nog iets.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'De originele bon zit achter een klein icoontje in de kop',
+        body:
+          'Naast "SERVICE BON" staan voortaan kleine knopjes: de bon zoals hij binnenkwam '
+          + '(een PDF-symbool of een fotosymbool, naargelang wat er geüpload werd), de '
+          + 'afgewerkte bon zodra die getekend is, en het potloodje om de gegevens recht te '
+          + 'zetten. Wie twijfelt aan wat de app uitgelezen heeft, legt het papier er zo in '
+          + 'twee tikken naast. Is er geen origineel, dan staat er ook geen knopje — een '
+          + 'knop die niets opent is erger dan geen knop.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Alle toestellen van een bon, niet alleen het eerste',
+        body:
+          'Staan er meerdere toestellen op één servicebon, dan las de app ze wel alle drie '
+          + 'uit maar toonde ze er één. Nu staat er een rijtje met alle toestellen van de '
+          + 'bon; het toestel waarover het verslag gaat, is aangeduid. Bij één toestel '
+          + 'verandert er niets aan het scherm.',
+      },
+      {
         label: 'Fix',
         title: 'Een nieuwe bon staat meteen op jouw naam',
         body:
