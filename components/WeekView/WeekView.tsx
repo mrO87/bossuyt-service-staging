@@ -20,6 +20,7 @@ import { useSettings, getStartCoordinatesFromSettings } from '@/lib/hooks/useSet
 import { useTasks } from '@/lib/task-store'
 import { clockToMinutes, UNPAID_BREAK_MINUTES } from '@/lib/planning/workSchedule'
 import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@/lib/planning/daySchedule'
+import { orderDayByClock } from '@/lib/planning/dayOrder'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, isWeekEdge, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
@@ -34,7 +35,7 @@ import {
 } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
 import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
-import { PoolBar } from './PoolBar'
+import { PoolBar } from '@/components/planning/PoolBar'
 import { WeekEdges } from './WeekEdges'
 import type { Intervention } from '@/types'
 import type { ReactNode } from 'react'
@@ -247,10 +248,7 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
           .filter((i): i is Intervention => Boolean(i))
       }
 
-      return computeDaySchedule({
-        departureMinutes,
-        origin,
-        jobs: list.map(i => ({
+      const jobs = list.map(i => ({
           id: i.id,
           estimatedMinutes: drag?.kind === 'resize' && drag.id === i.id
             ? drag.minutes
@@ -264,9 +262,35 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
           startMinutes: drag?.kind === 'move' && drag.overOwnDay && drag.id === i.id
             ? drag.startMinutes
             : i.plannedStartMinutes ?? null,
-        })),
+      }))
+
+      // Dezelfde volgorde en dezelfde pauze als de dagweergave. Week en dag
+      // mogen nooit een ander uur tonen voor dezelfde bon, en dat lukt alleen
+      // als ze het uit dezelfde functie halen.
+      //
+      // Tijdens een sleep nemen we alleen de pauze over en niet de volgorde:
+      // die is hierboven al bepaald tegen de momentopname van bij het begin
+      // van de sleep, met opzet, want anders vergelijkt een blok zich met een
+      // positie die het zelf verschoven heeft en wisselen twee bonnen bij elke
+      // vingerbeweging van plaats.
+      const volgensDeKlok = orderDayByClock({
+        jobs,
+        departureMinutes,
+        origin,
         travelBetween: lookupTravel,
         breakMinutes: UNPAID_BREAK_MINUTES,
+      })
+      const byJobId = new Map(jobs.map(job => [job.id, job]))
+
+      return computeDaySchedule({
+        departureMinutes,
+        origin,
+        jobs: drag
+          ? jobs
+          : volgensDeKlok.order.map(id => byJobId.get(id)!),
+        travelBetween: lookupTravel,
+        breakMinutes: UNPAID_BREAK_MINUTES,
+        breakBefore: volgensDeKlok.breakBefore,
       })
     }),
     [days, byDate, departureMinutes, origin, drag],

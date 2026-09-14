@@ -15,6 +15,64 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.68',
+    date: '14 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'De dag loopt niet meer achteruit',
+        body:
+          'Een bon die je op een vast uur zette, bleef staan waar hij stond — het '
+          + 'uur veranderde wel, de plaats niet. Zo kon een bon van 14:00 bovenaan '
+          + 'staan met een bon van 08:30 eronder en de pauze ertussen. De volgorde '
+          + 'en het uur waren twee losse gegevens die elkaar nooit tegenkwamen. '
+          + 'Voortaan bepaalt het uur de plaats: wie een uur heeft staat waar dat '
+          + 'uur valt, en wie er geen heeft schuift eromheen met zijn onderlinge '
+          + 'volgorde intact. Sleep je een bon vóór een vastgezette, dan komt hij '
+          + 'daar alleen als het qua uur kan. Week en dag rekenen het uit met '
+          + 'dezelfde functie, dus ze kunnen niet meer uit elkaar lopen.',
+      },
+      {
+        label: 'Fix',
+        title: 'De middagpauze staat rond de middag',
+        body:
+          'De pauze werd altijd in het midden van de lijst gezet, en verschoof dus '
+          + 'zodra er een bon bij kwam of wegging. Een middagpauze hoort niet op de '
+          + 'helft van een rij maar rond de middag: ze valt nu op de eerste grens '
+          + 'tussen twee bonnen die op of na twaalf uur ligt. Een bon onderbreken '
+          + 'gebeurt niet. En loopt een dag vroeger leeg, dan telt de pauze toch '
+          + 'mee — je bent pas thuis na de pauze en de rit, en daar hangt de '
+          + 'overurenberekening aan.',
+      },
+      {
+        label: 'Nieuw',
+        title: 'Het poolbalkje staat nu ook onderaan de dagplanning',
+        body:
+          'De pool stond onder de tijdlijn, aan het eind van een pagina van '
+          + 'vijftienhonderd pixels. Sinds het venster tijdens het slepen stilstaat, '
+          + 'kon je er met een blok in je hand niet meer naartoe: nagemeten stond de '
+          + 'eerste bon van de dag dan tweeënvijftig pixels bóven de bovenrand. Je '
+          + 'mikte dus niet, de app koos de dichtstbijzijnde kaart. Dezelfde balk als '
+          + 'in de weekplanning zit nu vastgeplakt onderaan, zodat pool en dag altijd '
+          + 'samen bereikbaar zijn. Het is één en dezelfde balk in beide weergaven, '
+          + 'zodat ze niet uit elkaar kunnen groeien.',
+      },
+      {
+        label: 'Fix',
+        title: 'De app weigert zichzelf niet langer',
+        body:
+          'Sleep een bon en klik meteen door naar de volgende dag, en dezelfde '
+          + 'wijziging vertrok twee keer: de sleep maakte de wachtrij leeg, en de '
+          + 'dagwissel deed dat ook, allebei vóór de ander klaar was. De tweede '
+          + 'kreeg dan een conflict van de eerste, en op het scherm verscheen een '
+          + 'weigering voor iets wat gewoon gelukt was. De wachtrij vertrekt nu één '
+          + 'voor één. Ook de eerste sleep na het openklappen van de pool deed soms '
+          + 'niets: de sleepmotor onthield waar de doelwitten stonden vóór de balk '
+          + 'openschoof. Die meet nu tijdens het slepen mee.',
+      },
+    ],
+  },
+  {
     version: 'v1.67',
     date: '13 september 2026',
     changes: [
@@ -1817,7 +1875,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.67'
+const CURRENT_RELEASE_VERSION = 'v1.68'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

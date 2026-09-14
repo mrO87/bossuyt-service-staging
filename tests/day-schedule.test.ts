@@ -336,3 +336,39 @@ describe('draggableIdFor', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
+
+describe('de middagpauze telt altijd mee', () => {
+  /**
+   * De regel zoals de technieker hem gaf: loopt een dag vroeger leeg, dan
+   * wordt de middagpauze toch meegerekend — je bent pas thuis na de pauze en
+   * de rit. `breakBefore` gelijk aan het aantal jobs betekent "achteraan".
+   */
+  const korteDag = (breakBefore: number) =>
+    computeDaySchedule({
+      departureMinutes: 7 * 60,
+      origin: HOME,
+      jobs: [
+        { id: 'a', estimatedMinutes: 60, at: FAR },
+        { id: 'b', estimatedMinutes: 60, at: NEAR },
+      ],
+      travelBetween: travel,
+      breakMinutes: 30,
+      breakBefore,
+    })
+
+  it('schuift de thuiskomst een half uur op wanneer de pauze achteraan valt', () => {
+    const zonder = korteDag(-1)
+    const met = korteDag(2)
+    expect(met.backAtOriginMinutes! - zonder.backAtOriginMinutes!).toBe(30)
+  })
+
+  it('tekent die pauze tussen de laatste job en de rit naar huis', () => {
+    const result = korteDag(2)
+    const pauze = result.blocks.find(b => b.kind === 'break')!
+    const laatsteJob = result.blocks.filter(b => b.kind === 'job').at(-1)!
+    const ritNaarHuis = result.blocks.find(b => b.id === 'travel-home')!
+
+    expect(pauze.startMinutes).toBe(laatsteJob.endMinutes)
+    expect(ritNaarHuis.startMinutes).toBeGreaterThanOrEqual(pauze.endMinutes)
+  })
+})

@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
+  MeasuringStrategy,
   PointerSensor,
   TouchSensor,
   closestCenter,
@@ -32,7 +33,7 @@ import { enqueuePlanningWrite, updateInterventionSequence, upsertIntervention } 
 import { syncPendingWrites } from '@/lib/sync'
 import type { Settings } from '@/lib/hooks/useSettings'
 import type { Intervention, InterventionStatus, User } from '@/types'
-import { OpenPool } from './OpenPool'
+import { PoolBar } from '@/components/planning/PoolBar'
 
 /** Position within the movable items (break included) → index among the jobs. */
 function jobIndexForPosition(movableItems: MovableItem[], position: number): number {
@@ -56,8 +57,19 @@ export function PlanningBoard({
 }) {
   const [day, setDay] = useState(planned)
   const [pool, setPool] = useState(open)
-  const [poolVisible, setPoolVisible] = useState(true)
+  const [poolVisible, setPoolVisible] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  /**
+   * Of er nu een blok in de hand is.
+   *
+   * De poolbalk zegt daarmee wat loslaten betekent. Ze staat altijd onderaan
+   * het scherm, ook tijdens een sleep, en dat is precies waarom ze er is: de
+   * pool stond vroeger ónder de tijdlijn, en met een blok in je hand kon je er
+   * niet meer naartoe scrollen. Op een telefoon van 950 px stond de eerste
+   * bon van de dag dan op y = −52, boven de bovenrand — je mikte niet, de app
+   * koos de dichtstbijzijnde kaart. Nu zijn pool en dag altijd samen bereikbaar.
+   */
+  const [dragging, setDragging] = useState(false)
 
   // The server's answer always wins over the optimistic copy.
   useEffect(() => { setDay(planned) }, [planned])
@@ -163,6 +175,7 @@ export function PlanningBoard({
   }, [currentUser, selectedDate])
 
   async function handleDragEnd(event: DragEndEvent) {
+    setDragging(false)
     setRefusal(null)
 
     const activeId = String(event.active.id)
@@ -237,7 +250,22 @@ export function PlanningBoard({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      // Opmeten terwijl je sleept, niet alleen bij het begin.
+      //
+      // dnd-kit onthoudt standaard waar de doelwitten stonden toen de sleep
+      // begon. Klapt de poolbalk open, dan schuift de hele bladspiegel en
+      // kloppen die posities niet meer: het doelwit ligt ergens anders dan
+      // waar dnd-kit denkt, en de sleep eindigt op niets. Gemeten: de eerste
+      // sleep na het openklappen deed niets, terwijl dezelfde sleep daarna
+      // wél werkte. Precies dezelfde reden waarom de weekweergave dit al doet.
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={() => setDragging(true)}
+      onDragCancel={() => setDragging(false)}
+      onDragEnd={handleDragEnd}
+    >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-bold tracking-wide text-ink uppercase">Planning</h2>
         <span className="text-[11px] text-ink-soft">sleep om te verplaatsen</span>
@@ -255,11 +283,12 @@ export function PlanningBoard({
         onOpenIntervention={onOpenIntervention}
       />
 
-      <OpenPool
+      <PoolBar
         interventions={pool}
-        visible={poolVisible}
-        onToggleVisible={() => setPoolVisible(v => !v)}
-        onOpen={onOpenIntervention}
+        open={poolVisible}
+        onToggle={() => setPoolVisible(v => !v)}
+        dragging={dragging}
+        onOpenIntervention={onOpenIntervention}
       />
     </DndContext>
   )

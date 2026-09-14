@@ -41,7 +41,8 @@ import {
   type TravelCache,
 } from '@/lib/routing/travelCache'
 import { clockToMinutes } from '@/lib/planning/workSchedule'
-import { computeDaySchedule } from '@/lib/planning/daySchedule'
+import { computeDaySchedule, type TravelLookup } from '@/lib/planning/daySchedule'
+import { orderDayByClock } from '@/lib/planning/dayOrder'
 import type {
   RouteState,
   RouteTotals,
@@ -91,17 +92,35 @@ export function shouldTakeExternalOrder(previous: string | null, next: string): 
   return previous !== next
 }
 
-/** Insert a 30-minute midday break in the middle of the job list. */
-function insertMiddayBreak(jobs: JobItem[]): MovableItem[] {
-  if (jobs.length < 2) return [...jobs]
-  const midIndex = Math.floor(jobs.length / 2)
+/**
+ * De pauze op zijn plek zetten, of weglaten.
+ *
+ * `breakBefore` is de index van de job waar de pauze vóór komt, uitgerekend
+ * door `orderDayByClock` op basis van de klok. Vroeger stond hier
+ * `Math.floor(jobs.length / 2)` — het midden van de lijst — en dat verschoof
+ * de pauze zodra er een job bij kwam. Een middagpauze hoort rond de middag.
+ */
+function insertBreakAt(jobs: JobItem[], breakBefore: number): MovableItem[] {
+  // `jobs.length` is geldig en betekent "achteraan": de middagpauze telt ook
+  // mee op een dag waarvan het werk vóór de middag op is.
+  if (breakBefore < 1 || breakBefore > jobs.length) return [...jobs]
   const breakItem: BreakItem = {
     kind: 'break',
     id: 'break',
     minutes: DEFAULT_BREAK_MINUTES,
     label: 'Middagpauze',
   }
-  return [...jobs.slice(0, midIndex), breakItem, ...jobs.slice(midIndex)]
+  return [...jobs.slice(0, breakBefore), breakItem, ...jobs.slice(breakBefore)]
+}
+
+/** Staan er dezelfde dingen in dezelfde volgorde? Vergelijkt op id. */
+function sameItems(a: readonly MovableItem[], b: readonly MovableItem[]): boolean {
+  return a.length === b.length && a.every((item, index) => item.id === b[index].id)
+}
+
+/** Waar de pauze staat, uitgedrukt als "vóór de hoeveelste job". */
+function breakIndexIn(items: readonly MovableItem[]): number {
+  return items.findIndex(item => item.kind === 'break')
 }
 
 export function useRouteTimeline(plannedInterventions: Intervention[], settings: Settings) {
@@ -121,7 +140,11 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
       startAddress: configuredStartAddress,
       endAddress: configuredStartAddress,
       sameAsStart: true,
-      movableItems: insertMiddayBreak(jobs),
+      // Nog zonder pauze: waar die valt hangt af van de klok, en de klok hangt
+      // af van rijtijden die pas een moment later binnen zijn. Een pauze die
+      // even later verschijnt is beter dan een die eerst in het midden staat
+      // en dan wegspringt.
+      movableItems: [...jobs],
     }
   }, [configuredStartAddress, plannedInterventions])
 
@@ -177,6 +200,55 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
       endAddress: sameAsStart ? startAddress : endAddress,
     })
   }, [movableItems, startAddress, endAddress, sameAsStart])
+
+  /** De rijtijd tussen twee punten zoals de tijdlijn die vandaag kent. */
+  const travelBetween = useCallback<TravelLookup>((from, to) => {
+    const leg = resolveLeg(cacheSnapshot, from, to)
+    return leg.provider === 'unknown' ? null : leg.minutes
+  }, [cacheSnapshot])
+
+  /**
+   * De jobs op volgorde van de klok zetten, met de pauze op zijn plaats.
+   *
+   * Eén functie, gebruikt door zowel het scherm als het slepen, zodat wat je
+   * ziet en wat we wegschrijven dezelfde lijst zijn.
+   */
+  const ordenVolgensDeKlok = useCallback((jobs: JobItem[]): MovableItem[] => {
+    if (jobs.length === 0) return []
+
+    const { order, breakBefore } = orderDayByClock({
+      jobs: jobs.map(item => ({
+        id: item.intervention.id,
+        estimatedMinutes: item.intervention.estimatedMinutes,
+        at: jobCoordinates(item.intervention),
+        startMinutes: item.intervention.plannedStartMinutes ?? null,
+      })),
+      departureMinutes: clockToMinutes(settings.startTime),
+      origin: startCoordinates,
+      travelBetween,
+      breakMinutes: DEFAULT_BREAK_MINUTES,
+    })
+
+    const byId = new Map(jobs.map(item => [item.intervention.id, item]))
+    return insertBreakAt(order.map(id => byId.get(id)!), breakBefore)
+  }, [settings.startTime, startCoordinates, travelBetween])
+
+  /**
+   * De volgorde volgt de klok — ook nadat er gesleept is of een rijtijd binnen
+   * kwam.
+   *
+   * De vergelijking met `sameItems` is wat dit laat stoppen: zodra de lijst
+   * niet meer verandert geven we dezelfde toestand terug, React tekent niet
+   * opnieuw, en deze lus staat stil. Zonder die vergelijking zou elke ronde
+   * een nieuwe lijst maken en zichzelf eeuwig opnieuw aanroepen.
+   */
+  useEffect(() => {
+    setState(current => {
+      const jobs = current.movableItems.filter((item): item is JobItem => item.kind === 'job')
+      const next = ordenVolgensDeKlok(jobs)
+      return sameItems(current.movableItems, next) ? current : { ...current, movableItems: next }
+    })
+  }, [ordenVolgensDeKlok, movableItems])
 
   // Reset the working order when the day's jobs change from outside (a sync).
   useEffect(() => {
@@ -385,6 +457,10 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
         return leg.provider === 'unknown' ? null : leg.minutes
       },
       breakMinutes: DEFAULT_BREAK_MINUTES,
+      // Dezelfde pauze als die in de lijst staat. Liet je dit weg, dan viel de
+      // pauze hier weer in het midden terwijl ze op het scherm rond de middag
+      // stond — twee plaatsen die hetzelfde moeten weten en elkaar tegenspreken.
+      breakBefore: breakIndexIn(state.movableItems),
     })
 
     const startByIntervention: Record<string, number> = {}
@@ -407,7 +483,14 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     const newIndex = movableItems.findIndex(item => item.id === overId)
     if (oldIndex === -1 || newIndex === -1) return null
 
-    const nextMovableItems = arrayMove(movableItems, oldIndex, newIndex)
+    // Waar je hem neerzet is een voorstel; de klok heeft het laatste woord.
+    // Sleep je een bon vóór een bon die op 14:00 vastgezet staat, dan komt hij
+    // daar alleen te staan als dat qua uur kan. Zo blijft wat we wegschrijven
+    // dezelfde lijst als wat je ziet.
+    const verplaatst = arrayMove(movableItems, oldIndex, newIndex)
+    const nextMovableItems = ordenVolgensDeKlok(
+      verplaatst.filter((item): item is JobItem => item.kind === 'job'),
+    )
     setState(prev => ({ ...prev, movableItems: nextMovableItems }))
 
     // No cache to clear and nothing to refetch: the new order uses the same
@@ -415,7 +498,7 @@ export function useRouteTimeline(plannedInterventions: Intervention[], settings:
     return nextMovableItems
       .filter((item): item is JobItem => item.kind === 'job')
       .map(item => item.intervention)
-  }, [movableItems])
+  }, [movableItems, ordenVolgensDeKlok])
 
   const setStartAddress = useCallback((address: string) => {
     setResolvedEndpoints(prev => ({ ...prev, start: undefined }))

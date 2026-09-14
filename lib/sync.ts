@@ -171,7 +171,41 @@ async function fetchDailyRoute(planned: Intervention[]): Promise<RouteStep[]> {
  * Each pending write is tried in order. If it fails, we stop
  * and try again next time (keeps things in the right order).
  */
-export async function syncPendingWrites(): Promise<PendingWriteResult> {
+/**
+ * De wachtrij mag nooit twee keer tegelijk vertrekken.
+ *
+ * Gemeten op staging: sleep een bon en klik meteen door naar de volgende dag,
+ * en dezelfde opdracht gaat twee keer de lijn op —
+ *
+ *     → update_planning v8 n=1
+ *     → update_planning v8 n=1
+ *     ← 200 success=true
+ *     ← 409
+ *
+ * — want `persist` maakt de wachtrij leeg ná een sleep, en `useDayData` doet
+ * het bij elke datumwissel. Allebei lazen ze dezelfde wachtrij vóór de ander
+ * klaar was, en de tweede kreeg een conflict van de eerste. Op het scherm
+ * verscheen dan een weigering voor iets wat gewoon gelukt was.
+ *
+ * De oplossing is niet "de tweede oproep negeren", want die tweede wil iets
+ * wat er misschien ná de eerste bij is gekomen. Ze gaan dus achter elkaar in
+ * de rij staan: elke oproep wacht tot de vorige klaar is en begint dan zelf.
+ * Een ronde die niets meer vindt, kost niets.
+ *
+ * `.catch()` op de keten is er zodat één mislukte ronde de volgende niet
+ * blokkeert — de keten mag nooit stukgaan op een fout die al afgehandeld is.
+ */
+let synchronisatieKeten: Promise<unknown> = Promise.resolve()
+
+export function syncPendingWrites(): Promise<PendingWriteResult> {
+  const volgende = synchronisatieKeten
+    .catch(() => undefined)
+    .then(() => runSyncPendingWrites())
+  synchronisatieKeten = volgende
+  return volgende
+}
+
+async function runSyncPendingWrites(): Promise<PendingWriteResult> {
   const {
     getPendingWrites,
     removePendingWrite,

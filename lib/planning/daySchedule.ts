@@ -115,6 +115,17 @@ export function computeDaySchedule(input: {
   jobs: ScheduleJob[]
   travelBetween: TravelLookup
   breakMinutes: number
+  /**
+   * Vóór welke job de pauze valt, of -1 voor geen pauze.
+   *
+   * Laat je dit weg, dan valt de pauze in het midden van de lijst. Dat was
+   * jarenlang de enige regel, en het was de verkeerde: een middagpauze hoort
+   * rond de middag en niet op de helft van een rij, dus verschoof ze zodra er
+   * een job bij kwam. `orderDayByClock` rekent de juiste plaats uit en geeft
+   * hem hier door; het oude gedrag blijft staan voor wie alleen een dag wil
+   * doorrekenen zonder zich om de pauze te bekommeren.
+   */
+  breakBefore?: number
 }): DayScheduleResult {
   const { departureMinutes, origin, jobs, travelBetween, breakMinutes } = input
 
@@ -136,9 +147,13 @@ export function computeDaySchedule(input: {
     }
   }
 
-  // Eén pauze, vanaf twee jobs: de dagweergave tekent de pauze zelf al vanaf
-  // twee jobs (insertMiddayBreak), en de twee mogen elkaar nooit tegenspreken.
-  const breakBefore = jobs.length >= 2 ? Math.floor(jobs.length / 2) : -1
+  // Eén pauze. Wie hem uitgerekend heeft, geeft de plaats mee; wie dat niet
+  // deed, krijgt het oude midden. Er staat nog maar één regel die hierover
+  // beslist, en dat was het hele punt: vroeger stond dezelfde berekening ook
+  // in de dagweergave, met een commentaar erbij dat ze elkaar nooit mochten
+  // tegenspreken. Twee plaatsen die hetzelfde moeten weten, spreken elkaar
+  // vroeg of laat tegen.
+  const breakBefore = input.breakBefore ?? (jobs.length >= 2 ? Math.floor(jobs.length / 2) : -1)
 
   let cursor = departureMinutes
   let departFromOrigin = departureMinutes
@@ -237,6 +252,18 @@ export function computeDaySchedule(input: {
     startMinutes: departFromOrigin - 10,
     endMinutes: departFromOrigin,
   })
+
+  // Een pauze ná de laatste job.
+  //
+  // Dat is geen rare uitzondering maar de gewone gang van zaken op een dag die
+  // niet vol gepland staat: de middagpauze telt altijd mee, ook als het werk
+  // om elf uur op is. Je bent dus pas thuis na de pauze én de rit. Zonder dit
+  // gaf een halfvolle dag een te vroege thuiskomst, en daar hangt de
+  // overurenberekening aan.
+  if (breakBefore === jobs.length) {
+    blocks.push({ kind: 'break', id: 'break', startMinutes: cursor, endMinutes: cursor + breakMinutes })
+    cursor += breakMinutes
+  }
 
   const homeLeg = travelBetween(previous, origin)
   const backAtOrigin = cursor + (homeLeg ?? 0)
