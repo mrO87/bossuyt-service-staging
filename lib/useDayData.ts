@@ -5,6 +5,7 @@ import type { Intervention } from '@/types'
 import { getOpenInterventions, getPlannedInterventions } from '@/lib/idb'
 import { toLocalDateStr } from '@/lib/planning/weekDays'
 import { shouldSync, syncPendingWrites, syncToday } from '@/lib/sync'
+import { todayInBelgium } from '@/lib/planning/pastDays'
 
 const DEFAULT_TECHNICIAN_ID = 'u1'
 
@@ -47,7 +48,8 @@ export function useDayData(technicianId: string = DEFAULT_TECHNICIAN_ID, date: D
       setError(null)
       setNotice(null)
 
-      const isCurrentDay = dateStr === toLocalDateStr(new Date())
+      // Dezelfde kalender als de rest van de planning: die van België.
+      const isCurrentDay = dateStr === todayInBelgium()
 
       if (isCurrentDay) {
         // Today: use IDB cache + sync logic

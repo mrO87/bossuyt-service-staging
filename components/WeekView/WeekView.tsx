@@ -23,6 +23,7 @@ import { computeDaySchedule, type DayScheduleResult, type TravelLookup } from '@
 import { orderDayByClock } from '@/lib/planning/dayOrder'
 import { actualVisitSpan } from '@/lib/planning/visitSpan'
 import { toLocalDateStr, weekDaysAround } from '@/lib/planning/weekDays'
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import { resolveLeg, sharedTravelCache } from '@/lib/routing/travelCache'
 import { dayDroppableId, isWeekEdge, PAST_DAY_REASON, resolveWeekDrop } from '@/lib/planning/weekDropIntent'
 import { conflictMessage, orderByHour, snapDuration, snapToStep } from '@/lib/planning/pinnedHour'
@@ -159,7 +160,13 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
   // server en browser dezelfde week. `dateFromSearch` blijft de terugval voor
   // wie hier landt zonder dat de pagina die datum kon doorgeven.
   const [anchor, setAnchor] = useState(
-    () => parseDateParam(initialDate) ?? dateFromSearch() ?? new Date(),
+    // Niet `new Date()`: de eerste versie van deze pagina wordt op de server
+    // gemaakt en die draait op UTC, dus tussen middernacht en twee uur 's
+    // nachts stond het anker nog op gisteren. De week zag er hetzelfde uit —
+    // gisteren en vandaag zitten meestal in dezelfde week — maar het ánker
+    // reist mee naar de dagweergave als je van weergave wisselt. Wie 's nachts
+    // naar de dagplanning sprong, landde zo op gisteren.
+    () => parseDateParam(initialDate) ?? dateFromSearch() ?? new Date(`${todayInBelgium()}T12:00:00`),
   )
   const [pixelsPerHour, setPixelsPerHour] = useState(54)
   const [byDate, setByDate] = useState<Record<string, Intervention[]>>({})

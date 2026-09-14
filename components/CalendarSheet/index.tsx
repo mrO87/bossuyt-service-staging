@@ -1,5 +1,6 @@
 'use client'
 
+import { todayInBelgium } from '@/lib/planning/pastDays'
 import { useEffect, useState } from 'react'
 
 function ChevronLeft({ size = 20, className = '' }: { size?: number; className?: string }) {
@@ -90,7 +91,8 @@ export default function CalendarSheet({
 
   if (!open) return null
 
-  const today = new Date()
+  // Vandaag in België, niet de klok van de server — zie todayInBelgium.
+  const today = new Date(`${todayInBelgium()}T12:00:00`)
   const year = viewMonth.getFullYear()
   const month = viewMonth.getMonth()
 
