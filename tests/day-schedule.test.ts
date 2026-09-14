@@ -372,3 +372,69 @@ describe('de middagpauze telt altijd mee', () => {
     expect(ritNaarHuis.startMinutes).toBeGreaterThanOrEqual(pauze.endMinutes)
   })
 })
+
+/**
+ * Een afgesproken uur tegenover een onthouden uur.
+ *
+ * De app onthoudt het uur waarop een bon is neergezet. Dat uur was lange tijd
+ * een claim, wat het ook was: een bon die niemand had afgesproken kon zo een
+ * kolom dichtarceren en zijn rit bovenop de vorige job leggen. Sinds
+ * `isAppointment` claimt alleen een afspraak; de rest is een voorkeur die
+ * opschuift zodra ze niet kan.
+ */
+describe('computeDaySchedule: afspraak tegenover voorkeur', () => {
+  /**
+   * Job a loopt van 08:00 tot 09:00. Job b ligt 20 minuten verder en de
+   * middagpauze van 30 minuten valt ertussen, dus b kan ten vroegste om 09:50.
+   */
+  function dagMetTweede(tweede: Partial<ScheduleJob>) {
+    return day([
+      { id: 'a', estimatedMinutes: 60, at: FAR },
+      { id: 'b', estimatedMinutes: 45, at: NEAR, startMinutes: 8 * 60 + 30, ...tweede },
+    ])
+  }
+
+  it('schuift een onhaalbare voorkeur op naar het eerste haalbare uur', () => {
+    const result = dagMetTweede({ isAppointment: false })
+    const jobB = result.blocks.find(b => b.interventionId === 'b')!
+    expect(jobB.startMinutes).toBe(9 * 60 + 50)
+    expect(jobB.endMinutes).toBe(10 * 60 + 35)
+  })
+
+  it('meldt geen botsing voor een voorkeur die opschoof', () => {
+    expect(dagMetTweede({ isAppointment: false }).conflicts).toEqual([])
+    expect(dagMetTweede({ isAppointment: false }).blocks.some(b => b.kind === 'clash')).toBe(false)
+  })
+
+  it('laat de rit tegen de opgeschoven job aan liggen, niet in de vorige job', () => {
+    // Dit was het zichtbare gebrek: de rit werd teruggerekend vanaf het
+    // opgeëiste uur en belandde midden in het blok van de job ervoor.
+    const result = dagMetTweede({ isAppointment: false })
+    const jobA = result.blocks.find(b => b.interventionId === 'a')!
+    const rit = result.blocks.filter(b => b.kind === 'travel')[1]
+    expect(rit.startMinutes).toBeGreaterThanOrEqual(jobA.endMinutes)
+  })
+
+  it('houdt een afgesproken uur vast, ook als het niet kan, en meldt het', () => {
+    const result = dagMetTweede({ isAppointment: true })
+    const jobB = result.blocks.find(b => b.kind === 'job' && b.interventionId === 'b')!
+    expect(jobB.startMinutes).toBe(8 * 60 + 30)
+    expect(result.conflicts).toHaveLength(1)
+    expect(result.conflicts[0]).toMatchObject({ interventionId: 'b', earliestMinutes: 9 * 60 + 50 })
+  })
+
+  it('behandelt een ontbrekend veld als afspraak, de veilige kant', () => {
+    // Liever een melding te veel dan een bon die ongemerkt opschuift.
+    const result = dagMetTweede({})
+    expect(result.blocks.find(b => b.kind === 'job' && b.interventionId === 'b')!.startMinutes)
+      .toBe(8 * 60 + 30)
+    expect(result.conflicts).toHaveLength(1)
+  })
+
+  it('laat een haalbare voorkeur gewoon op haar uur staan', () => {
+    // 10:00 ligt ruim na het vroegste moment, dus er valt niets op te schuiven.
+    const result = dagMetTweede({ isAppointment: false, startMinutes: 10 * 60 })
+    expect(result.blocks.find(b => b.interventionId === 'b')!.startMinutes).toBe(10 * 60)
+    expect(result.conflicts).toEqual([])
+  })
+})

@@ -34,6 +34,8 @@ import {
   getPlannedInterventions,
   updateInterventionSequence,
   upsertIntervention,
+  cacheDay,
+  getOpenInterventions,
 } from '@/lib/idb'
 import { syncPendingWrites } from '@/lib/sync'
 import { ViewSwitcher, dateFromSearch } from '@/components/planning/ViewSwitcher'
@@ -189,29 +191,93 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
 
   const days = useMemo(() => weekDaysAround(anchor), [anchor])
 
+  /**
+   * De dag die meereist naar de dagplanning.
+   *
+   * Hier stond `days[0]`, de maandag van de getoonde week. Dat klopt zolang je
+   * naar een àndere week kijkt: daar bestaat geen "vandaag", en dan is de
+   * maandag het begin van wat je ziet. In de week van vandaag was het fout —
+   * wie op dinsdag van week naar dag wisselde kreeg maandag, en die maandag
+   * bleef plakken, want hij reist mee als `?date=`.
+   *
+   * Dus: zit vandaag in de getoonde week, dan gaat vandaag mee. Anders de
+   * maandag.
+   */
+  const overdrachtsdag = useMemo(() => {
+    const vandaag = todayInBelgium()
+    return days.find(day => toLocalDateStr(day) === vandaag) ?? days[0]
+  }, [days])
+
   useEffect(() => {
     let cancelled = false
 
+    /**
+     * Eerst uit de cache, dan pas bij de server.
+     *
+     * Dit was één `fetch` per dag en verder niets. In een kelder zonder bereik
+     * — en dat is waar dit gereedschap gebruikt wordt — gaf dat zeven lege
+     * kolommen zonder één woord uitleg, alsof de week leeg gepland stond. De
+     * dagweergave deed het al goed en las eerst uit IndexedDB; de week niet.
+     *
+     * De volgorde is bewust: wat in de cache staat verschijnt meteen, de
+     * server overschrijft het zodra hij antwoordt. Lukt dat niet, dan blijft
+     * staan wat er stond en zegt een melding waaróm het misschien oud is.
+     */
     async function load() {
+      const uitCache = await Promise.all(
+        days.map(async day => {
+          const date = toLocalDateStr(day)
+          return { date, planned: await getPlannedInterventions(date) }
+        }),
+      )
+      if (cancelled) return
+
+      const eerst: Record<string, Intervention[]> = {}
+      for (const r of uitCache) eerst[r.date] = r.planned
+      setByDate(eerst)
+      setPool(await getOpenInterventions())
+      if (cancelled) return
+
       const results = await Promise.all(
         days.map(async day => {
           const date = toLocalDateStr(day)
           try {
             const res = await fetch(`/api/sync/today?technicianId=${currentUser.id}&date=${date}`)
-            if (!res.ok) return { date, planned: [] as Intervention[], open: [] as Intervention[] }
+            if (!res.ok) return { date, ok: false, planned: [] as Intervention[], open: [] as Intervention[] }
             const data = await res.json() as { planned: Intervention[]; open: Intervention[] }
-            return { date, planned: data.planned, open: data.open }
+            return { date, ok: true, planned: data.planned, open: data.open }
           } catch {
-            return { date, planned: [] as Intervention[], open: [] as Intervention[] }
+            return { date, ok: false, planned: [] as Intervention[], open: [] as Intervention[] }
           }
         }),
       )
-
       if (cancelled) return
+
+      const geslaagd = results.filter(r => r.ok)
+
+      // Niets binnen: laat staan wat de cache gaf en zeg dat het oud kan zijn.
+      if (geslaagd.length === 0) {
+        setNotice(
+          uitCache.some(r => r.planned.length > 0)
+            ? 'Geen verbinding — dit is de planning zoals ze het laatst opgehaald werd.'
+            : 'Geen verbinding, en er staat nog niets in het geheugen van dit toestel.',
+        )
+        return
+      }
+
       const next: Record<string, Intervention[]> = {}
-      for (const r of results) next[r.date] = r.planned
+      for (const r of results) next[r.date] = r.ok ? r.planned : (eerst[r.date] ?? [])
       setByDate(next)
-      setPool(results[0]?.open ?? [])
+      setPool(geslaagd[0]?.open ?? [])
+      setNotice(
+        geslaagd.length < results.length
+          ? 'Een deel van de week kon niet opgehaald worden; die dagen komen uit het geheugen van dit toestel.'
+          : null,
+      )
+
+      // Wegschrijven wat er binnenkwam, zodat de volgende keer zonder bereik
+      // niet leeg is. Per dag, want één dag mag de andere zes niet wissen.
+      await Promise.all(geslaagd.map(r => cacheDay(r.date, r.planned).catch(() => undefined)))
     }
 
     void load()
@@ -283,6 +349,18 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
             : drag?.kind === 'move' && drag.overOwnDay && drag.id === i.id
               ? drag.startMinutes
               : i.plannedStartMinutes ?? null,
+          /**
+           * Alleen een afgesproken uur eist zijn plaats op.
+           *
+           * Een bon die al gelopen is telt ook als afspraak: zijn uur is geen
+           * voorkeur meer maar een feit, en dat mag de motor niet wegschuiven.
+           * Idem tijdens een sleep — daar staat de vinger, en wat er onder de
+           * vinger gebeurt moet zijn wat je ziet.
+           */
+          isAppointment:
+            Boolean(gelopen) ||
+            (drag?.kind === 'move' && drag.id === i.id) ||
+            Boolean(i.startIsAppointment),
         }
       })
 
@@ -993,7 +1071,7 @@ export default function WeekView({ initialDate = null }: { initialDate?: string 
       <header className="flex items-center gap-3 bg-brand-dark px-4 py-3">
         <div>
           <p className="text-sm font-bold leading-tight text-white">bossuyt</p>
-          <ViewSwitcher current="week" date={days[0]} />
+          <ViewSwitcher current="week" date={overdrachtsdag} />
         </div>
       </header>
 

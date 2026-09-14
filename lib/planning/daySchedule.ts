@@ -101,12 +101,32 @@ export interface ScheduleJob {
    * Het uur waarop de gebruiker deze bon heeft neergezet, in minuten sinds
    * middernacht. Ontbreekt het, dan wordt het uur berekend zoals altijd.
    *
-   * Of er een speldje op staat doet hier niet ter zake. Het speldje zegt dat
-   * dit uur met de klant afgesproken is — dat is iets wat een mens moet weten
-   * voor hij de planning omgooit, en niets waar deze berekening anders van
-   * wordt. Een afspraak en een voorkeur lopen op dezelfde klok.
+   * Of het uur afgesproken is staat in `isAppointment` hieronder, en dat
+   * maakt hier wél uit: een afspraak houdt haar uur ook als het niet haalbaar
+   * is, een voorkeur schuift op. Hier stond het omgekeerde — dat het speldje
+   * niets veranderde aan de berekening — en daardoor kon een uur dat niemand
+   * had afgesproken een dag dichtarceren.
    */
   startMinutes?: number | null
+  /**
+   * Of dat uur met de klant afgesproken is.
+   *
+   * Hier stond dat het speldje niets uitmaakte voor de berekening. Dat hield
+   * geen stand. Een afgesproken uur is een claim: kan het niet gehaald worden,
+   * dan hoort daar een waarschuwing te staan en mag de bon niet stilletjes
+   * verschuiven — iemand moet de klant bellen. Een onthouden uur zónder
+   * afspraak is een voorkeur: het is het uur waar de planner de bon neerzette,
+   * en het geldt zolang het kan. Botst het met de bon ervoor, dan schuift het
+   * op naar het eerste haalbare moment en is er niets aan de hand.
+   *
+   * Zonder dit veld werd élk onthouden uur een claim, en arceerde een bon die
+   * niemand had afgesproken een hele kolom dicht.
+   *
+   * Ontbreekt het veld, dan geldt het oude gedrag — waarschuwen. Dat is de
+   * veilige kant om op te vallen: liever een melding te veel dan een bon die
+   * ongemerkt een half uur opschuift.
+   */
+  isAppointment?: boolean
 }
 
 export function computeDaySchedule(input: {
@@ -194,8 +214,13 @@ export function computeDaySchedule(input: {
     // Het vroegste moment waarop deze job kan beginnen: klaar met de vorige, de
     // pauze gehad, en er naartoe gereden.
     const earliest = cursor + leg + pause
-    const pinned = job.startMinutes ?? null
-    const start = pinned ?? earliest
+    const uur = job.startMinutes ?? null
+
+    // Een afspraak eist haar plaats op, haalbaar of niet. Een voorkeur geldt
+    // zolang ze kan en schuift anders op. Zie `isAppointment` hierboven.
+    const eist = uur !== null && job.isAppointment !== false
+    const pinned = eist ? uur : null
+    const start = uur === null ? earliest : eist ? uur : Math.max(uur, earliest)
 
     pushTravelLeg(`travel-${index}`, legMinutes, start - pause)
 

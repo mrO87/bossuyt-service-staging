@@ -241,6 +241,8 @@ export function useRouteTimeline(
         estimatedMinutes: item.intervention.estimatedMinutes,
         at: jobCoordinates(item.intervention),
         startMinutes: item.intervention.plannedStartMinutes ?? null,
+        // Alleen een afspraak houdt haar uur ook als het niet haalbaar is.
+        isAppointment: Boolean(item.intervention.startIsAppointment),
       })),
       departureMinutes: vertrekMinuten,
       origin: startCoordinates,
@@ -473,6 +475,7 @@ export function useRouteTimeline(
           // toont voor dezelfde bon — dezelfde motor, andere invoer, en dan is
           // "ze kunnen nooit een ander uur tonen" niet langer waar.
           startMinutes: item.intervention.plannedStartMinutes ?? null,
+          isAppointment: Boolean(item.intervention.startIsAppointment),
         })),
       travelBetween: (from, to) => {
         const leg = resolveLeg(cacheSnapshot, from, to)

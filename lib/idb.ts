@@ -261,14 +261,46 @@ export function getDB(): Promise<IDBPDatabase<BossuytDB>> {
 
 // ---------- Interventions ----------
 
-/** Save all today's interventions (replaces previous cache) */
-export async function cacheInterventions(items: Intervention[]): Promise<void> {
+/**
+ * Een deel van de voorraad vervangen door wat er net binnenkwam.
+ *
+ * `hoortErbij` zegt welk deel deze oproep beschrijft. Wat binnen dat deel valt
+ * en niet in `items` voorkomt, is weg bij de server en gaat dus ook hier weg;
+ * wat erbuiten valt blijft onaangeroerd. Alles in één transactie, zodat er
+ * nooit een half opgeruimde cache overblijft.
+ */
+async function vervangInCache(
+  items: Intervention[],
+  hoortErbij: (item: Intervention) => boolean,
+): Promise<void> {
   const db = await getDB()
-  // Use a transaction so all writes succeed or all fail — no half-saved state
   const tx = db.transaction('interventions', 'readwrite')
-  await tx.store.clear()                         // wipe old day's data
-  await Promise.all(items.map(i => tx.store.put(normalizeIntervention(i))))
+  const blijft = new Set(items.map(item => item.id))
+
+  const bestaand = await tx.store.getAll()
+  await Promise.all(
+    bestaand
+      .filter(item => hoortErbij(item) && !blijft.has(item.id))
+      .map(item => tx.store.delete(item.id)),
+  )
+  await Promise.all(items.map(item => tx.store.put(normalizeIntervention(item))))
   await tx.done
+}
+
+/**
+ * De bonnen van één dag plus de open pool bewaren.
+ *
+ * Dit veegde de héle voorraad leeg voor het schreef, met als commentaar "wipe
+ * old day's data". Dat klopte toen er één dag in de cache zat. De weekweergave
+ * zet er zeven in, en dus wiste elke synchronisatie van vandaag de andere zes
+ * uit: wie zijn week opendeed nadat de dagplanning net gesynchroniseerd had,
+ * kreeg zes lege kolommen. Gemeten, niet bedacht.
+ *
+ * Daarom moet de dag er nu bij. Vervangen wordt precies wat deze oproep
+ * beschrijft — die dag en de pool — en geen minuut van een andere dag.
+ */
+export async function cacheInterventions(items: Intervention[], dateStr: string): Promise<void> {
+  return vervangInCache(items, item => isOnDate(item, dateStr) || isInThePool(item))
 }
 
 /**
@@ -294,6 +326,24 @@ export async function getPlannedInterventions(dateStr: string): Promise<Interven
   const db = await getDB()
   const all = await db.getAll('interventions')
   return all.filter(item => isOnDate(item, dateStr)).map(normalizeIntervention)
+}
+
+/**
+ * De bonnen van één dag in de cache zetten, zonder de andere dagen te raken.
+ *
+ * `cacheInterventions` veegt eerst de hele voorraad leeg. Dat mag als er één
+ * dag tegelijk in zit — zo is het gebouwd — maar de weekweergave haalt zeven
+ * dagen op en dan wist elke dag de vorige uit. Deze functie vervangt precies
+ * één dag: wat er voor die datum stond en niet meer terugkomt van de server
+ * verdwijnt, de rest blijft staan.
+ *
+ * Dat "en niet meer terugkomt" is het hele punt. Zonder die opruiming zou een
+ * bon die van woensdag naar donderdag verhuisd is op allebei de dagen blijven
+ * hangen zodra je offline kijkt — en bonnen die zich vermenigvuldigen is
+ * precies het soort spook waar deze planning al eens last van had.
+ */
+export async function cacheDay(dateStr: string, planned: Intervention[]): Promise<void> {
+  return vervangInCache(planned, item => isOnDate(item, dateStr))
 }
 
 export async function getOpenInterventions(): Promise<Intervention[]> {

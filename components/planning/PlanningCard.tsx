@@ -107,11 +107,14 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
   const schedule = useMemo(() => {
     if (!date) return null
 
+    // Het speldje zoals het hier nú staat, niet zoals het bewaard is: de
+    // waarschuwing hoort te kloppen met de knop die je net omzette. Zonder
+    // afspraak schuift de bon op en is er niets te melden.
     const withThis = day.some(i => i.id === intervention.id)
       ? day.map(i => (i.id === intervention.id
-          ? { ...i, plannedStartMinutes: minutes ?? undefined }
+          ? { ...i, plannedStartMinutes: minutes ?? undefined, startIsAppointment: appointment }
           : i))
-      : [...day, { ...intervention, plannedStartMinutes: minutes ?? undefined }]
+      : [...day, { ...intervention, plannedStartMinutes: minutes ?? undefined, startIsAppointment: appointment }]
 
     return computeDaySchedule({
       departureMinutes: clockToMinutes(settings.startTime),
@@ -123,11 +126,12 @@ export function PlanningCard({ intervention }: { intervention: Intervention }) {
           ? { lat: i.siteLat, lon: i.siteLon }
           : undefined,
         startMinutes: i.plannedStartMinutes ?? null,
+        isAppointment: Boolean(i.startIsAppointment),
       })),
       travelBetween: lookupTravel,
       breakMinutes: UNPAID_BREAK_MINUTES,
     })
-  }, [date, day, intervention, minutes, settings])
+  }, [date, day, intervention, minutes, appointment, settings])
 
   const mine = schedule?.blocks.find(b => b.kind === 'job' && b.interventionId === intervention.id)
   const clash = schedule?.conflicts.find(c => c.interventionId === intervention.id)

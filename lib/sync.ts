@@ -96,7 +96,7 @@ export async function syncToday(technicianId: string): Promise<SyncResult> {
     const all = [...planned, ...open]
 
     // Step 3: save to IndexedDB
-    await cacheInterventions(all)
+    await cacheInterventions(all, today)
 
     // Step 4: fetch travel times for the planned stops in sequence
     // We only do routing for planned items (in their assigned order)
@@ -204,6 +204,19 @@ async function fetchDailyRoute(planned: Intervention[]): Promise<RouteStep[]> {
  * blokkeert — de keten mag nooit stukgaan op een fout die al afgehandeld is.
  */
 let synchronisatieKeten: Promise<unknown> = Promise.resolve()
+
+/**
+ * De dag waarover een wachtrij-rij gaat.
+ *
+ * Het antwoord van `/api/sync/write` beschrijft één dag, en de cache moet
+ * weten wélke — anders zou hij de bonnen van vandaag opruimen terwijl het
+ * antwoord over volgende dinsdag ging. De dag staat in de payload onder
+ * `date`; ontbreekt hij, dan is vandaag de enige zinnige gok.
+ */
+function dagVanDeWrite(write: PendingWrite): string {
+  const dag = write.payload?.date
+  return typeof dag === 'string' ? dag : todayInBelgium()
+}
 
 export function syncPendingWrites(): Promise<PendingWriteResult> {
   const volgende = synchronisatieKeten
@@ -341,7 +354,7 @@ async function runSyncPendingWrites(): Promise<PendingWriteResult> {
           open?: Intervention[]
         }
         if (data.planned && data.open) {
-          await cacheInterventions([...data.planned, ...data.open])
+          await cacheInterventions([...data.planned, ...data.open], dagVanDeWrite(write))
           // Ook teruggeven aan wie ons aanriep. Een scherm dat niet uit
           // IndexedDB leest — de dagplanning op een andere dag dan vandaag —
           // houdt anders de oude versienummers vast, en dan botst de vólgende
@@ -362,7 +375,7 @@ async function runSyncPendingWrites(): Promise<PendingWriteResult> {
           planned: Intervention[]
           open: Intervention[]
         }
-        await cacheInterventions([...data.planned, ...data.open])
+        await cacheInterventions([...data.planned, ...data.open], dagVanDeWrite(write))
         await removePendingWrite(write.id!)
         synced++
         conflict = true

@@ -15,6 +15,66 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.70',
+    date: '15 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'Bonnen die niemand afsprak eisen hun uur niet meer op',
+        body:
+          'De app onthoudt het uur waarop je een bon neerzet. Dat uur werd '
+          + 'behandeld als een afspraak, ook als er nooit iemand voor gebeld was. '
+          + 'Zette je de bon ervóór op een vast uur, dan bleef de volgende '
+          + 'koppig op zijn oude uur staan: twee blokken over elkaar, de rit '
+          + 'ernaartoe dwars door het blok van de vorige klant, en een rode '
+          + 'arcering met "kan niet" over de hele kolom. Op woensdag zag dat eruit '
+          + 'als een puinhoop, en dat was het ook. Nu geldt het onderscheid dat het '
+          + 'speldje altijd al bedoelde: een afgesproken uur houdt zijn plaats, ook '
+          + 'als het niet haalbaar is — dan hoort er juist een waarschuwing te '
+          + 'staan, want iemand moet de klant bellen. Een uur zonder afspraak is '
+          + 'een voorkeur en schuift op naar het eerste moment waarop je er echt '
+          + 'kunt zijn. De dag eindigt daardoor soms later dan vroeger, maar dat is '
+          + 'de tijd die de rit werkelijk kost.',
+      },
+      {
+        label: 'Fix',
+        title: 'De weekplanning sprong bij het wisselen naar maandag',
+        body:
+          'Wisselde je van de weekplanning naar de dagplanning, dan kwam je op '
+          + 'maandag uit — ook op een dinsdag. De weekweergave gaf altijd de eerste '
+          + 'dag van de getoonde week mee in plaats van de dag waar je naar keek. '
+          + 'Die maandag bleef vervolgens plakken, want hij reist mee in de '
+          + 'adresbalk. Nu reist vandaag mee zolang vandaag in de getoonde week '
+          + 'zit; kijk je naar een andere week, dan blijft de maandag het logische '
+          + 'startpunt.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'De weekplanning blijft staan als het bereik wegvalt',
+        body:
+          'De weekplanning haalde elke dag rechtstreeks bij de server op en had '
+          + 'verder geen geheugen. Viel het bereik weg — een kelder, een '
+          + 'machinekamer — dan stonden er zeven lege kolommen, zonder één woord '
+          + 'uitleg, alsof de week leeg gepland was. Ze leest nu eerst uit het '
+          + 'geheugen van je toestel en gaat daarna pas naar de server. Lukt dat '
+          + 'niet, dan blijft staan wat er stond en zegt een melding dat het de '
+          + 'laatst opgehaalde versie is.',
+      },
+      {
+        label: 'Fix',
+        title: 'De dagplanning wiste de rest van de week uit het geheugen',
+        body:
+          'Bij elke synchronisatie van vandaag werd het hele geheugen leeggeveegd '
+          + 'voordat de nieuwe bonnen erin gingen. Dat kon toen er één dag in zat, '
+          + 'maar de weekplanning bewaart er zeven — en die werden dus telkens '
+          + 'weggegooid. Wie zijn week opende nadat de dagplanning net '
+          + 'gesynchroniseerd had, kreeg zes lege kolommen. Er wordt nu alleen nog '
+          + 'vervangen waar de synchronisatie echt over gaat: die ene dag en de '
+          + 'open pool.',
+      },
+    ],
+  },
+  {
     version: 'v1.69',
     date: '14 september 2026',
     changes: [
@@ -1997,7 +2057,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.69'
+const CURRENT_RELEASE_VERSION = 'v1.70'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 
