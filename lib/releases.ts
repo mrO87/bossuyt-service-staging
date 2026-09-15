@@ -15,6 +15,51 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.71',
+    date: '15 september 2026',
+    changes: [
+      {
+        label: 'Nieuw',
+        title: 'De app start nu op zonder bereik',
+        body:
+          'Tot nu toe gaf de app zonder verbinding de foutpagina van de browser '
+          + '— op elke pagina, ook de dagplanning. Dat stond al die tijd anders in '
+          + 'de documentatie, maar het klopte niet: het hulpje dat pagina\'s moet '
+          + 'bewaren deed uitsluitend meldingen, en werd bovendien pas aangezet als '
+          + 'je meldingen inschakelde. Wie dat nooit deed, had het helemaal niet. '
+          + 'Nu wordt het meteen bij het opstarten aangemeld en bewaart het de '
+          + 'dagplanning, de weekplanning en alles wat ze nodig hebben. In een '
+          + 'kelder of een machinekamer opent de app dus gewoon, met de planning '
+          + 'zoals ze het laatst opgehaald werd, en kun je blijven wisselen tussen '
+          + 'dag en week. Werkbonnen invullen werkte al offline; dat verandert '
+          + 'niet — wat je invult blijft in de wachtrij tot er weer bereik is.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Vers gaat altijd voor op bewaard',
+        body:
+          'Bewaarde pagina\'s hebben één berucht gebrek: ze kunnen blijven hangen, '
+          + 'en dan zit een technieker met een oude app die je van op afstand niet '
+          + 'meer gerepareerd krijgt. Daarom haalt de app elke pagina eerst bij de '
+          + 'server en pas uit het geheugen als dat niet lukt. Zodra er bereik is '
+          + 'wint de nieuwste versie dus altijd, binnen één herlading. Gegevens '
+          + 'worden nooit bewaard op deze manier — die komen uit het geheugen van '
+          + 'het toestel zelf, zodat er nooit twee antwoorden op dezelfde vraag '
+          + 'kunnen bestaan.',
+      },
+      {
+        label: 'Fix',
+        title: 'De app kan weer op je startscherm',
+        body:
+          'De app verwees naar een instellingenbestand dat niet bestond, dus gaf '
+          + 'de telefoon een foutmelding en bood hij nooit aan om Bossuyt Service '
+          + 'op het startscherm te zetten. Dat bestand is er nu: de app opent '
+          + 'vanaf het startscherm in volledig scherm, zonder adresbalk, met het '
+          + 'juiste icoon en de juiste kleur.',
+      },
+    ],
+  },
+  {
     version: 'v1.70',
     date: '15 september 2026',
     changes: [
@@ -2057,7 +2102,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.70'
+const CURRENT_RELEASE_VERSION = 'v1.71'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

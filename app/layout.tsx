@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import AppProviders from '@/components/AppProviders'
 import './globals.css'
 import VersionBadge from '@/components/VersionBadge'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 
 export const metadata: Metadata = {
   title: 'Bossuyt Service',
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className="bg-gray-100 min-h-screen">
         <AppProviders>{children}</AppProviders>
         <VersionBadge />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   )
