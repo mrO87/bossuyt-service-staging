@@ -13,6 +13,7 @@ import { TimelineRail, RailLine } from './TimelineRail'
 import AlertNoteBadge from '@/components/AlertNoteBadge'
 import {
   formatClock,
+  formatMinutes,
   statusClass,
   statusLabel,
   typeBorderClass,
@@ -21,10 +22,16 @@ import {
 } from '@/components/planning/interventionLabels'
 import { EstimateBadge } from '@/components/planning/EstimateBadge'
 import { customerLabel } from '@/lib/customerLabel'
+import { actualVisitSpan } from '@/lib/planning/visitSpan'
 
-function Chip({ className, label }: { className: string; label: string }) {
+function Chip(
+  { className, label, title }: { className: string; label: string; title?: string },
+) {
   return (
-    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${className}`}>
+    <span
+      className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${className}`}
+      title={title}
+    >
       {label}
     </span>
   )
@@ -45,6 +52,9 @@ export function JobTimelineCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id })
+
+  /** Het bezoek zoals het werkelijk gelopen is, of null zolang dat niet vaststaat. */
+  const gelopen = actualVisitSpan(intervention)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -85,17 +95,38 @@ export function JobTimelineCard({
             <span className="text-ink-soft text-lg select-none">⋮⋮</span>
           </button>
 
-          {/* clickable content area */}
+          {/*
+            Het klikbare deel van de kaart.
+
+            `min-w-0` hoort erbij en stond er niet. Een flexitem krijgt van de
+            browser `min-width: auto` en weigert dus smaller te worden dan zijn
+            inhoud: bij "KAMERS VAN VOLKSVERTEGENWOORDIGERS" werd dit blok
+            113 px breder dan de kaart, en omdat de kaart `overflow-hidden`
+            draagt, werd alles wat erbuiten viel weggeknipt — de klantnaam
+            halverwege, en het uur helemaal. Elke `truncate` en `min-w-0`
+            dieper in de kaart was machteloos zolang dit blok zelf niet mocht
+            krimpen.
+          */}
           <div
             onClick={onClick}
-            className="flex-1 p-3 cursor-pointer active:opacity-70"
+            className="min-w-0 flex-1 p-3 cursor-pointer active:opacity-70"
           >
             <div className="flex items-start justify-between mb-1">
               <div className="flex-1 min-w-0 flex items-start gap-2">
                 {intervention.alertNote && <AlertNoteBadge note={intervention.alertNote} />}
                 <div className="min-w-0">
+                  {/*
+                    `min-w-0` op de naam en `shrink-0` op het uur, en niet
+                    andersom. Zonder dat mag de naam niet krimpen — dat is wat
+                    een flexitem standaard doet — en duwt een lange klantnaam
+                    het uur gewoon de kaart uit. "KAMERS VAN
+                    VOLKSVERTEGENWOORDIGERS" liet zo geen enkel uur meer zien,
+                    terwijl "Jan decan" er wel een had. Het uur is het enige op
+                    deze kaart waar een technieker 's ochtends op vaart; dat
+                    hoort niet als eerste te wijken.
+                  */}
                   <div className="flex items-baseline gap-2">
-                    <p className="font-bold text-sm leading-tight text-ink truncate">
+                    <p className="min-w-0 font-bold text-sm leading-tight text-ink truncate">
                       {customerLabel(intervention.customerName)}
                     </p>
                     {/*
@@ -112,7 +143,7 @@ export function JobTimelineCard({
                     {typeof startMinutes === 'number' && (
                       <p
                         className={[
-                          'text-[11px] font-bold tabular-nums',
+                          'shrink-0 text-[11px] font-bold tabular-nums',
                           intervention.startIsAppointment
                             ? 'rounded bg-brand-red px-1 text-white'
                             : 'text-brand-orange',
@@ -168,10 +199,27 @@ export function JobTimelineCard({
                 className={statusClass(intervention.status)}
                 label={statusLabel(intervention.status)}
               />
-              <EstimateBadge
-                interventionId={intervention.id}
-                minutes={intervention.estimatedMinutes}
-              />
+              {/*
+                Op een afgewerkte bon staat de tijd die het werkelijk kostte,
+                en die is niet te bewerken. De raming is een voorspelling; zodra
+                er een aankomst- en een vertrekuur op de bon staan, is er geen
+                voorspelling meer nodig. Hier stond de raming ook ná afloop, dus
+                las je "Afgewerkt · 1u30" bij een bezoek dat 1u15 duurde — en
+                een raming aanpassen op een bon die al klaar is, verandert
+                bovendien niets meer aan de planning.
+              */}
+              {gelopen ? (
+                <Chip
+                  className="bg-stroke text-ink-soft"
+                  label={formatMinutes(gelopen.minutes)}
+                  title="Werkelijk gewerkt, volgens het aankomst- en vertrekuur op de bon"
+                />
+              ) : (
+                <EstimateBadge
+                  interventionId={intervention.id}
+                  minutes={intervention.estimatedMinutes}
+                />
+              )}
 
               {intervention.isUrgent && (
                 <Chip className="bg-brand-red text-white" label="Dringend" />
