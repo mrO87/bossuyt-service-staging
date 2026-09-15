@@ -50,6 +50,62 @@ genoeg gebeurt om het handwerk duurder te maken dan de regel.
 lege `customerName`. Niet allemaal om deze reden — een gefotografeerde bon
 faalt anders dan een PDF uit het ERP.
 
+### De omschrijving valt weg wanneer de bon een paar millimeter verschoven staat
+
+**Gemeten op** `TKT20/12786` (VAN DEN BERGE - RAEMDONCK), gefotografeerd,
+15 september 2026. `ocrGrade: good` — de lezing zelf was prima.
+
+| veld | uitgelezen | op het papier |
+|---|---|---|
+| ticketnummer, datum, klantnummer, factuurnummer | juist | ✓ |
+| adres, postcode, gemeente, telefoon | juist | ✓ |
+| **omschrijving** | **leeg** | "Nazicht/ herstel plancha - raar lawaai op toestel na foutieve stroomaansluiting door energieleverancier van buitenaf - gsm 0496/ 12 18 24 - Vandenberghe Frank" |
+| **toestellen** | één rij met `OMSCHRIJVINGKLANTOBSERVATIONSCLIENT` | geen toestel; de UNIT-tabel is leeg |
+
+**Waarom.** De toestellenband loopt tot y = 121 mm, met als verantwoording:
+*"De klantomschrijving eronder begint pas op 122.8, dus 121 is ruim en botst
+niet."* Op deze foto klopt dat niet. Het spooktoestel dráágt het opschrift
+`OMSCHRIJVING KLANT | OBSERVATIONS CLIENT`, en dat opschrift hoort op 122.8 te
+staan — het is dus bóven 121 terechtgekomen. De inhoud staat een paar
+millimeter hoger dan de zones aannemen. Daardoor greep de toestellenband in het
+omschrijvingsvak, en viel de omschrijving zelf gedeeltelijk buiten haar eigen
+zone (`description: y 121–140`) en kwam ze leeg terug.
+
+Het is dus geen leesfout maar een uitlijningsfout: de zones zijn absolute
+millimeters op een A4, en een foto die een fractie anders geschaald of
+uitgesneden is, schuift alles mee.
+
+**Wat een oplossing zou moeten doen.** De zones vastmaken aan wat er op de bon
+zelf te herkennen valt — de opschriften — in plaats van aan millimeters. Een
+opschrift als `OMSCHRIJVING KLANT` is een landmerk: staat het op y = 118, dan
+ligt het omschrijvingsvak daar eronder en niet op 121. Dat is een grotere
+ingreep dan een zone verschuiven, en een zone verschuiven zou deze bon
+repareren en de volgende breken.
+
+**Waarom nog niet gebouwd.** Eén waarneming, en die staat niet eens meer in de
+database: de upload was een test en is meteen weer opgeruimd, dus de telling
+hieronder geeft vandaag nul op eenentwintig. Dat is geen bewijs dat het niet
+gebeurt — het is bewijs dat er nog niets van bewaard is. Vanaf de volgende
+echte upload telt ze wel mee.
+
+**Bijhouden.** Deze telt de bevestigde uploads waar de omschrijving leeg bleef —
+het veld dat een technieker als eerste leest:
+
+```sql
+select count(*) filter (where coalesce(extracted->>'description','') = '') as zonder_omschrijving,
+       count(*) as totaal
+from work_order_intakes where extracted is not null;
+```
+
+En deze toont toestelrijen die in werkelijkheid een opschrift zijn:
+
+```sql
+select id, created_at::timestamp(0), extracted_devices
+from work_order_intakes
+where extracted_devices::text ilike '%OMSCHRIJVING%'
+   or extracted_devices::text ilike '%OBSERVATIONS%';
+```
+
 ## Opgelost
 
 ### Een datum in het unit-nummer — opgelost 11/09/2026
