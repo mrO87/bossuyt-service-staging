@@ -2,7 +2,9 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 import {
+  extractDevices,
   extractWerkbon,
+  lijnUitOpOpschriften,
   parseAddressBlock,
   parsePrintedDate,
   toFragments,
@@ -384,5 +386,124 @@ describe('extractWerkbon when the street sits past the next label', () => {
     expect(result.fields.customerNumber).toBe('K04233')
     expect(result.fields.phone).toBe('0473/89 76 78')
     expect(result.fields.description).toBe('Vervangen van sensorplaat op plancha Scholl')
+  })
+})
+
+/**
+ * De Van den Berge-bon, gefotografeerd, waarvan de inhoud een paar millimeter
+ * hoger op de pagina staat dan de zones aannemen.
+ *
+ * Gemeten aan de opschriften, tegenover de twee bonnen die wél kloppen:
+ *
+ *   UNIT N°              99,5  →   95,5
+ *   OMSCHRIJVING KLANT  122,5  →  117,2
+ *   TECHNICUS RAPPORT   141,6  →  135,2
+ *   MATERIALEN          167,0  →  158,7
+ *
+ * Het verschil groeit mee met de hoogte, dus het is geen verschuiving maar een
+ * schaal. Zonder uitlijning greep de toestellenband (tot y 121) in het
+ * omschrijvingsvak: er kwam een verzonnen toestel uit met de tekst van het
+ * opschrift erin, en de omschrijving zelf bleef leeg.
+ */
+const bergeDoc = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'tests/fixtures/berge-herfelingen-docling.json'), 'utf-8'),
+) as DoclingDocument
+
+describe('extractWerkbon op een bon die hoger op de pagina staat', () => {
+  const result = extractWerkbon(bergeDoc)
+
+  it('leest de omschrijving van de klant', () => {
+    expect(result.fields.description).toContain('Nazicht')
+    expect(result.fields.description).toContain('plancha')
+  })
+
+  it('maakt geen toestel van het opschrift eronder', () => {
+    const rijen = extractDevices(toFragments(bergeDoc))
+    for (const rij of rijen) {
+      expect(rij.description).not.toMatch(/OMSCHRIJVING|OBSERVATIONS/i)
+    }
+  })
+
+  it('leest de rest van de bon nog steeds goed', () => {
+    expect(result.fields.ticketNumber).toBe('TKT20/12786')
+    expect(result.fields.customerNumber).toBe('K02536')
+    expect(result.fields.invoiceNumber).toBe('K02535')
+    expect(result.fields.address.toUpperCase()).toBe('WEVERSSTRAAT 5')
+    expect(result.fields.postalCode).toBe('1540')
+    expect(result.fields.phone).toBe('0479943488')
+  })
+})
+
+/**
+ * De uitlijning zelf, en vooral haar vangnetten.
+ *
+ * Deze functie draait op elke upload. Ze mag een bon nooit slechter maken dan
+ * hij zonder haar was, dus geeft ze bij de minste twijfel de fragmenten
+ * onveranderd terug.
+ */
+describe('lijnUitOpOpschriften', () => {
+  /** Een fragment op een gegeven hoogte, met de tekst van een opschrift. */
+  const frag = (text: string, y: number) =>
+    ({ page: 1, x1: 12, x2: 100, y1: y, y2: y + 3, text })
+
+  /** De vier opschriften, elk `verschoven` mm van hun plaats af. */
+  function bon(schaal: number, verschuiving = 0) {
+    return [
+      frag('UNIT N°', (99.5 - verschuiving) / schaal),
+      frag('OMSCHRIJVING KLANT | OBSERVATIONS CLIENT', (122.5 - verschuiving) / schaal),
+      frag('TECHNICUS RAPPORT TECHNICIEN', (141.6 - verschuiving) / schaal),
+      frag('MATERIALEN | MATÉRIAUX', (167.0 - verschuiving) / schaal),
+    ]
+  }
+
+  it('legt een geschaalde bon terug op zijn plaats', () => {
+    const uit = lijnUitOpOpschriften(bon(0.94, 2))
+    expect(uit[0].y1).toBeCloseTo(99.5, 1)
+    expect(uit[1].y1).toBeCloseTo(122.5, 1)
+    expect(uit[3].y1).toBeCloseTo(167.0, 1)
+  })
+
+  it('laat een bon die al klopt met rust', () => {
+    const invoer = bon(1)
+    const uit = lijnUitOpOpschriften(invoer)
+    for (let i = 0; i < invoer.length; i++) {
+      expect(uit[i].y1).toBeCloseTo(invoer[i].y1, 2)
+    }
+  })
+
+  it('doet niets bij te weinig opschriften', () => {
+    // Twee ankers: een rechte door twee punten is altijd perfect en daarom
+    // nergens op te controleren.
+    const invoer = [frag('UNIT N°', 80), frag('MATERIALEN | MATÉRIAUX', 140)]
+    expect(lijnUitOpOpschriften(invoer)).toBe(invoer)
+  })
+
+  it('doet niets wanneer de opschriften in één blok geplakt zitten', () => {
+    // Drie treffers, maar allemaal hetzelfde fragment: dat is één anker.
+    const samen = frag('UNIT N° OMSCHRIJVING KLANT TECHNICUS RAPPORT MATERIALEN', 100)
+    const invoer = [samen]
+    expect(lijnUitOpOpschriften(invoer)).toBe(invoer)
+  })
+
+  it('weigert een schaal die geen schaal meer is', () => {
+    // Een halve pagina: dat is geen scheve foto maar een verkeerde lezing.
+    const invoer = bon(0.5)
+    expect(lijnUitOpOpschriften(invoer)).toBe(invoer)
+  })
+
+  it('weigert wanneer de opschriften ook na het rechttrekken niet passen', () => {
+    // Eén anker ver naast de rest: geen enkele rechte legt alle vier goed.
+    const invoer = [
+      frag('UNIT N°', 99.5),
+      frag('OMSCHRIJVING KLANT', 122.5),
+      frag('TECHNICUS RAPPORT', 141.6),
+      frag('MATERIALEN', 200),
+    ]
+    expect(lijnUitOpOpschriften(invoer)).toBe(invoer)
+  })
+
+  it('laat een bon zonder opschriften ongemoeid', () => {
+    const invoer = [frag('Zomaar wat tekst', 50)]
+    expect(lijnUitOpOpschriften(invoer)).toBe(invoer)
   })
 })

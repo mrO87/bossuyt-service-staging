@@ -101,7 +101,115 @@ export function toFragments(doc: DoclingDocument): Fragment[] {
     }
   }
 
-  return fragments
+  // Derde conversie, en de enige die niet uit de pagina zelf te berekenen valt:
+  // de bon rechttrekken tegen zijn eigen opschriften. Zie `lijnUitOpOpschriften`.
+  return lijnUitOpOpschriften(fragments)
+}
+
+/**
+ * Waar een opschrift hoort te staan op de bon waar de zones op afgeregeld zijn.
+ *
+ * Gemeten aan twee bonnen die allebei precies kloppen — de Molenhoeve-bon (een
+ * PDF uit het ERP) en de Decan-bon (een foto). Ze geven op alle vier dezelfde
+ * getallen, tot op de tiende millimeter.
+ *
+ * Niet overgenomen uit `lib/pdf.ts`, hoewel dat dezelfde bon afdrukt. Daar
+ * staan de opschriften op 100,5 / 123,5 / 143 / 170, maar dat zijn
+ * **basislijnen** van de tekst, terwijl docling de **bovenkant** van een vak
+ * meldt. Het verschil daartussen is niet constant — het hangt af van de
+ * lettergrootte van het opschrift — dus zou dat vier ankers opleveren die elk
+ * een eigen, onbekende fout dragen.
+ *
+ * Vier stuks, ver uit elkaar over de pagina. Twee dicht bij elkaar zouden een
+ * schaal opleveren die op de rest van het blad wild afwijkt.
+ */
+const OPSCHRIFT_ANKERS: ReadonlyArray<{ patroon: RegExp; y: number }> = [
+  { patroon: /UNIT\s*N/i,                                   y: 99.5 },
+  { patroon: /OMSCHRIJVING\s*KLANT|OBSERVATIONS\s*CLIENT/i, y: 122.5 },
+  { patroon: /TECHNICUS\s*RAPPORT/i,                        y: 141.6 },
+  { patroon: /MATERIALEN/i,                                 y: 167.0 },
+]
+
+/** Minder ankers dan dit is te weinig houvast om een rechte door te trekken. */
+const MINIMUM_ANKERS = 3
+
+/** Buiten deze grenzen is de uitkomst geen bon meer maar een rekenfout. */
+const MIN_SCHAAL = 0.85
+const MAX_SCHAAL = 1.15
+
+/** Hoever een anker na het rechttrekken nog van zijn plaats mag liggen, in mm. */
+const MAX_AFWIJKING_MM = 2
+
+/**
+ * De bon rechttrekken tegen zijn eigen opschriften.
+ *
+ * De zones in dit bestand zijn absolute millimeters op een A4. Dat werkt zolang
+ * elke bon op dezelfde plaats op het blad staat, en dat is precies wat een foto
+ * niet garandeert: een bon die een fractie anders uitgesneden of geschaald is,
+ * schuift alles mee. Gemeten op de Van den Berge-bon stond de hele inhoud vier
+ * tot acht millimeter te hoog, en het verschil groeide mee met de hoogte — dus
+ * geen verschuiving maar een schaal. De toestellenband greep daardoor in het
+ * omschrijvingsvak: er kwam een verzonnen toestel uit met het opschrift erin,
+ * en de omschrijving zelf bleef leeg.
+ *
+ * De opschriften zijn het antwoord, want die staan op de bon zelf gedrukt. Waar
+ * `OMSCHRIJVING KLANT` staat, daar begint het omschrijvingsvak — of het blad nu
+ * recht of scheef gefotografeerd is.
+ *
+ * Alleen verticaal. Horizontaal is nog nooit een veld misgelopen, en een
+ * correctie die niets repareert kan alleen maar iets breken.
+ *
+ * Vier vangnetten, want dit draait op elke upload en mag nooit een bon slechter
+ * maken dan hij zonder deze functie was: te weinig ankers, een schaal die geen
+ * schaal meer is, ankers die na het rechttrekken nog steeds niet passen, of
+ * ankers die niet in dezelfde volgorde staan als op het papier. In al die
+ * gevallen blijven de fragmenten zoals ze waren en gedraagt de extractie zich
+ * exact zoals vroeger.
+ */
+export function lijnUitOpOpschriften(fragments: Fragment[]): Fragment[] {
+  const punten: Array<{ gemeten: number; hoort: number }> = []
+
+  for (const anker of OPSCHRIFT_ANKERS) {
+    const treffer = fragments.find(
+      f => f.page === 1 && anker.patroon.test(f.text.replace(/\s+/g, ' ')),
+    )
+    if (treffer) punten.push({ gemeten: treffer.y1, hoort: anker.y })
+  }
+
+  if (punten.length < MINIMUM_ANKERS) return fragments
+
+  // Twee opschriften in één samengeplakt fragment leveren dezelfde gemeten
+  // hoogte op. Dat is geen twee ankers maar één, en een rechte door punten die
+  // op elkaar liggen is willekeurig.
+  const hoogtes = new Set(punten.map(punt => punt.gemeten.toFixed(1)))
+  if (hoogtes.size < MINIMUM_ANKERS) return fragments
+
+  // Kleinste kwadraten: hoort = schaal * gemeten + verschuiving.
+  const n = punten.length
+  const somG = punten.reduce((t, punt) => t + punt.gemeten, 0)
+  const somH = punten.reduce((t, punt) => t + punt.hoort, 0)
+  const somGG = punten.reduce((t, punt) => t + punt.gemeten * punt.gemeten, 0)
+  const somGH = punten.reduce((t, punt) => t + punt.gemeten * punt.hoort, 0)
+
+  const noemer = n * somGG - somG * somG
+  if (noemer === 0) return fragments
+
+  const schaal = (n * somGH - somG * somH) / noemer
+  const verschuiving = (somH - schaal * somG) / n
+
+  if (!Number.isFinite(schaal) || !Number.isFinite(verschuiving)) return fragments
+  if (schaal < MIN_SCHAAL || schaal > MAX_SCHAAL) return fragments
+
+  const ergsteAfwijking = Math.max(
+    ...punten.map(punt => Math.abs(schaal * punt.gemeten + verschuiving - punt.hoort)),
+  )
+  if (ergsteAfwijking > MAX_AFWIJKING_MM) return fragments
+
+  return fragments.map(f => ({
+    ...f,
+    y1: schaal * f.y1 + verschuiving,
+    y2: schaal * f.y2 + verschuiving,
+  }))
 }
 
 /**

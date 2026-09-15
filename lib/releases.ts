@@ -19,6 +19,24 @@ export const RELEASES: ReleaseEntry[] = [
     date: '15 september 2026',
     changes: [
       {
+        label: 'Verbeterd',
+        title: 'Een gefotografeerde bon wordt nu rechtgetrokken voor hij gelezen wordt',
+        body:
+          'De app zoekt elk veld op een vaste plaats op het blad — het ticketnummer '
+          + 'linksboven, de omschrijving in het midden. Dat werkt zolang de bon recht '
+          + 'en volledig op de foto staat. Een foto die een fractie schever of krapper '
+          + 'genomen is, schuift alles mee, en dan zoekt de app op de verkeerde plek. '
+          + 'Bij één bon liep de inhoud vier tot acht millimeter uit de pas: de '
+          + 'omschrijving van de klant kwam leeg terug en er verscheen een verzonnen '
+          + 'toestel met de tekst van een opschrift erin. Nu zoekt de app eerst de '
+          + 'gedrukte opschriften op — UNIT N°, OMSCHRIJVING KLANT, TECHNICUS RAPPORT, '
+          + 'MATERIALEN — en legt de bon daarmee terug op zijn plaats voor ze ook maar '
+          + 'één veld leest. Getest met een bon die met opzet scheef ingescand werd: '
+          + 'die komt er nu even goed uit als het origineel. Vindt de app te weinig '
+          + 'opschriften, of levert het rechttrekken iets onmogelijks op, dan doet ze '
+          + 'niets en leest ze zoals vroeger.',
+      },
+      {
         label: 'Fix',
         title: 'De dagplanning rekende met de raming in plaats van met je uren',
         body:
