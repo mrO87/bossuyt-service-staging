@@ -41,8 +41,9 @@ import {
   type TravelCache,
 } from '@/lib/routing/travelCache'
 import { clockToMinutes } from '@/lib/planning/workSchedule'
-import { computeDaySchedule, type TravelLookup } from '@/lib/planning/daySchedule'
+import { computeDaySchedule, type ScheduleJob, type TravelLookup } from '@/lib/planning/daySchedule'
 import { orderDayByClock } from '@/lib/planning/dayOrder'
+import { actualVisitSpan } from '@/lib/planning/visitSpan'
 import type {
   RouteState,
   RouteTotals,
@@ -64,6 +65,35 @@ function jobCoordinates(intervention: Intervention): Coordinates | undefined {
   if (typeof intervention.siteLat !== 'number') return undefined
   if (typeof intervention.siteLon !== 'number') return undefined
   return { lat: intervention.siteLat, lon: intervention.siteLon }
+}
+
+/**
+ * Eén job zoals de motor hem moet zien.
+ *
+ * Twee plaatsen in dit bestand vroegen hetzelfde en schreven het los op: de
+ * volgorde en het rooster. Die zijn al een keer uit elkaar gelopen, en dat
+ * kostte een avond zoeken. Nu staat het hier, één keer.
+ *
+ * **Een afgewerkte bon telt met zijn échte uren.** De raming is wat je wist
+ * vóór je vertrok; zodra er een aankomst- en vertrekuur op de bon staan, weet
+ * je meer. De weekweergave deed dit al — de dagweergave niet, en die toonde
+ * daardoor een afgewerkte bon zonder uur en op zijn raming terwijl de week hem
+ * op 11:00 en op zijn werkelijke duur tekende. Week en dag mogen nooit een
+ * ander uur tonen voor dezelfde bon.
+ *
+ * Zo'n uur is bovendien geen voorkeur meer maar een feit: daar is de technieker
+ * geweest. Dus mag de motor het niet wegschuiven, en telt het als afspraak.
+ */
+function scheduleJobFor(item: JobItem): ScheduleJob {
+  const gelopen = actualVisitSpan(item.intervention)
+
+  return {
+    id: item.intervention.id,
+    estimatedMinutes: gelopen ? gelopen.minutes : item.intervention.estimatedMinutes,
+    at: jobCoordinates(item.intervention),
+    startMinutes: gelopen ? gelopen.startMinutes : item.intervention.plannedStartMinutes ?? null,
+    isAppointment: Boolean(gelopen) || Boolean(item.intervention.startIsAppointment),
+  }
 }
 
 /**
@@ -236,14 +266,7 @@ export function useRouteTimeline(
     if (jobs.length === 0) return []
 
     const { order, breakBefore } = orderDayByClock({
-      jobs: jobs.map(item => ({
-        id: item.intervention.id,
-        estimatedMinutes: item.intervention.estimatedMinutes,
-        at: jobCoordinates(item.intervention),
-        startMinutes: item.intervention.plannedStartMinutes ?? null,
-        // Alleen een afspraak houdt haar uur ook als het niet haalbaar is.
-        isAppointment: Boolean(item.intervention.startIsAppointment),
-      })),
+      jobs: jobs.map(scheduleJobFor),
       departureMinutes: vertrekMinuten,
       origin: startCoordinates,
       travelBetween,
@@ -423,7 +446,10 @@ export function useRouteTimeline(
 
       if (current.kind === 'job') {
         tally.jobCount++
-        tally.workMinutes += current.intervention.estimatedMinutes ?? 0
+        // Ook hier de werkelijkheid boven de raming: een dag die uitliep, hoort
+        // dat in zijn totaal te laten zien.
+        tally.workMinutes +=
+          actualVisitSpan(current.intervention)?.minutes ?? current.intervention.estimatedMinutes ?? 0
       }
       if (current.kind === 'break') {
         tally.breakMinutes += current.minutes
@@ -466,17 +492,7 @@ export function useRouteTimeline(
       origin: startCoordinates,
       jobs: state.movableItems
         .filter((item): item is JobItem => item.kind === 'job')
-        .map(item => ({
-          id: item.intervention.id,
-          estimatedMinutes: item.intervention.estimatedMinutes,
-          at: jobCoordinates(item.intervention),
-          // Het vastgezette uur hoort hier net zo goed thuis als in de week.
-          // Zonder dit toont de dagweergave 08:22 waar de weekweergave 10:00
-          // toont voor dezelfde bon — dezelfde motor, andere invoer, en dan is
-          // "ze kunnen nooit een ander uur tonen" niet langer waar.
-          startMinutes: item.intervention.plannedStartMinutes ?? null,
-          isAppointment: Boolean(item.intervention.startIsAppointment),
-        })),
+        .map(scheduleJobFor),
       travelBetween: (from, to) => {
         const leg = resolveLeg(cacheSnapshot, from, to)
         return leg.provider === 'unknown' ? null : leg.minutes

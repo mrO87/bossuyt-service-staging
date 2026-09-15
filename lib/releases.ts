@@ -15,6 +15,39 @@ export type ReleaseEntry = {
 // Maintainers: every visible staging release must update this file; the badge and /changenotes are expected to stay aligned with it.
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: 'v1.72',
+    date: '15 september 2026',
+    changes: [
+      {
+        label: 'Fix',
+        title: 'De dagplanning rekende met de raming in plaats van met je uren',
+        body:
+          'Vul je een bon in met een aankomst- en een vertrekuur, dan weet de app '
+          + 'hoe lang het bezoek werkelijk duurde. De weekplanning gebruikte dat al: '
+          + 'daar werd de bon uitgerekt tot zijn echte tijd. De dagplanning niet — '
+          + 'die bleef de geraamde duur tonen en helemaal geen uur, zodat dezelfde '
+          + 'bon in de week op 11:00 stond en in de dag nergens. Nu gebruiken '
+          + 'allebei hetzelfde. Ook het dagtotaal telt voortaan wat er echt gewerkt '
+          + 'is: een dag die uitliep, laat dat zien in plaats van netjes op de '
+          + 'raming te blijven staan.',
+      },
+      {
+        label: 'Verbeterd',
+        title: 'Een bon zonder uur duwt je afspraken niet meer opzij',
+        body:
+          'De volgorde van de dag werd bepaald door het berekende startuur van elke '
+          + 'bon. Een bon waar nog geen uur van bekend was, rekende de app zo vroeg '
+          + 'mogelijk in, en daardoor kwam die automatisch vooraan te staan en schoof '
+          + 'alles erachter op — ook bonnen waar wél een uur van bekend was. Eén bon '
+          + 'van 08:45 belandde zo op 10:58. Nu bepalen de uren het skelet van de dag: '
+          + 'bonnen met een uur staan op volgorde van dat uur, en een bon zonder uur '
+          + 'zoekt de eerste plaats waar hij niets verschuift. Past hij nog vóór je '
+          + 'eerste afspraak, dan gaat hij daar — want wachten is geen planning. Past '
+          + 'hij nergens tussen, dan komt hij achteraan.',
+      },
+    ],
+  },
+  {
     version: 'v1.71',
     date: '15 september 2026',
     changes: [
@@ -2102,7 +2135,7 @@ export const RELEASES: ReleaseEntry[] = [
   },
 ]
 
-const CURRENT_RELEASE_VERSION = 'v1.71'
+const CURRENT_RELEASE_VERSION = 'v1.72'
 
 const currentRelease = RELEASES.find(release => release.version === CURRENT_RELEASE_VERSION)
 

@@ -75,6 +75,114 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index])
 }
 
+/** Wat de motor nodig heeft om een kandidaat-volgorde door te rekenen. */
+interface Rekenwerk {
+  departureMinutes: number
+  origin: Coordinates | undefined
+  travelBetween: TravelLookup
+  breakMinutes: number
+  breakBefore: number
+}
+
+/**
+ * Hoeveel uren deze volgorde niet haalt.
+ *
+ * Twee soorten schade, allebei één punt waard. Een botsing: een afgesproken
+ * uur dat niet gehaald kan worden, waar de motor een arcering voor tekent. En
+ * een uur dat wél verschoven is: een bon zonder afspraak die later moest
+ * beginnen dan waar hij stond.
+ *
+ * Het getal zelf zegt niets; het verschil tussen twee volgordes zegt alles.
+ * Een dag die al een botsing had, mag er niet aan kapot dat er daarna nergens
+ * meer iets "past" — vandaar vergelijken en niet toetsen aan nul.
+ */
+function uurSchade(
+  ids: readonly string[],
+  byId: Map<string, ScheduleJob>,
+  rekenwerk: Rekenwerk,
+): number {
+  const jobs = ids.map(id => byId.get(id)!)
+  const schedule = computeDaySchedule({ ...rekenwerk, jobs })
+
+  const startById = new Map<string, number>()
+  for (const block of schedule.blocks) {
+    if (block.kind === 'job' && block.interventionId) {
+      startById.set(block.interventionId, block.startMinutes)
+    }
+  }
+
+  let schade = schedule.conflicts.length
+  for (const job of jobs) {
+    if (job.startMinutes == null) continue
+    const start = startById.get(job.id)
+    if (start != null && start > job.startMinutes) schade++
+  }
+  return schade
+}
+
+/**
+ * De dag schikken: de uren vormen het skelet, de rest vult de gaten.
+ *
+ * Hier stond iets anders: alles werd gesorteerd op het **berekende** startuur.
+ * Dat gaf een bon zonder uur automatisch de eerste plaats, want zonder uur
+ * rekent de motor je zo vroeg mogelijk in — en dus duwde één bon waar nog geen
+ * uur van bekend was, alle afspraken van die dag naar achteren. Op dinsdag
+ * 15 september schoof daardoor een bon van 08:45 op naar 10:58.
+ *
+ * Nu bepalen de uren de dag. Bonnen mét een uur staan op volgorde van dat uur;
+ * dat is het skelet en daar wordt niet aan getornd. Elke bon zónder uur zoekt
+ * daarna zijn plaats: van voor naar achter, en hij gaat staan op de eerste
+ * plek waar hij geen enkel uur slechter maakt. Past hij nergens tussen, dan
+ * achteraan — want achteraan kan hij per definitie niets meer verschuiven.
+ *
+ * Onderling houden de bonnen zonder uur hun volgorde: ze worden één voor één
+ * geplaatst in de volgorde waarin ze binnenkwamen.
+ */
+function schikVolgensDeUren(
+  huidig: readonly string[],
+  byId: Map<string, ScheduleJob>,
+  rekenwerk: Rekenwerk,
+): string[] {
+  const metUur = huidig
+    .map((id, index) => ({ id, index, uur: byId.get(id)?.startMinutes ?? null }))
+    .filter(entry => entry.uur !== null)
+    // Stabiel: twee bonnen op hetzelfde uur houden hun onderlinge volgorde.
+    .sort((a, b) => a.uur! - b.uur! || a.index - b.index)
+    .map(entry => entry.id)
+
+  const zonderUur = huidig.filter(id => byId.get(id)?.startMinutes == null)
+
+  let order = metUur
+
+  /**
+   * Waar de zoektocht mag beginnen.
+   *
+   * Zonder dit ging elke bon zonder uur op plaats nul staan, want op een dag
+   * zonder vaste uren richt hij daar evenveel schade aan als overal elders —
+   * namelijk geen — en dus kwam de laatste bon vooraan terecht. De lijst
+   * draaide om. Door de zoektocht te laten beginnen waar de vorige bon zonder
+   * uur beland is, houden ze onderling de volgorde waarin ze binnenkwamen.
+   */
+  let vanaf = 0
+
+  for (const id of zonderUur) {
+    const drempel = uurSchade(order, byId, rekenwerk)
+
+    let plaats = order.length
+    for (let k = vanaf; k <= order.length; k++) {
+      const kandidaat = [...order.slice(0, k), id, ...order.slice(k)]
+      if (uurSchade(kandidaat, byId, rekenwerk) <= drempel) {
+        plaats = k
+        break
+      }
+    }
+    order = [...order.slice(0, plaats), id, ...order.slice(plaats)]
+    vanaf = plaats + 1
+  }
+
+  return order
+}
+
 /**
  * De jobs van een dag op volgorde van de klok, plus de plaats van de pauze.
  *
@@ -113,23 +221,13 @@ export function orderDayByClock(input: {
       }
     }
 
-    // Stabiel sorteren: gelijke tijden houden hun onderlinge volgorde, en dat
-    // is precies wat "bonnen zonder vast uur houden hun volgorde" betekent.
-    //
-    // Met één uitzondering, en die is de kern van de afspraak. Komt een bon
-    // zónder vast uur op hetzelfde moment uit als een bon mét een vast uur,
-    // dan gaat de vastgezette voor. Een vastgezet uur is een claim op dat
-    // moment — meestal omdat het met de klant afgesproken is. Een berekend uur
-    // is niet meer dan "hier kwam ik toevallig uit", en dat hoort te wijken.
-    const nextOrder = order
-      .map((id, index) => ({
-        id,
-        index,
-        start: startById.get(id) ?? Number.MAX_SAFE_INTEGER,
-        vast: byId.get(id)?.startMinutes != null ? 0 : 1,
-      }))
-      .sort((a, b) => a.start - b.start || a.vast - b.vast || a.index - b.index)
-      .map(entry => entry.id)
+    const nextOrder = schikVolgensDeUren(order, byId, {
+      departureMinutes: input.departureMinutes,
+      origin: input.origin,
+      travelBetween: input.travelBetween,
+      breakMinutes: input.breakMinutes,
+      breakBefore,
+    })
 
     const starts = nextOrder.map(id => startById.get(id) ?? Number.MAX_SAFE_INTEGER)
     const nextBreakBefore = breakBeforeIndexFor(

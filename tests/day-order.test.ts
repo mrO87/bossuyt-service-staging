@@ -147,3 +147,75 @@ describe('orderDayByClock', () => {
     expect([...order].sort()).toEqual(['x', 'y'])
   })
 })
+
+/**
+ * De uren vormen het skelet, de rest vult de gaten.
+ *
+ * Dit sorteerde vroeger alles op het berekende startuur, en dat gaf een bon
+ * zónder uur automatisch de eerste plaats: zonder uur rekent de motor je zo
+ * vroeg mogelijk in. Eén bon waar nog geen uur van bekend was, duwde zo alle
+ * afspraken van de dag naar achteren.
+ */
+describe('orderDayByClock: uren bepalen de dag', () => {
+  it('laat een bon zonder uur een vroeger uur niet wegduwen', () => {
+    // Zonder deze regel kwam 'vrij' vooraan en schoof 'negen' naar later.
+    const { order } = dag([
+      { id: 'vrij',  at: A, estimatedMinutes: 90 },
+      { id: 'negen', at: B, estimatedMinutes: 60, startMinutes: uur(9) },
+    ])
+    expect(order[0]).toBe('negen')
+  })
+
+  it('zet de uren op volgorde van de klok, ongeacht hoe ze binnenkwamen', () => {
+    const { order } = dag([
+      { id: 'laat',    at: A, estimatedMinutes: 30, startMinutes: uur(14) },
+      { id: 'vroeg',   at: B, estimatedMinutes: 30, startMinutes: uur(8) },
+      { id: 'middag',  at: A, estimatedMinutes: 30, startMinutes: uur(11) },
+    ])
+    expect(order).toEqual(['vroeg', 'middag', 'laat'])
+  })
+
+  it('schuift een bon zonder uur in een gat waar hij past', () => {
+    // 08:00–08:30, dan een gat tot 13:00. De vrije bon duurt 90 minuten en
+    // past dus niet meer vóór acht uur — daar is maar een half uur, tussen
+    // aankomst om 07:30 en het uur van 'ochtend'. In het gat erna past hij wel.
+    const { order } = dag([
+      { id: 'ochtend', at: A, estimatedMinutes: 30, startMinutes: uur(8) },
+      { id: 'namiddag', at: A, estimatedMinutes: 30, startMinutes: uur(13) },
+      { id: 'vrij', at: A, estimatedMinutes: 90 },
+    ])
+    expect(order).toEqual(['ochtend', 'vrij', 'namiddag'])
+  })
+
+  it('vult de dag van voren op wanneer dat kan', () => {
+    // Past een vrije bon nog vóór het eerste vaste uur, dan hoort hij daar:
+    // een technieker die om 07:30 ter plaatse kan zijn, hoort niet te wachten.
+    const { order } = dag([
+      { id: 'acht', at: A, estimatedMinutes: 30, startMinutes: uur(8) },
+      { id: 'vrij', at: A, estimatedMinutes: 30 },
+    ])
+    expect(order).toEqual(['vrij', 'acht'])
+  })
+
+  it('zet een bon die nergens tussen past achteraan', () => {
+    // Twee uren die vlak op elkaar volgen: er is geen gat van 90 minuten, dus
+    // de vrije bon kan alleen nog achteraan zonder iets te verschuiven.
+    const { order } = dag([
+      { id: 'acht',  at: A, estimatedMinutes: 30, startMinutes: uur(8) },
+      { id: 'negen', at: A, estimatedMinutes: 30, startMinutes: uur(9) },
+      { id: 'vrij',  at: A, estimatedMinutes: 90 },
+    ])
+    expect(order).toEqual(['acht', 'negen', 'vrij'])
+  })
+
+  it('houdt de onderlinge volgorde van bonnen zonder uur', () => {
+    // Zonder vaste uren valt er niets te schikken; dan telt alleen dat de
+    // lijst blijft staan zoals hij stond. Dit ging ooit mis en draaide om.
+    const { order } = dag(
+      ['a', 'b', 'c', 'd'].map((id, i) => ({
+        id, at: i % 2 === 0 ? A : B, estimatedMinutes: 45,
+      })),
+    )
+    expect(order).toEqual(['a', 'b', 'c', 'd'])
+  })
+})
